@@ -612,6 +612,9 @@ struct obe_t
 
     /* Misc configurable system parameters */
     unsigned int probe_time_seconds;
+
+    /* Runtime statistics */
+    void *runtime_statistics;
 };
 
 typedef struct
@@ -680,5 +683,7 @@ void obe_image_copy(obe_image_t *dst, obe_image_t *src);
 int obe_image_compare(obe_image_t *dst, obe_image_t *src);
 void obe_raw_frame_free(obe_raw_frame_t *frame);
 #endif
+
+int obe_getTimestamp(char *s, time_t *when);
 
 #endif

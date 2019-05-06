@@ -42,7 +42,13 @@ typedef struct
     int local_port;
     struct sockaddr_storage dest_addr;
     int dest_addr_len;
+
+    int bps;
+    int bps_current;
+    time_t bps_last;
 } obe_udp_ctx;
+
+int g_udp_output_bps = 0;
 
 static int udp_set_multicast_opts( int sockfd, obe_udp_ctx *s )
 {
@@ -318,6 +324,17 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
 {
     obe_udp_ctx *s = handle;
     int ret;
+
+    time_t now;
+    time(&now);
+
+    if (now != s->bps_last) {
+        s->bps_last = now;
+        s->bps = s->bps_current;
+        s->bps_current = 0;
+        g_udp_output_bps = s->bps;
+    }
+    s->bps_current += size;
 
     if (!s->is_connected) {
 #if 0 /* SEI_TIMESTAMPING */

@@ -63,6 +63,9 @@ typedef struct
 
 obecli_ctx_t cli;
 
+int  runtime_statistics_start(void **ctx, obecli_ctx_t *cli);
+void runtime_statistics_stop(void *ctx);
+
 /* Ctrl-C handler */
 static volatile int b_ctrl_c = 0;
 
@@ -1168,11 +1171,15 @@ extern int g_udp_output_drop_next_audio_packet;
 extern int g_udp_output_drop_next_packet;
 extern int g_udp_output_stall_packet_ms;
 extern int g_udp_output_latency_alert_ms;
+extern int g_udp_output_bps;
 
 /* LOS frame injection. */
 extern int g_decklink_inject_frame_enable;
 extern int g_decklink_injected_frame_count_max;
 extern int g_decklink_injected_frame_count;
+
+/* Core */
+extern int g_core_runtime_statistics_to_file;
 
 void display_variables()
 {
@@ -1238,6 +1245,10 @@ void display_variables()
         g_udp_output_stall_packet_ms);
     printf("udp_output.latency_alert_ms        = %d\n",
         g_udp_output_latency_alert_ms);
+    printf("udp_output.bps                     = %d\n",
+        g_udp_output_bps);
+    printf("core.runtime_statistics_to_file    = %d\n",
+        g_core_runtime_statistics_to_file);
 }
 
 static int set_variable(char *command, obecli_command_t *child)
@@ -1313,6 +1324,9 @@ static int set_variable(char *command, obecli_command_t *child)
     if (strcasecmp(var, "codec.x265.qpmin") == 0) {
         g_x265_min_qp = val;
         g_x265_min_qp_new = 1;
+    } else
+    if (strcasecmp(var, "core.runtime_statistics_to_file") == 0) {
+        g_core_runtime_statistics_to_file = val;
     } else
     if (strcasecmp(var, "video_encoder.sei_timestamping") == 0) {
         g_sei_timestamping = val;
@@ -1847,11 +1861,17 @@ static int start_encode( char *command, obecli_command_t *child )
     g_running = 1;
     printf( "Encoding started\n" );
 
+    if (g_core_runtime_statistics_to_file)
+        runtime_statistics_start(&cli.h->runtime_statistics, &cli);
+
     return 0;
 }
 
 static int stop_encode( char *command, obecli_command_t *child )
 {
+    if (cli.h->runtime_statistics)
+        runtime_statistics_stop(cli.h->runtime_statistics);
+
     obe_close( cli.h );
     cli.h = NULL;
 
@@ -2193,4 +2213,144 @@ int main( int argc, char **argv )
     stop_encode( NULL, NULL );
 
     return 0;
+}
+
+/* RUNTIME STATISTICS */
+#define LOCAL_DEBUG 0
+int g_core_runtime_statistics_to_file = 0;
+extern int pthread_setname_np(pthread_t thread, const char *name);
+
+struct runtime_statistics_ctx
+{
+	obecli_ctx_t *cli;
+
+	/* Thermal bitmasks */
+	uint64_t thermal_bm;
+	int therm_max;
+
+	pthread_t threadId;
+	int running, terminate, terminated;
+};
+
+#define APPEND(s) ((s) + strlen(s))
+static void *runtime_statistics_thread(void *p)
+{
+#if LOCAL_DEBUG
+	printf("%s()\n", __func__);
+#endif
+	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
+
+	pthread_setname_np(ctx->threadId, "obe-rt-stats");
+
+	ctx->running = 1;
+	char ts[64];
+	char line[256] = { 0 };
+	while (!ctx->terminate) {
+		sleep(1);
+		obe_getTimestamp(ts, NULL);
+		line[0] = 0;
+
+		/* 1. Timestamp,
+		 * 2. bps output
+		 * 3. pid
+		 * 4. encoder 0 (video codec) raw frame queue depth
+		 * 5..... cpu thermals in degC.
+		 */
+		sprintf(APPEND(line), ",pid=%d", getpid());
+		sprintf(APPEND(line), ",bps=%d", g_udp_output_bps);
+
+		// /sys/devices/platform/coretemp.0/hwmon/hwmon1
+
+		obe_t *h = ctx->cli->h;
+		for (int i = 0; i < ctx->cli->h->num_output_streams; i++) {
+			obe_output_stream_t *e = obe_core_get_output_stream_by_index(h, i);
+			if (e->stream_action == STREAM_ENCODE && i == 0) {
+				obe_queue_t *q = &h->encoders[i]->queue;
+				sprintf(APPEND(line), ",ve_q=%d", q->size);
+				break;
+			}
+		}
+
+		/* Thermals */
+		if (ctx->thermal_bm == 0) {
+			char tmp[256];
+			for (int i = 0; i < 63; i++) {
+				char fn[256];
+				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_label", i);
+				FILE *fh = fopen(fn, "rb");
+				if (!fh)
+					continue;
+
+				tmp[0] = 0;
+				fread(tmp, 1, sizeof(tmp), fh);
+				if (strncmp(tmp, "Core ", 5) == 0) {
+					ctx->thermal_bm |= (1 << i);
+					ctx->therm_max = i + 1;
+				}
+				fclose(fh);
+			}
+		}
+
+		if (ctx->thermal_bm) {
+			int t = 0;
+			for (int i = 0; i < ctx->therm_max; i++) {
+				if ((ctx->thermal_bm & ((uint64_t)(1 << i))) == 0)
+					continue;
+
+				char fn[256];
+				char val[16];
+				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_input", i);
+				FILE *fh = fopen(fn, "rb");
+				if (!fh)
+					continue;
+
+				fread(val, 1, sizeof(val), fh);
+				fclose(fh);
+				sprintf(APPEND(line),",cpu%d_temp=%d", t++, atoi(val) / 1000);
+			}
+		}
+
+		char msg[256];
+		sprintf(msg, "ts=%s%s\n", ts, line);
+
+		if (g_core_runtime_statistics_to_file > 1)
+			printf(msg);
+
+		char statsfile[256];
+		sprintf(statsfile, "/tmp/%d-obe-runtime-statistics.log", getpid());
+		FILE *fh = fopen(statsfile, "a+");
+		if (fh) {
+			fwrite(msg, 1, strlen(msg), fh);
+			fclose(fh);
+		}
+	}
+	ctx->terminated = 1;
+	ctx->running = 0;
+	pthread_exit(0);
+
+	return NULL;
+}
+
+int runtime_statistics_start(void **p, obecli_ctx_t *cli)
+{
+	struct runtime_statistics_ctx *ctx = calloc(1, sizeof(*ctx));
+	*p = ctx;
+	ctx->cli = cli;
+
+	printf("%s()\n", __func__);
+
+	pthread_create(&ctx->threadId, NULL, runtime_statistics_thread, ctx);
+	return 0;
+}
+
+void runtime_statistics_stop(void *p)
+{
+	printf("%s()\n", __func__);
+
+	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
+	ctx->terminate = 1;
+	while (!ctx->terminated)
+		usleep(100 * 1000);
+
+	pthread_cancel(ctx->threadId);
 }
