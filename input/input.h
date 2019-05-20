@@ -47,6 +47,9 @@ typedef struct
 #if HAVE_DECKLINK
 extern const obe_input_func_t decklink_input;
 #endif
+#if HAVE_BLUEDRIVER_P_H
+extern const obe_input_func_t bluefish_input;
+#endif
 extern const obe_input_func_t linsys_sdi_input;
 extern const obe_input_func_t v4l2_input;
 

@@ -94,10 +94,11 @@ enum input_video_format_e
 
 enum input_type_e
 {
-    INPUT_URL,
+    INPUT_URL = 0,
     INPUT_DEVICE_DECKLINK,
     INPUT_DEVICE_LINSYS_SDI,
     INPUT_DEVICE_V4L2,
+    INPUT_DEVICE_BLUEFISH,
 //    INPUT_DEVICE_ASI,
 };
 

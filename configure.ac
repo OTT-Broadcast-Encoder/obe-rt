@@ -26,7 +26,7 @@ AX_PROG_YASM()
 # being linked into a consumer's shared library
 AC_MSG_CHECKING(whether fPIC compiler option is accepted)
 SAVED_CFLAGS="$CFLAGS -DKL_USERSPACE"
-CFLAGS="$CFLAGS -fPIC -Werror"
+CFLAGS="$CFLAGS -fPIC -Werror "
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [return 0;])],
     [AC_MSG_RESULT(yes)
      CFLAGS="$SAVED_CFLAGS -fPIC"],
@@ -72,6 +72,12 @@ AC_CHECK_HEADERS([twolame.h],
                  [break],
                  [AC_MSG_ERROR([libtwolame headers not found or not usable])])
 
+AC_CHECK_HEADERS([BlueDriver_p.h], HEADER_BLUEFISH444="yes")
+#if test "x$HEADER_LIBX265" == "xyes" ; then
+#    LDFLAGS+=" -lx265 "
+#fi
+AM_CONDITIONAL(BLUEFISH444, test x"$HEADER_BLUEFISH444" == x"yes")
+
 ## Check for x265 (optional)
 AC_CHECK_HEADERS([x265.h], HEADER_LIBX265="yes")
 #if test "x$HEADER_LIBX265" == "xyes" ; then
@@ -80,7 +86,7 @@ AC_CHECK_HEADERS([x265.h], HEADER_LIBX265="yes")
 AM_CONDITIONAL(LIBX265, test x"$HEADER_LIBX265" == x"yes")
 
 ## Check for VAAPI (optional)
-AC_CHECK_HEADERS([va/va.h], HEADER_LIBVA="yes")
+#AC_CHECK_HEADERS([va/va.h], HEADER_LIBVA="yes")
 #if test "x$HEADER_LIBX265" == "xyes" ; then
 #    LDFLAGS+=" -lx265 "
 #fi

@@ -26,6 +26,12 @@ LDFLAGS += -L../../vaapi/libva-utils/common/.libs
 LDFLAGS += -lva -lva-display
 CFLAGS += -I../../vaapi/libva-utils/common
 endif
+if BLUEFISH444
+BLUEFISH444_SDK=/home/stoth/BLUEFISH/EpochLinuxDriver_V5_11_0_27/release/driver
+LDFLAGS += -L$(BLUEFISH444_SDK)/lib
+LDFLAGS += -lBlueVelvetC64 -lBlueVelvet64 -lrt
+CFLAGS += -I$(BLUEFISH444_SDK)/inc
+endif
 
 CXXFLAGS = $(CFLAGS)
 
@@ -51,6 +57,9 @@ obecli_SOURCES += ../input/sdi/smpte337_detector2.c
 obecli_SOURCES += ../input/sdi/decklink/decklink.cpp
 obecli_SOURCES += ../input/sdi/linsys/linsys.c
 obecli_SOURCES += ../input/sdi/v4l2/v4l2.cpp
+if BLUEFISH444
+obecli_SOURCES += ../input/sdi/bluefish/bluefish.cpp
+endif
 obecli_SOURCES += ../filters/audio/audio.c
 obecli_SOURCES += ../filters/audio/337m/337m.c
 obecli_SOURCES += ../filters/video/cc.c

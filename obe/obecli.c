@@ -73,7 +73,11 @@ static int g_running = 0;
 static int system_type_value = OBE_SYSTEM_TYPE_GENERIC;
 
 static const char * const system_types[]             = { "generic", "lowestlatency", "lowlatency", 0 };
-static const char * const input_types[]              = { "url", "decklink", "linsys-sdi", "v4l2", 0 };
+static const char * const input_types[]              = { "url", "decklink", "linsys-sdi", "v4l2",
+#if HAVE_BLUEDRIVER_P_H
+								"bluefish",
+#endif
+								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
                                                          "1080p23.98", "1080p24", "1080p25", "1080p29.97", "1080p30", "1080p50", "1080p59.94",
                                                          "1080p60", 0 };
@@ -2042,6 +2046,9 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+#if HAVE_BLUEDRIVER_P_H
+    printf("BlueFish444 Epoch SDK\n");
+#endif
     printf("Decklink SDK %s\n", BLACKMAGIC_DECKLINK_API_VERSION_STRING);
     printf("\n");
 
