@@ -333,6 +333,21 @@ struct decklink_status
     decklink_opts_t *decklink_opts;
 };
 
+void klsyslog_and_stdout(const char *format, ...)
+{
+    char buf[2048] = { 0 };
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+
+    va_list vl;
+    va_start(vl,format);
+    vsprintf(&buf[strlen(buf)], format, vl);
+    va_end(vl);
+
+    syslog(LOG_INFO, "%s", buf);
+    printf("%s\n", buf);
+}
+
 void kllog(const char *category, const char *format, ...)
 {
     char buf[2048] = { 0 };
@@ -2101,21 +2116,21 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     }
 
     if (OPTION_ENABLED(frame_injection)) {
-        fprintf(stdout, "Enabling option frame injection\n");
+        klsyslog_and_stdout("Enabling option frame injection");
         g_decklink_inject_frame_enable = 1;
     }
 
     if (OPTION_ENABLED(allow_1080p60)) {
-        fprintf(stdout, "Enabling option 1080p60\n");
+        klsyslog_and_stdout("Enabling option 1080p60");
     }
 
     if (OPTION_ENABLED(scte35)) {
-        fprintf(stdout, "Enabling option SCTE35\n");
+        klsyslog_and_stdout("Enabling option SCTE35");
     } else
 	callbacks.scte_104 = NULL;
 
     if (OPTION_ENABLED(smpte2038)) {
-        fprintf(stdout, "Enabling option SMPTE2038\n");
+        klsyslog_and_stdout("Enabling option SMPTE2038");
         if (smpte2038_packetizer_alloc(&decklink_ctx->smpte2038_ctx) < 0) {
             fprintf(stderr, "Unable to allocate a SMPTE2038 context.\n");
         }
