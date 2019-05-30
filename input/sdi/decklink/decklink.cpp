@@ -1052,7 +1052,7 @@ HRESULT DeckLinkCaptureDelegate::noVideoInputFrameArrived(IDeckLinkVideoInputFra
 	avfm_set_pts_audio(&raw_frame->avfm, decklink_ctx->stream_time + clock_offset);
 
 	avfm_set_hw_received_time(&raw_frame->avfm);
-#if 1
+#if 0
 	//avfm_dump(&raw_frame->avfm);
 	printf("Injecting cached frame %d for time %" PRIi64 "\n", g_decklink_injected_frame_count, raw_frame->pts);
 #endif
