@@ -1401,7 +1401,11 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         else if (decklink_opts_->probe && decklink_ctx->audio_pairs[0].smpte337_frames_written > 6)
             decklink_opts_->probe_success = 1;
 
-        g_decklink_injected_frame_count = 0;
+        if (g_decklink_injected_frame_count > 0) {
+            klsyslog_and_stdout("Decklink card index %i: Injected %d cached video frame(s)",
+                decklink_opts_->card_idx, g_decklink_injected_frame_count);
+            g_decklink_injected_frame_count = 0;
+        }
 
         /* use SDI ticks as clock source */
         videoframe->GetStreamTime(&decklink_ctx->stream_time, &frame_duration, OBE_CLOCK);
