@@ -126,6 +126,8 @@ typedef struct
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
+	AVAudioResampleContext *avr;
+
 	pthread_t vthreadId;
 	int vthreadTerminate, vthreadRunning, vthreadComplete;
 
@@ -257,10 +259,9 @@ static void *bluefish_videoThreadFunc(void *p)
 	unsigned char* pAudioSamples = new unsigned char[2002*16*4];
 
 	memset(&ctx->HancInfo, 0, sizeof(ctx->HancInfo));
-	unsigned int nAudioChannels = 2;
+	unsigned int nAudioChannels = 16;
 	ctx->HancInfo.audio_ch_required_mask =
-		MONO_CHANNEL_1 | MONO_CHANNEL_2;
-#if 0
+		MONO_CHANNEL_1 | MONO_CHANNEL_2 |
 		MONO_CHANNEL_3 | MONO_CHANNEL_4 |
 		MONO_CHANNEL_5 | MONO_CHANNEL_6 |
 		MONO_CHANNEL_7 | MONO_CHANNEL_8 |
@@ -268,7 +269,7 @@ static void *bluefish_videoThreadFunc(void *p)
 		MONO_CHANNEL_13 | MONO_CHANNEL_14 |
 		MONO_CHANNEL_15 | MONO_CHANNEL_16 |
 		MONO_CHANNEL_17 | MONO_CHANNEL_18;
-#endif
+
 	ctx->HancInfo.audio_pcm_data_ptr = pAudioSamples;
 	ctx->HancInfo.type_of_sample_required = AUDIO_CHANNEL_16BIT;
 	ctx->HancInfo.max_expected_audio_sample_count = 2002;
@@ -440,25 +441,47 @@ static void *bluefish_videoThreadFunc(void *p)
 			}
 
 			/* Handle all of the Audio..... */
+			/* HANC parser produced S16 interleaved sames C1L | C1R | C2L | C2R
+			 *                            we need planer  C1L | C1R | C1L | C1R .... | C2L | C2R .... etc
+			 */
 			{
 				obe_raw_frame_t *aud_frame = new_raw_frame();
 				if (!raw_frame) {
-					syslog(LOG_ERR, MODULE_PREFIX "Could not allocate raw audio frame\n" );
+					fprintf(stderr, MODULE_PREFIX "Could not allocate raw audio frame\n" );
 					break;
 				}
+
 				aud_frame->release_data = obe_release_audio_data;
 				aud_frame->release_frame = obe_release_frame;
 				aud_frame->audio_frame.num_samples = ctx->HancInfo.no_audio_samples / nAudioChannels;
 				aud_frame->audio_frame.num_channels = nAudioChannels;
-				aud_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_S16;
+				aud_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_S32P;
 				aud_frame->audio_frame.linesize = nAudioChannels * (16 /*bits */ / 8);
 				aud_frame->input_stream_id = 1;
 
-// MMM
-				int bytes = ctx->HancInfo.no_audio_samples * (16 / 8);
-				aud_frame->audio_frame.audio_data[0] = (uint8_t*)malloc(bytes);
-				memcpy(aud_frame->audio_frame.audio_data[0], pAudioSamples, bytes);
+				/* Allocate a new sample buffer ready to hold S32P */
+				if (av_samples_alloc(aud_frame->audio_frame.audio_data,
+					&aud_frame->audio_frame.linesize,
+					opts->num_channels,
+					aud_frame->audio_frame.num_samples,
+					(AVSampleFormat)aud_frame->audio_frame.sample_fmt, 0) < 0)
+				{
+					fprintf(stderr, MODULE_PREFIX "avsample alloc failed\n");
+				}
 
+				/* Convert input samples from S16 interleaved into S32P planer. */
+				if (avresample_convert(ctx->avr,
+					aud_frame->audio_frame.audio_data,
+					aud_frame->audio_frame.linesize,
+					aud_frame->audio_frame.num_samples,
+					(uint8_t**)&pAudioSamples,
+					0,
+					aud_frame->audio_frame.num_samples) < 0)
+				{
+					fprintf(stderr, MODULE_PREFIX "sample format conversion failed\n");
+				}
+
+// MMM
 //		int64_t pts = av_rescale_q(v4l2_ctx->a_counter++, v4l2_ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
 		//obe_clock_tick(v4l2_ctx->h, pts);
 				pts = 0;
@@ -519,6 +542,9 @@ static void close_device(bluefish_opts_t *opts)
 		avcodec_close(ctx->codec);
 		av_free(ctx->codec);
 	}
+
+	if (ctx->avr)
+		avresample_free(&ctx->avr);
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
@@ -634,6 +660,23 @@ static int open_device(bluefish_opts_t *opts)
 		fprintf(stderr, MODULE_PREFIX "Could not allocate a codec context\n");
 	}
 
+	ctx->avr = avresample_alloc_context();
+        if (!ctx->avr) {
+            fprintf(stderr, MODULE_PREFIX "Unable to alloc avresample context\n");
+        }
+
+	/* Give libavresample a made up channel map */
+printf("num_channels = %d\n", opts->num_channels);
+	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
+	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
+	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
+	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_channels) - 1, 0 );
+	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
+
+	if (avresample_open(ctx->avr) < 0) {
+		fprintf(stderr, MODULE_PREFIX "Could not configure avresample\n");
+	}
+
 	ctx->codec->get_buffer = obe_get_buffer;
 	ctx->codec->release_buffer = obe_release_buffer;
 	ctx->codec->reget_buffer = obe_reget_buffer;
@@ -667,7 +710,7 @@ static void *bluefish_probe_stream(void *ptr)
 	obe_input_t *user_opts = &probe_ctx->user_opts;
 	obe_device_t *device;
 	obe_int_input_stream_t *streams[MAX_STREAMS];
-	int num_streams = 2;
+	int num_streams = 9;
 
 	printf(MODULE_PREFIX "%s()\n", __func__);
 
@@ -706,10 +749,11 @@ static void *bluefish_probe_stream(void *ptr)
 		goto finish;
 	}
 
+
 	/* TODO: probe for SMPTE 337M */
 	/* TODO: factor some of the code below out */
 
-	for( int i = 0; i < 2; i++ ) {
+	for (int i = 0; i < 9; i++ ) {
 
 		streams[i] = (obe_int_input_stream_t*)calloc( 1, sizeof(*streams[i]) );
 		if (!streams[i])
@@ -732,7 +776,7 @@ static void *bluefish_probe_stream(void *ptr)
 			streams[i]->tff = 1; /* NTSC is bff in baseband but coded as tff */
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
-		else if( i == 1 ) {
+		else if (i > 0) {
 			/* TODO: various v4l2 assumptions about audio being 48KHz need resolved.
          		 * Some sources could be 44.1 and this module will fall down badly.
 			 */
