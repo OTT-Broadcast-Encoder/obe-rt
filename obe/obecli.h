@@ -185,6 +185,7 @@ static const obecli_input_name_t input_names[] =
 #if HAVE_BLUEDRIVER_P_H
     { INPUT_DEVICE_BLUEFISH, "BlueFish", "BlueFish Epoch Raw Frame Device", "internal" },
 #endif
+    { INPUT_DEVICE_V210    , "V210", "V210 Raw Frame Device", "internal" },
     { 0, 0, 0 },
 };
 

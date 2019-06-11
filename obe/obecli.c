@@ -77,6 +77,7 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 #if HAVE_BLUEDRIVER_P_H
 								"bluefish",
 #endif
+								"v210",
 								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
                                                          "1080p23.98", "1080p24", "1080p25", "1080p29.97", "1080p30", "1080p50", "1080p59.94",
@@ -2039,6 +2040,7 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+    printf("Supports  YUV via  FILE: true\n");
     printf("Supports  AVC via VAAPI: %s\n",
 #if HAVE_VA_VA_H
         "true"

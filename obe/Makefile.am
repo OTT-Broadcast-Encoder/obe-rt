@@ -57,6 +57,7 @@ obecli_SOURCES += ../input/sdi/smpte337_detector2.c
 obecli_SOURCES += ../input/sdi/decklink/decklink.cpp
 obecli_SOURCES += ../input/sdi/linsys/linsys.c
 obecli_SOURCES += ../input/sdi/v4l2/v4l2.cpp
+obecli_SOURCES += ../input/sdi/v210/v210.cpp
 if BLUEFISH444
 obecli_SOURCES += ../input/sdi/bluefish/bluefish.cpp
 endif

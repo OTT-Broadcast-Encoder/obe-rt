@@ -649,6 +649,8 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
         input = bluefish_input;
 #endif
+    else if (input_device->input_type == INPUT_DEVICE_V210)
+        input = v210_input;
     else if( input_device->input_type == INPUT_DEVICE_LINSYS_SDI )
         input = linsys_sdi_input;
     else if (input_device->input_type == INPUT_DEVICE_V4L2)
@@ -706,6 +708,8 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
         printf( "Probing device: BlueFish card %i. ", input_device->card_idx);
 #endif
+    else if (input_device->input_type == INPUT_DEVICE_V210)
+        printf( "Probing device: YUV card %i. ", input_device->card_idx);
     else
         printf( "Probing device: Decklink card %i. ", input_device->card_idx );
 
@@ -1055,6 +1059,8 @@ int obe_start( obe_t *h )
     else if( h->devices[0]->device_type == INPUT_DEVICE_BLUEFISH )
         input = bluefish_input;
 #endif
+    else if( h->devices[0]->device_type == INPUT_DEVICE_V210)
+        input = v210_input;
     else if( h->devices[0]->device_type == INPUT_DEVICE_LINSYS_SDI )
         input = linsys_sdi_input;
     else if (h->devices[0]->device_type == INPUT_DEVICE_V4L2)
