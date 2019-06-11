@@ -61,8 +61,6 @@ extern "C"
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
-#include <libavresample/avresample.h>
-#include <libavutil/opt.h>
 #include <libyuv/convert.h>
 #include <alsa/asoundlib.h>
 }
@@ -225,16 +223,16 @@ static void *bluefish_videoThreadFunc(void *p)
          * this call just synchronises us to the card
          */
 	bfcWaitVideoInputSync(ctx->hBvc, UPD_FMT_FRAME, ctx->CurrentFieldCount);
-	//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image(ScheduleID));
-	bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
+	bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image(ScheduleID));
+	//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
 	CapturingID = ScheduleID;
 	ScheduleID = (ScheduleID+1)%4;
 	ctx->LastFieldCount = ctx->CurrentFieldCount;
 
 	/* the first buffer starts to be captured now; this is it's field count */
 	bfcWaitVideoInputSync(ctx->hBvc, UPD_FMT_FRAME, ctx->CurrentFieldCount);
-	//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image(ScheduleID));
-	bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
+	bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image(ScheduleID));
+	//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
 	DoneID = CapturingID;
 	CapturingID = ScheduleID;
 	ScheduleID = (ScheduleID + 1) % 4;
@@ -253,6 +251,7 @@ static void *bluefish_videoThreadFunc(void *p)
 	unsigned char *pVideoBuffer = (unsigned char *)valloc(ctx->frameSizeBytesVideo);
 	unsigned char *pVancBuffer = (unsigned char *)valloc(ctx->frameSizeBytesVanc);
 	unsigned char *pHancBuffer = (unsigned char *)valloc(ctx->frameSizeBytesHanc);
+	memset(pHancBuffer, 0, ctx->frameSizeBytesHanc);
 
 	/* Initialize the HANC parser, decode all audio channels. 1-16 */
 	unsigned char* pAudioSamples = new unsigned char[2002*16*4];
@@ -286,8 +285,8 @@ static void *bluefish_videoThreadFunc(void *p)
 		ctx->LastFieldCount = ctx->CurrentFieldCount;
 
 		/* tell the card to capture another frame at the next interrupt */
-		//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image(ScheduleID));
-		bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
+		bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_HANC(ScheduleID));
+		//bfcRenderBufferCapture(ctx->hBvc, BlueBuffer_Image_VBI(ScheduleID));
 
 		/* check if the video signal was valid for the last frame (until wait_input_video_synch() returned) */
 		unsigned int nValue = 0;
@@ -299,24 +298,34 @@ static void *bluefish_videoThreadFunc(void *p)
 			 * for the buffer DoneID was valid while it was capturing so we can DMA the buffer
 			 * DMA the frame from the card to our buffer
 			 */
-                        //bfcSystemBufferRead(ctx->hBvc, pVideoBuffer, ctx->frameSizeBytesVideo,
-			//	BlueImage_DMABuffer(DoneID, BLUE_DATA_IMAGE));
+#if 1
+                        ret = bfcSystemBufferRead(ctx->hBvc, pVideoBuffer, ctx->frameSizeBytesVideo,
+				BlueImage_DMABuffer(DoneID, BLUE_DATA_IMAGE));
+#else
                         ret = bfcSystemBufferRead(ctx->hBvc, pVideoBuffer, ctx->frameSizeBytesVideo,
 				BlueImage_VBI_DMABuffer(DoneID, BLUE_DATA_IMAGE));
+#endif
 			if (BLUE_FAIL(ret)) {
 				fprintf(stderr, MODULE_PREFIX "Unable to read frame image\n");
 			}
-
+#if 0
                         ret = bfcSystemBufferRead(ctx->hBvc, pVancBuffer, ctx->frameSizeBytesVanc,
 				BlueImage_VBI_DMABuffer(DoneID, BLUE_DATA_VBI));
 			if (BLUE_FAIL(ret)) {
 				fprintf(stderr, MODULE_PREFIX "Unable to read frame vanc\n");
 			}
+#endif
 
+#if 1
+			ret = bfcSystemBufferRead(ctx->hBvc, pHancBuffer, ctx->frameSizeBytesHanc,
+				BlueImage_DMABuffer(DoneID, BLUE_DATA_HANC));
+#else
 			ret = bfcSystemBufferRead(ctx->hBvc, pHancBuffer, ctx->frameSizeBytesHanc,
 				BlueImage_VBI_DMABuffer(DoneID, BLUE_DATA_HANC));
+#endif
 			if (BLUE_FAIL(ret)) {
 				fprintf(stderr, MODULE_PREFIX "Unable to read frame hanc\n");
+			} else {
 			}
 
 			/* Process HANC and extract audio samples. */
@@ -337,8 +346,9 @@ static void *bluefish_videoThreadFunc(void *p)
 				ctx->HancInfo.timecodes[1],
 				ctx->HancInfo.timecodes[2],
 				ctx->HancInfo.timecodes[3]);
-#else
+#endif
 
+#if 0
 			printf("Audio samples decoded: %4d (%8.2f), available 0x%04x, payload 0x%04x\n",
 				ctx->HancInfo.no_audio_samples,
 				ctx->HancInfo.no_audio_samples/(float)nAudioChannels,
@@ -370,7 +380,7 @@ static void *bluefish_videoThreadFunc(void *p)
 			CapturingID = ScheduleID;
 			ScheduleID = (ScheduleID +1 ) % 4;
 
-			/* Ship the payload into the OBE pipeline. */
+			/* Ship the video payload into the OBE pipeline. */
 			obe_raw_frame_t *raw_frame = new_raw_frame();
 			if (!raw_frame) {
 				fprintf(stderr, MODULE_PREFIX "Could not allocate raw video frame\n");
@@ -421,12 +431,56 @@ static void *bluefish_videoThreadFunc(void *p)
 			avfm_set_pts_audio(&raw_frame->avfm, pts);
 
 			avfm_set_hw_received_time(&raw_frame->avfm);
-			double dur = 27000000 / (opts->timebase_den / opts->timebase_num);
+			double dur = 27000000 / ((double)opts->timebase_den / (double)opts->timebase_num);
 			avfm_set_video_interval_clk(&raw_frame->avfm, dur);
 			//raw_frame->avfm.hw_audio_correction_clk = clock_offset;
 			//avfm_dump(&raw_frame->avfm);
 
 			if (add_to_filter_queue(ctx->h, raw_frame) < 0 ) {
+			}
+
+			/* Handle all of the Audio..... */
+			{
+				obe_raw_frame_t *aud_frame = new_raw_frame();
+				if (!raw_frame) {
+					syslog(LOG_ERR, MODULE_PREFIX "Could not allocate raw audio frame\n" );
+					break;
+				}
+				aud_frame->release_data = obe_release_audio_data;
+				aud_frame->release_frame = obe_release_frame;
+				aud_frame->audio_frame.num_samples = ctx->HancInfo.no_audio_samples / nAudioChannels;
+				aud_frame->audio_frame.num_channels = nAudioChannels;
+				aud_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_S16;
+				aud_frame->audio_frame.linesize = nAudioChannels * (16 /*bits */ / 8);
+				aud_frame->input_stream_id = 1;
+
+// MMM
+				int bytes = ctx->HancInfo.no_audio_samples * (16 / 8);
+				aud_frame->audio_frame.audio_data[0] = (uint8_t*)malloc(bytes);
+				memcpy(aud_frame->audio_frame.audio_data[0], pAudioSamples, bytes);
+
+//		int64_t pts = av_rescale_q(v4l2_ctx->a_counter++, v4l2_ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
+		//obe_clock_tick(v4l2_ctx->h, pts);
+				pts = 0;
+				aud_frame->pts = pts;
+
+				/* AVFM */
+				avfm_init(&aud_frame->avfm, AVFM_AUDIO_PCM);
+				avfm_set_hw_status_mask(&aud_frame->avfm, 0);
+
+				/* Remember that we drive everything in the pipeline from the audio clock. */
+				avfm_set_pts_video(&aud_frame->avfm, pts);
+				avfm_set_pts_audio(&aud_frame->avfm, pts);
+
+				avfm_set_hw_received_time(&aud_frame->avfm);
+				double dur = 27000000 / ((double)opts->timebase_den / (double)opts->timebase_num);
+				avfm_set_video_interval_clk(&aud_frame->avfm, dur);
+				//raw_frame->avfm.hw_audio_correction_clk = clock_offset;
+				//avfm_dump(&raw_frame->avfm);
+
+				if (add_to_filter_queue(ctx->h, aud_frame) < 0 ) {
+					printf("Failed to add\n");
+				}
 			}
 
 			if (frame)
@@ -687,6 +741,7 @@ static void *bluefish_probe_stream(void *ptr)
 			streams[i]->num_channels  = 2;
 			streams[i]->sample_format = AV_SAMPLE_FMT_S16;
 			streams[i]->sample_rate = 48000;
+			streams[i]->sdi_audio_pair = i;
 		}
 	}
 
