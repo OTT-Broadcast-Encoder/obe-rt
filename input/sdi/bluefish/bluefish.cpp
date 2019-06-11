@@ -254,6 +254,7 @@ static void *bluefish_videoThreadFunc(void *p)
 	unsigned char *pVancBuffer = (unsigned char *)valloc(ctx->frameSizeBytesVanc);
 	unsigned char *pHancBuffer = (unsigned char *)valloc(ctx->frameSizeBytesHanc);
 	memset(pHancBuffer, 0, ctx->frameSizeBytesHanc);
+	memset(pVancBuffer, 0, ctx->frameSizeBytesVanc);
 
 	/* Initialize the HANC parser, decode all audio channels. 1-16 */
 	unsigned char* pAudioSamples = new unsigned char[2002*16*4];
@@ -309,13 +310,12 @@ static void *bluefish_videoThreadFunc(void *p)
 			if (BLUE_FAIL(ret)) {
 				fprintf(stderr, MODULE_PREFIX "Unable to read frame image\n");
 			}
-#if 0
+
                         ret = bfcSystemBufferRead(ctx->hBvc, pVancBuffer, ctx->frameSizeBytesVanc,
 				BlueImage_VBI_DMABuffer(DoneID, BLUE_DATA_VBI));
 			if (BLUE_FAIL(ret)) {
 				fprintf(stderr, MODULE_PREFIX "Unable to read frame vanc\n");
 			}
-#endif
 
 #if 1
 			ret = bfcSystemBufferRead(ctx->hBvc, pHancBuffer, ctx->frameSizeBytesHanc,
@@ -355,16 +355,6 @@ static void *bluefish_videoThreadFunc(void *p)
 				ctx->HancInfo.no_audio_samples/(float)nAudioChannels,
 				nValue & 0xffff,
 				(nValue >> 16) & 0xffff);
-#endif
-
-#if 0
-			char fn[64];
-			sprintf(fn, "audio%06d.raw", ctx->v_counter);
-			FILE *fh = fopen(fn, "wb");
-			if (fh) {
-				fwrite(pAudioSamples, 1, 2 * ctx->HancInfo.no_audio_samples, fh);
-				fclose(fh);
-			}
 #endif
 
 #if 0
