@@ -655,8 +655,7 @@ static int open_device(bluefish_opts_t *opts)
             fprintf(stderr, MODULE_PREFIX "Unable to alloc avresample context\n");
         }
 
-	/* Give libavresample a made up channel map */
-printf("num_channels = %d\n", opts->num_channels);
+	/* Give libavresample our custom audio channel map */
 	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
@@ -743,16 +742,17 @@ static void *bluefish_probe_stream(void *ptr)
 	/* TODO: probe for SMPTE 337M */
 	/* TODO: factor some of the code below out */
 
-	for (int i = 0; i < 9; i++ ) {
+	/* Create the video output stream and eight output audio pairs. */
+	for (int i = 0; i < 9; i++) {
 
-		streams[i] = (obe_int_input_stream_t*)calloc( 1, sizeof(*streams[i]) );
+		streams[i] = (obe_int_input_stream_t*)calloc( 1, sizeof(*streams[i]));
 		if (!streams[i])
 			goto finish;
 
 		/* TODO: make it take a continuous set of stream-ids */
-		pthread_mutex_lock( &h->device_list_mutex );
+		pthread_mutex_lock(&h->device_list_mutex);
 		streams[i]->input_stream_id = h->cur_input_stream_id++;
-		pthread_mutex_unlock( &h->device_list_mutex );
+		pthread_mutex_unlock(&h->device_list_mutex);
 
 		if (i == 0) {
 			streams[i]->stream_type = STREAM_TYPE_VIDEO;
@@ -767,9 +767,6 @@ static void *bluefish_probe_stream(void *ptr)
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
 		else if (i > 0) {
-			/* TODO: various v4l2 assumptions about audio being 48KHz need resolved.
-         		 * Some sources could be 44.1 and this module will fall down badly.
-			 */
 			streams[i]->stream_type = STREAM_TYPE_AUDIO;
 			streams[i]->stream_format = AUDIO_PCM;
 			streams[i]->num_channels  = 2;
