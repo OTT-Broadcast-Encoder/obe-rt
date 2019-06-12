@@ -586,6 +586,15 @@ void *open_muxer( void *ptr )
             encoder = get_encoder( h, output_stream->output_stream_id );
             stream->audio_frame_size = (double)encoder->num_samples * 90000LL * output_stream->ts_opts.frames_per_pes / input_stream->sample_rate;
         }
+        else if (stream_format == AUDIO_AC_3_BITSTREAM) {
+            output_stream->ts_opts.frames_per_pes = 1;
+            stream->audio_frame_size = 2880; /* In 90KHz ticks - 32ms */
+        } else {
+            printf("stream_format = %d\n", stream_format);
+            printf("frames_per_pes = %d\n", output_stream->ts_opts.frames_per_pes);
+            printf("sample_rate = %d\n", input_stream->sample_rate);
+            printf("WARNING: audio frame size is unknown -- Poorly defined new audio codec?\n");
+	}
     }
 
     /* Video stream isn't guaranteed to be first so populate program parameters here */

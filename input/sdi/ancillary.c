@@ -317,6 +317,28 @@ static int parse_cea_608( uint16_t *line )
 }
 #endif
 
+#define SAVE_BAD_VANC 0
+#if SAVE_BAD_VANC
+static void save_vanc_line(uint16_t *line, int width, int line_number)
+{
+	time_t now;
+	time(&now);
+
+	char fn[64];
+	sprintf(fn, "/tmp/%d-line%d-width%d.raw", (int)now, line_number, width);
+	
+	FILE *fh = fopen(fn, "wb");
+	if (fh) {
+		fprintf(fh, "line %4d: ", line_number);
+		for (int i = 0; i < width; i++) {
+			fprintf(fh, "%04x ", line[i]);
+		}
+		fprintf(fh, "\n");
+		fclose(fh);
+	}
+}
+#endif
+
 int parse_vanc_line( obe_t *h, obe_sdi_non_display_data_t *non_display_data, obe_raw_frame_t *raw_frame,
                      uint16_t *line, int width, int line_number )
 {
@@ -340,6 +362,9 @@ int parse_vanc_line( obe_t *h, obe_sdi_non_display_data_t *non_display_data, obe
             if( (len+2) > (width - i - 1) )
             {
                 syslog( LOG_ERR, "VANC packet length too large on line %i \n", line_number );
+#if SAVE_BAD_VANC
+		save_vanc_line(line, width, line_number);
+#endif
                 break;
             }
 
@@ -370,8 +395,12 @@ int parse_vanc_line( obe_t *h, obe_sdi_non_display_data_t *non_display_data, obe
                         break;
                 }
             }
-            else
+            else {
                 syslog( LOG_ERR, "Invalid VANC checksum on line %i \n", line_number );
+#if SAVE_BAD_VANC
+		save_vanc_line(line, width, line_number);
+#endif
+            }
 
             /* skip DID, DBN/SDID, user data words and checksum */
             i += 2 + len + 1;

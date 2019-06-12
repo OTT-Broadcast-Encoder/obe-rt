@@ -334,7 +334,7 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
         s->bps_current = 0;
         g_udp_output_bps = s->bps;
     }
-    s->bps_current += size;
+    s->bps_current += (size * 8);
 
     if (!s->is_connected) {
 #if 0 /* SEI_TIMESTAMPING */
