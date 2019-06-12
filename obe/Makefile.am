@@ -61,6 +61,9 @@ obecli_SOURCES += ../input/sdi/v210/v210.cpp
 if BLUEFISH444
 obecli_SOURCES += ../input/sdi/bluefish/bluefish.cpp
 endif
+if NDILIB
+obecli_SOURCES += ../input/ndi/ndi.cpp
+endif
 obecli_SOURCES += ../filters/audio/audio.c
 obecli_SOURCES += ../filters/audio/337m/337m.c
 obecli_SOURCES += ../filters/video/cc.c

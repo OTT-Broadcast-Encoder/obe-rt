@@ -649,6 +649,10 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
         input = bluefish_input;
 #endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (input_device->input_type == INPUT_DEVICE_NDI)
+        input = ndi_input;
+#endif
     else if (input_device->input_type == INPUT_DEVICE_V210)
         input = v210_input;
     else if( input_device->input_type == INPUT_DEVICE_LINSYS_SDI )
@@ -707,6 +711,10 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
 #if HAVE_BLUEDRIVER_P_H
     else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
         printf( "Probing device: BlueFish card %i. ", input_device->card_idx);
+#endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (input_device->input_type == INPUT_DEVICE_NDI)
+        printf( "Probing device: NDI input %i. ", input_device->card_idx);
 #endif
     else if (input_device->input_type == INPUT_DEVICE_V210)
         printf( "Probing device: YUV card %i. ", input_device->card_idx);
@@ -1058,6 +1066,10 @@ int obe_start( obe_t *h )
 #if HAVE_BLUEDRIVER_P_H
     else if( h->devices[0]->device_type == INPUT_DEVICE_BLUEFISH )
         input = bluefish_input;
+#endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (h->devices[0]->device_type == INPUT_DEVICE_NDI)
+        input = ndi_input;
 #endif
     else if( h->devices[0]->device_type == INPUT_DEVICE_V210)
         input = v210_input;

@@ -186,6 +186,9 @@ static const obecli_input_name_t input_names[] =
     { INPUT_DEVICE_BLUEFISH, "BlueFish", "BlueFish Epoch Raw Frame Device", "internal" },
 #endif
     { INPUT_DEVICE_V210    , "V210", "V210 Raw Frame Device", "internal" },
+#if HAVE_PROCESSING_NDI_LIB_H
+    { INPUT_DEVICE_NDI,      "NDI",  "NDI Raw Frame Device", "internal" },
+#endif
     { 0, 0, 0 },
 };
 

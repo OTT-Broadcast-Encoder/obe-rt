@@ -53,5 +53,8 @@ extern const obe_input_func_t bluefish_input;
 extern const obe_input_func_t linsys_sdi_input;
 extern const obe_input_func_t v4l2_input;
 extern const obe_input_func_t v210_input;
+#if HAVE_PROCESSING_NDI_LIB_H
+extern const obe_input_func_t ndi_input;
+#endif
 
 #endif
