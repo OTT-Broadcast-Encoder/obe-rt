@@ -255,7 +255,7 @@ static void processFrameVideo(ndi_opts_t *opts, NDIlib_video_frame_v2_t *frame)
 {
 	ndi_ctx_t *ctx = &opts->ctx;
 
-#if 1
+#if 0
 printf("%s()\n", __func__);
 printf("line_stride_in_bytes = %d\n", frame->line_stride_in_bytes);
 static int64_t lastTimestamp = 0;
@@ -510,6 +510,8 @@ static int open_device(ndi_opts_t *opts)
 		return -1;
 	}
 
+	printf("p_sources %p\n", p_sources);
+
 	// Connect to source
 	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + 0);
 
@@ -518,7 +520,10 @@ static int open_device(ndi_opts_t *opts)
 
 	/* Detect signal properties */
 	int l = 0;
-	while (l++ < 32) {
+	while (++l) {
+
+		if (opts->width && l > 32)
+			break;
 
 		/* Grab a frame of video and audio, probe it. */
 		NDIlib_video_frame_v2_t video_frame;
@@ -544,7 +549,7 @@ lastTimestamp = video_frame.timestamp;
 					opts->interlaced = 0;
 				else
 					opts->interlaced = 1;
-#if 1
+#if 0
 				printf("Detected fourCC 0x%x\n", video_frame.FourCC);
 				if (video_frame.FourCC == NDIlib_FourCC_type_UYVY) {
 					printf("UYVY\n");
@@ -565,6 +570,8 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 #endif
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
+			default:
+				printf("other\n");
 		}
 	}
 
