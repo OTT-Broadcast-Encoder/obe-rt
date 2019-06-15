@@ -394,157 +394,19 @@ static void *hevc_vaapi_start_encoder( void *ptr )
 				dst_uv, ctx->frame_width / 2,
 				ctx->frame_width, ctx->frame_height);
 
-#if 0 // SEI_TIMESTAMPING
-/* NO SEI support yet. When we do add it, watch out for mallocs and small leaks
- * if we clone the HEVC iplementaiton.
- */
-/* Start time - Always the last SEI */
-static uint32_t framecount = 0;
-x = &p->userSEI.payloads[count - 1];
-x->payloadType = USER_DATA_AVC_UNREGISTERED;
-x->payloadSize = SEI_TIMESTAMP_PAYLOAD_LENGTH;
-x->payload = set_timestamp_alloc();
-
-struct timeval tv;
-gettimeofday(&tv, NULL);
-
-set_timestamp_field_set(x->payload, 1, framecount);
-set_timestamp_field_set(x->payload, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-set_timestamp_field_set(x->payload, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-set_timestamp_field_set(x->payload, 4, tv.tv_sec);
-set_timestamp_field_set(x->payload, 5, tv.tv_usec);
-set_timestamp_field_set(x->payload, 6, 0);
-set_timestamp_field_set(x->payload, 7, 0);
-set_timestamp_field_set(x->payload, 8, 0);
-set_timestamp_field_set(x->payload, 9, 0);
-
-/* The remaining 8 bytes (time exit from compressor fields)
- * will be filled when the frame exists the compressor. */
-framecount++;
-#endif
-
 			vaapi_encode_frame(ctx, rf, f, dst_uv, NULL);
 
 			free(f);
 
-#if 0 // SEI_TIMESTAMPING
-			/* Walk through each of the NALS and insert current time into any LTN sei timestamp frames we find. */
-			for (int m = 0; m < ctx->i_nal; m++) {
-				int offset = ltn_uuid_find(&ctx->hevc_nals[m].payload[0], ctx->hevc_nals[m].sizeBytes);
-				if (offset >= 0) {
-				{
-					struct timeval tv;
-					gettimeofday(&tv, NULL);
-
-					/* Add the time exit from compressor seconds/useconds. */
-					set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], 6, tv.tv_sec);
-					set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], 7, tv.tv_usec);
-				}
-			}
-#endif
-
 			rf->release_data(rf);
 			rf->release_frame(rf);
 			remove_from_queue(&ctx->encoder->queue);
-
 
 			if (ret == 0) {
 				//fprintf(stderr, MESSAGE_PREFIX " ret = %d\n", ret);
 				leave = 1;
 				continue;
 			}
-#if 0
-			if (ret > 0) {
-				for (int z = 0; z < ctx->i_nal; z++) {
-					obe_coded_frame_t *cf = new_coded_frame(ctx->encoder->output_stream_id, ctx->hevc_nals[z].sizeBytes);
-					if (!cf) {
-						fprintf(stderr, MESSAGE_PREFIX " unable to alloc a new coded frame\n");
-						break;
-					}
-#if LOCAL_DEBUG
-					printf(MESSAGE_PREFIX " acquired %7d nals bytes (%d nals), pts = %12" PRIi64 " dts = %12" PRIi64 ", ret = %d, ",
-						ctx->hevc_nals[z].sizeBytes, ctx->i_nal - z,
-						ctx->hevc_picture_out->pts,
-						ctx->hevc_picture_out->dts,
-						ret);
-					printf("poc %8d  sliceType %d [%s]\n",
-						ctx->hevc_picture_out->poc, ctx->hevc_picture_out->sliceType,
-						sliceTypeLookup(ctx->hevc_picture_out->sliceType));
-#endif
-					/* Prep the frame. */
-#if 0
-static FILE *fh = NULL;
-if (fh == NULL)
-  fh = fopen("/tmp/hevc.nals", "wb");
-
-if (fh)
-  fwrite(ctx->hevc_nals[z].payload, 1, ctx->hevc_nals[z].sizeBytes, fh);
-#endif
-
-					struct userdata_s *out_ud = ctx->hevc_picture_out->userData; 
-					if (out_ud) {
-						/* Make sure we push the original hardware timing into the new frame. */
-						memcpy(&cf->avfm, &out_ud->avfm, sizeof(struct avfm_s));
-						free(ctx->hevc_picture_out->userData);
-						ctx->hevc_picture_out->userData = 0;
-
-						cf->pts = out_ud->avfm.audio_pts;
-					} else {
-						//fprintf(stderr, MESSAGE_PREFIX " missing pic out userData\n");
-					}
-
-					memcpy(cf->data, ctx->hevc_nals[z].payload, ctx->hevc_nals[z].sizeBytes);
-					cf->len                      = ctx->hevc_nals[z].sizeBytes;
-					cf->type                     = CF_VIDEO;
-					cf->pts                      = ctx->hevc_picture_out->pts + 45000;
-					cf->real_pts                 = ctx->hevc_picture_out->pts + 45000;
-					cf->real_dts                 = ctx->hevc_picture_out->dts;
-					cf->cpb_initial_arrival_time = cf->real_pts;
-					cf->cpb_final_arrival_time   = cf->real_pts + 45000;
-
-#if 0
-// X264 specific, I don't think we need to do this for HEVC
-            cf->pts = coded_frame->avfm.audio_pts;
-
-            /* The audio and video clocks jump with different intervals when the cable
-             * is disconnected, suggestedint a BM firmware bug.
-             * We'll use the audio clock regardless, for both audio and video compressors.
-             */
-            int64_t new_dts  = avfm->audio_pts + 24299700 - abs(cf->real_dts - cf->real_pts) + (2 * 450450);
-
-            /* We need to userstand, for this temporal frame, how much it varies from the dts. */
-            int64_t pts_diff = cf->real_dts - cf->real_pts;
-
-            /* Construct a new PTS based on the hardware DTS and the PTS offset difference. */
-            int64_t new_pts  = new_dts - pts_diff;
-
-            cf->real_dts = new_dts;
-            cf->real_pts = new_pts;
-            cf->cpb_initial_arrival_time = new_dts;
-            cf->cpb_final_arrival_time   = new_dts + abs(pic_out.hrd_timing.cpb_final_arrival_time - pic_out.hrd_timing.cpb_final_arrival_time);
-
-            cpb_removal_time = cf->real_pts; /* Only used for manually eyeballing the video output clock. */
-
-#endif
-#if 0
-			printf(MESSAGE_PREFIX " real_pts:%" PRIi64 " real_dts:%" PRIi64 " (%.3f %.3f)\n",
-				cf->real_pts, cf->real_dts,
-				ctx->hevc_picture_out->hrd_timing.dpb_output_time, pic_out.hrd_timing.cpb_removal_time);
-#endif
-
-					cf->priority = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
-					cf->random_access = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
-
-					if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
-						cf->arrival_time = arrival_time;
-						add_to_queue(&ctx->h->mux_queue, cf);
-						//printf(MESSAGE_PREFIX " Encode Latency %"PRIi64" \n", obe_mdate() - cf->arrival_time);
-					} else {
-						add_to_queue(&ctx->h->enc_smoothing_queue, cf);
-					}
-				} /* For each NAL */
-			} /* if nal_bytes > 0 */
-#endif
 
 			leave = 1;
 		} /* While ! leave */
