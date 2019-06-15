@@ -384,6 +384,7 @@ static void *hevc_vaapi_start_encoder( void *ptr )
 			uint8_t *dst_y = f;
 			uint8_t *dst_uv = f + (ctx->frame_width * ctx->frame_height);
 
+			/* VAAPI wants the frame in NV12 natively, so perform a csc */
 			/* This costs a few percent of a cpu */
 			I420ToNV12(
 				rf->img.plane[0], ctx->frame_width,
