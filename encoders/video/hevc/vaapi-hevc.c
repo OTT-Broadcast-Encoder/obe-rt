@@ -384,6 +384,7 @@ static void *hevc_vaapi_start_encoder( void *ptr )
 			uint8_t *dst_y = f;
 			uint8_t *dst_uv = f + (ctx->frame_width * ctx->frame_height);
 
+			/* VAAPI wants the frame in NV12 natively, so perform a csc */
 			/* This costs a few percent of a cpu */
 			I420ToNV12(
 				rf->img.plane[0], ctx->frame_width,
@@ -450,104 +451,11 @@ framecount++;
 			rf->release_frame(rf);
 			remove_from_queue(&ctx->encoder->queue);
 
-
 			if (ret == 0) {
 				//fprintf(stderr, MESSAGE_PREFIX " ret = %d\n", ret);
 				leave = 1;
 				continue;
 			}
-#if 0
-			if (ret > 0) {
-				for (int z = 0; z < ctx->i_nal; z++) {
-					obe_coded_frame_t *cf = new_coded_frame(ctx->encoder->output_stream_id, ctx->hevc_nals[z].sizeBytes);
-					if (!cf) {
-						fprintf(stderr, MESSAGE_PREFIX " unable to alloc a new coded frame\n");
-						break;
-					}
-#if LOCAL_DEBUG
-					printf(MESSAGE_PREFIX " acquired %7d nals bytes (%d nals), pts = %12" PRIi64 " dts = %12" PRIi64 ", ret = %d, ",
-						ctx->hevc_nals[z].sizeBytes, ctx->i_nal - z,
-						ctx->hevc_picture_out->pts,
-						ctx->hevc_picture_out->dts,
-						ret);
-					printf("poc %8d  sliceType %d [%s]\n",
-						ctx->hevc_picture_out->poc, ctx->hevc_picture_out->sliceType,
-						sliceTypeLookup(ctx->hevc_picture_out->sliceType));
-#endif
-					/* Prep the frame. */
-#if 0
-static FILE *fh = NULL;
-if (fh == NULL)
-  fh = fopen("/tmp/hevc.nals", "wb");
-
-if (fh)
-  fwrite(ctx->hevc_nals[z].payload, 1, ctx->hevc_nals[z].sizeBytes, fh);
-#endif
-
-					struct userdata_s *out_ud = ctx->hevc_picture_out->userData; 
-					if (out_ud) {
-						/* Make sure we push the original hardware timing into the new frame. */
-						memcpy(&cf->avfm, &out_ud->avfm, sizeof(struct avfm_s));
-						free(ctx->hevc_picture_out->userData);
-						ctx->hevc_picture_out->userData = 0;
-
-						cf->pts = out_ud->avfm.audio_pts;
-					} else {
-						//fprintf(stderr, MESSAGE_PREFIX " missing pic out userData\n");
-					}
-
-					memcpy(cf->data, ctx->hevc_nals[z].payload, ctx->hevc_nals[z].sizeBytes);
-					cf->len                      = ctx->hevc_nals[z].sizeBytes;
-					cf->type                     = CF_VIDEO;
-					cf->pts                      = ctx->hevc_picture_out->pts + 45000;
-					cf->real_pts                 = ctx->hevc_picture_out->pts + 45000;
-					cf->real_dts                 = ctx->hevc_picture_out->dts;
-					cf->cpb_initial_arrival_time = cf->real_pts;
-					cf->cpb_final_arrival_time   = cf->real_pts + 45000;
-
-#if 0
-// X264 specific, I don't think we need to do this for HEVC
-            cf->pts = coded_frame->avfm.audio_pts;
-
-            /* The audio and video clocks jump with different intervals when the cable
-             * is disconnected, suggestedint a BM firmware bug.
-             * We'll use the audio clock regardless, for both audio and video compressors.
-             */
-            int64_t new_dts  = avfm->audio_pts + 24299700 - abs(cf->real_dts - cf->real_pts) + (2 * 450450);
-
-            /* We need to userstand, for this temporal frame, how much it varies from the dts. */
-            int64_t pts_diff = cf->real_dts - cf->real_pts;
-
-            /* Construct a new PTS based on the hardware DTS and the PTS offset difference. */
-            int64_t new_pts  = new_dts - pts_diff;
-
-            cf->real_dts = new_dts;
-            cf->real_pts = new_pts;
-            cf->cpb_initial_arrival_time = new_dts;
-            cf->cpb_final_arrival_time   = new_dts + abs(pic_out.hrd_timing.cpb_final_arrival_time - pic_out.hrd_timing.cpb_final_arrival_time);
-
-            cpb_removal_time = cf->real_pts; /* Only used for manually eyeballing the video output clock. */
-
-#endif
-#if 0
-			printf(MESSAGE_PREFIX " real_pts:%" PRIi64 " real_dts:%" PRIi64 " (%.3f %.3f)\n",
-				cf->real_pts, cf->real_dts,
-				ctx->hevc_picture_out->hrd_timing.dpb_output_time, pic_out.hrd_timing.cpb_removal_time);
-#endif
-
-					cf->priority = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
-					cf->random_access = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
-
-					if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
-						cf->arrival_time = arrival_time;
-						add_to_queue(&ctx->h->mux_queue, cf);
-						//printf(MESSAGE_PREFIX " Encode Latency %"PRIi64" \n", obe_mdate() - cf->arrival_time);
-					} else {
-						add_to_queue(&ctx->h->enc_smoothing_queue, cf);
-					}
-				} /* For each NAL */
-			} /* if nal_bytes > 0 */
-#endif
 
 			leave = 1;
 		} /* While ! leave */
