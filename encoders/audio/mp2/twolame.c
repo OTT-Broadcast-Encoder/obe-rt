@@ -47,6 +47,7 @@ __inline__ void historical_int64_printf(struct historical_int64_s *s, char *pref
 }
 //
 
+#define REPORT_AUDIO_DISCONTINUITIES 0
 #define MP2_AUDIO_BUFFER_SIZE 50000
 
 #define LOCAL_DEBUG 0
@@ -103,7 +104,9 @@ static void *start_encoder_mp2( void *ptr )
     AVAudioResampleContext *avr = NULL;
     AVFifoBuffer *fifo = NULL;
 
+#if REPORT_AUDIO_DISCONTINUITIES
     int64_t lastOutputFramePTS = 0; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
+#endif
 
     pts_increment = 648000 * enc_params->frames_per_pes; /* 24ms, the codec frame size * number of frames per pes. */
 
@@ -342,6 +345,7 @@ static void *start_encoder_mp2( void *ptr )
             historical_int64_set(&cf_pts, coded_frame->pts);
             //historical_int64_printf(&cf_pts, "  cf_pts");
 
+#if REPORT_AUDIO_DISCONTINUITIES
             if (lastOutputFramePTS + (648000 * enc_params->frames_per_pes) != coded_frame->pts) {
                 printf(MODULE "Output PTS discontinuity\n\tShould be %" PRIi64 " was %" PRIi64 " diff %9" PRIi64 " frames_per_pes %d\n",
                     lastOutputFramePTS + (648000 * enc_params->frames_per_pes),
@@ -350,6 +354,7 @@ static void *start_encoder_mp2( void *ptr )
                     enc_params->frames_per_pes);
             }
             lastOutputFramePTS = coded_frame->pts;
+#endif
             add_to_queue( &h->mux_queue, coded_frame );
 
             cur_pts += pts_increment;
