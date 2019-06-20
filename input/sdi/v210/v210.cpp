@@ -294,7 +294,7 @@ static int open_device(v210_opts_t *opts)
 	ctx->totalInputFrames = ctx->v210_file_size / ctx->frameSizeBytesVideo;
 
 	ctx->v210_addr = (uint8_t *)mmap(NULL, ctx->v210_file_size, PROT_READ, MAP_SHARED, ctx->v210_fd, 0);
-	printf("Mapped %" PRIi64 " bytes at %p, %d frames.\n",
+	printf("Mapped %" PRIi64 " bytes at %p, %lu frames.\n",
 		ctx->v210_file_size, ctx->v210_addr,
 		ctx->v210_file_size / ctx->frameSizeBytesVideo);
 
