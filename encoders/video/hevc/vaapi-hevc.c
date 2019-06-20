@@ -394,6 +394,7 @@ static void *hevc_vaapi_start_encoder( void *ptr )
 				ctx->frame_width, ctx->frame_height);
 
 #if SEI_TIMESTAMPING
+#if 0
 /* NO SEI support yet. When we do add it, watch out for mallocs and small leaks
  * if we clone the HEVC iplementaiton.
  */
@@ -421,12 +422,14 @@ set_timestamp_field_set(x->payload, 9, 0);
  * will be filled when the frame exists the compressor. */
 framecount++;
 #endif
+#endif
 
 			vaapi_encode_frame(ctx, rf, f, dst_uv, NULL);
 
 			free(f);
 
 #if SEI_TIMESTAMPING
+#if 0
 			/* Walk through each of the NALS and insert current time into any LTN sei timestamp frames we find. */
 			for (int m = 0; m < ctx->i_nal; m++) {
 				int offset = ltn_uuid_find(&ctx->hevc_nals[m].payload[0], ctx->hevc_nals[m].sizeBytes);
@@ -440,6 +443,7 @@ framecount++;
 					set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], 7, tv.tv_usec);
 				}
 			}
+#endif
 #endif
 
 			rf->release_data(rf);
