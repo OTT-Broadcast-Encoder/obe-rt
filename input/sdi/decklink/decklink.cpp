@@ -1143,7 +1143,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     if (0 && decklink_opts_->probe == 0 && decklink_ctx->enabled_mode_fmt) {
         const struct obe_to_decklink_video *fmt = decklink_ctx->enabled_mode_fmt;
 
-        int abortframe = 0;
         if (width != fmt->callback_width) {
 //            printf(" !width %d\n", width);
             return S_OK;
