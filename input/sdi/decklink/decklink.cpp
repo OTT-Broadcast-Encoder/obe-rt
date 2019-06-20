@@ -333,7 +333,7 @@ struct decklink_status
     decklink_opts_t *decklink_opts;
 };
 
-void klsyslog_and_stdout(const char *format, ...)
+void klsyslog_and_stdout(int level, const char *format, ...)
 {
     char buf[2048] = { 0 };
     struct timeval tv;
@@ -344,7 +344,7 @@ void klsyslog_and_stdout(const char *format, ...)
     vsprintf(&buf[strlen(buf)], format, vl);
     va_end(vl);
 
-    syslog(LOG_INFO, "%s", buf);
+    syslog(level, "%s", buf);
     printf("%s\n", buf);
 }
 
@@ -1402,7 +1402,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
             decklink_opts_->probe_success = 1;
 
         if (g_decklink_injected_frame_count > 0) {
-            klsyslog_and_stdout("Decklink card index %i: Injected %d cached video frame(s)",
+            klsyslog_and_stdout(LOG_INFO, "Decklink card index %i: Injected %d cached video frame(s)",
                 decklink_opts_->card_idx, g_decklink_injected_frame_count);
             g_decklink_injected_frame_count = 0;
         }
@@ -2110,21 +2110,21 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     }
 
     if (OPTION_ENABLED(frame_injection)) {
-        klsyslog_and_stdout("Enabling option frame injection");
+        klsyslog_and_stdout(LOG_INFO, "Enabling option frame injection");
         g_decklink_inject_frame_enable = 1;
     }
 
     if (OPTION_ENABLED(allow_1080p60)) {
-        klsyslog_and_stdout("Enabling option 1080p60");
+        klsyslog_and_stdout(LOG_INFO, "Enabling option 1080p60");
     }
 
     if (OPTION_ENABLED(scte35)) {
-        klsyslog_and_stdout("Enabling option SCTE35");
+        klsyslog_and_stdout(LOG_INFO, "Enabling option SCTE35");
     } else
 	callbacks.scte_104 = NULL;
 
     if (OPTION_ENABLED(smpte2038)) {
-        klsyslog_and_stdout("Enabling option SMPTE2038");
+        klsyslog_and_stdout(LOG_INFO, "Enabling option SMPTE2038");
         if (klvanc_smpte2038_packetizer_alloc(&decklink_ctx->smpte2038_ctx) < 0) {
             fprintf(stderr, "Unable to allocate a SMPTE2038 context.\n");
         }
