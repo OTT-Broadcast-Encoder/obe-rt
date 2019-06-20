@@ -2027,6 +2027,7 @@ static void _usage(const char *prog, int exitcode)
     printf("%s\n", msg);
     syslog(LOG_INFO, msg);
 
+    printf("Built %s @ %s\n", __DATE__, __TIME__);
     printf("x264 build#%d (%dbit support)\n", X264_BUILD, X264_BIT_DEPTH);
     printf("Supports HEVC via  X265: %s\n",
 #if HAVE_X265_H
