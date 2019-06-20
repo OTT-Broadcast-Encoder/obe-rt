@@ -1297,7 +1297,11 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: missing audio (%p) or video (%p) (PATCHED)",
             decklink_opts_->card_idx,
             audioframe, videoframe);
-        //decklink_ctx->last_frame_time = obe_mdate();
+
+        /* Make sure we keep track of time, else if we have a small signal issue then
+         * we treat this as a major signal outage.
+         */
+        decklink_ctx->last_frame_time = obe_mdate();
         return S_OK;
     }
 
