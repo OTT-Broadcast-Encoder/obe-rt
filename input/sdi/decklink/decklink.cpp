@@ -1294,9 +1294,10 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
     if ((audioframe == NULL) || (videoframe == NULL)) {
         //system("/storage/dev/DEKTEC-DTU351/DTCOLLECTOR/obe-error.sh");
-        syslog(LOG_ERR, "Decklink card index %i: missing audio (%p) or video (%p)",
+        klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: missing audio (%p) or video (%p) (PATCHED)",
             decklink_opts_->card_idx,
             audioframe, videoframe);
+        //decklink_ctx->last_frame_time = obe_mdate();
         return S_OK;
     }
 
