@@ -1309,7 +1309,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     }
 
     if (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max) {
-        if ((videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {
+        if (videoframe && (videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {
             klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: illegal audio sample count %d, wanted %d to %d, "
                 "dropping frames to maintain MP2 sync\n",
                 decklink_opts_->card_idx, sfc,
