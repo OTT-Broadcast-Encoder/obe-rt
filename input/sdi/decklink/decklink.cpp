@@ -1081,6 +1081,8 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     int width = 0;
     int height = 0;
     int stride = 0;
+    int sfc = 0;
+    BMDTimeValue packet_time;
 
 #if AUDIO_PULSE_OFFSET_MEASURMEASURE
     {
@@ -1160,6 +1162,10 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     BMDTimeValue vtime = 0;
     if (videoframe) {
        videoframe->GetStreamTime(&vtime, &decklink_ctx->vframe_duration, OBE_CLOCK);
+    }
+    if (audioframe) {
+        sfc = audioframe->GetSampleFrameCount();
+        audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
     }
 
     if (g_decklink_monitor_hw_clocks)
@@ -1353,7 +1359,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     }
 #endif
 
-    int sfc = audioframe->GetSampleFrameCount();
 #if 0
     if (audioframe) {
         FILE *fh = fopen("/tmp/shortaudio.cmd", "rb");
@@ -1706,10 +1711,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
                 if (decklink_ctx->device->input_streams[i]->stream_format == VIDEO_UNCOMPRESSED)
                     raw_frame->input_stream_id = decklink_ctx->device->input_streams[i]->input_stream_id;
             }
-
-            /* We're guaranteed to have a audio frame. */
-            BMDTimeValue packet_time;
-            audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
 
             if (framesQueued++ == 0) {
                 //clock_offset = (packet_time * -1);
