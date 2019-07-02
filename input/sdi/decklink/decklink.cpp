@@ -1308,64 +1308,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         return S_OK;
     }
 
-#define DROP_N_FRAMES_ON_DEMAND 1
-
-#if DROP_N_FRAMES_ON_DEMAND
-    /* Drop N frames on demand. */
-    static int dropcount = 0;
-    FILE *dfh = NULL;
-    dfh = fopen("/tmp/drop1f.cmd", "rb");
-    if (dfh) {
-        unlink("/tmp/drop1f.cmd");
-        dropcount = 1;
-        fclose(dfh);
-    }
-    dfh = fopen("/tmp/drop2f.cmd", "rb");
-    if (dfh) {
-        unlink("/tmp/drop2f.cmd");
-        dropcount = 2;
-        fclose(dfh);
-    }
-    dfh = fopen("/tmp/drop3f.cmd", "rb");
-    if (dfh) {
-        unlink("/tmp/drop3f.cmd");
-        dropcount = 3;
-        fclose(dfh);
-    }
-    dfh = fopen("/tmp/drop4f.cmd", "rb");
-    if (dfh) {
-        unlink("/tmp/drop4f.cmd");
-        dropcount = 4;
-        fclose(dfh);
-    }
-    dfh = fopen("/tmp/drop5f.cmd", "rb");
-    if (dfh) {
-        unlink("/tmp/drop5f.cmd");
-        dropcount = 5;
-        fclose(dfh);
-    }
-
-
-    if (dropcount > 0) {
-        //if (countAudioChannelsWithPayload(audioframe) == 0)
-        {
-            printf("Dropping %d\n", dropcount);
-            syslog(LOG_WARNING, "Decklink card index %i: Dropping frame %d", decklink_opts_->card_idx, dropcount);
-            dropcount--;
-            return S_OK;
-        }
-    }
-#endif
-
-#if 0
-    if (audioframe) {
-        FILE *fh = fopen("/tmp/shortaudio.cmd", "rb");
-        if (fh) {
-            sfc /= 2; /* Trigger short audio frame handling. */
-            fclose(fh);
-        }
-    }
-#endif
     if (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max) {
         if ((videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {
             klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: illegal audio sample count %d, wanted %d to %d, "
