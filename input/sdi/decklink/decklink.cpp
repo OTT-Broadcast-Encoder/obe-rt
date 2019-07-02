@@ -1386,18 +1386,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         }
     }
 
-#if 0
-    if (audioframe) {
-        FILE *fh = fopen("/tmp/zeroaudio.cmd", "rb");
-        if (fh) {
-            void *p;
-            audioframe->GetBytes(&p);
-            memset(p, 0, audioframe->GetSampleFrameCount() * decklink_opts_->num_channels * (32 / 8));
-            fclose(fh);
-        }
-    }
-#endif
-
     av_init_packet( &pkt );
 
     if( videoframe )
@@ -1456,22 +1444,6 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         //printf("video_format = %d, height = %d, width = %d, stride = %d\n", decklink_opts_->video_format, height, width, stride);
 
         videoframe->GetBytes( &frame_bytes );
-
-#if 0
-        /* Save every frame as raw data (keeping the last 16 only). To view it, and presevent any field ordering.... 
-         * /tmp/ffmpeg -y -f image2pipe -vcodec v210 -s 1920x1080 -frame_size 5529600 -i /tmp/raw-9.bin -vframes 1 new.png
-         */
-        {
-            static int fc = 0;
-            char fn[256];
-            sprintf(&fn[0], "/tmp/raw-%d.bin", fc++);
-            if (fc >= 16)
-                fc = 0;
-            FILE *fh = fopen(fn, "wb");
-            fwrite(frame_bytes, stride, height, fh);
-            fclose(fh);
-        }
-#endif
 
         if (g_decklink_burnwriter_enable) {
             V210_write_32bit_value(frame_bytes, stride, g_decklink_burnwriter_count++, g_decklink_burnwriter_linenr, 1);
