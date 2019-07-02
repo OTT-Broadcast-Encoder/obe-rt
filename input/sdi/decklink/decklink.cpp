@@ -1082,7 +1082,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     int height = 0;
     int stride = 0;
     int sfc = 0;
-    BMDTimeValue packet_time;
+    BMDTimeValue packet_time = 0;
 
 #if AUDIO_PULSE_OFFSET_MEASURMEASURE
     {
@@ -1142,6 +1142,11 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         stride = videoframe->GetRowBytes();
     }
 
+    if (audioframe) {
+        sfc = audioframe->GetSampleFrameCount();
+        audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
+    }
+
     if (0 && decklink_opts_->probe == 0 && decklink_ctx->enabled_mode_fmt) {
         const struct obe_to_decklink_video *fmt = decklink_ctx->enabled_mode_fmt;
 
@@ -1163,20 +1168,13 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     if (videoframe) {
        videoframe->GetStreamTime(&vtime, &decklink_ctx->vframe_duration, OBE_CLOCK);
     }
-    if (audioframe) {
-        sfc = audioframe->GetSampleFrameCount();
-        audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
-    }
 
     if (g_decklink_monitor_hw_clocks)
     {
         static BMDTimeValue last_vtime = 0;
         static BMDTimeValue last_atime = 0;
 
-        BMDTimeValue atime = 0;
-        if (audioframe) {
-           audioframe->GetPacketTime(&atime, OBE_CLOCK);
-        }
+        BMDTimeValue atime = packet_time;
 
         if (vtime == 0)
             last_vtime = 0;
