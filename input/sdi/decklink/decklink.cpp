@@ -1306,27 +1306,27 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     }
 #endif
 
+#if 0
     if ((audioframe == NULL) || (videoframe == NULL)) {
-        //system("/storage/dev/DEKTEC-DTU351/DTCOLLECTOR/obe-error.sh");
-        klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: missing audio (%p) or video (%p) (PATCHED)",
+        klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: missing audio (%p) or video (%p) (WARNING)",
             decklink_opts_->card_idx,
             audioframe, videoframe);
-
-        /* Make sure we keep track of time, else if we have a small signal issue then
-         * we treat this as a major signal outage.
-         */
-        decklink_ctx->last_frame_time = obe_mdate();
-        return S_OK;
     }
+    if (videoframe) {
+        videoframe->GetBytes(&frame_bytes);
+        V210_write_32bit_value(frame_bytes, stride, g_decklink_missing_video_count, 32 /* g_decklink_burnwriter_linenr */, 1);
+        V210_write_32bit_value(frame_bytes, stride, g_decklink_missing_audio_count, 64 /* g_decklink_burnwriter_linenr */, 1);
+    }
+#endif
 
-    if (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max) {
+    if (sfc && (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max)) {
         if (videoframe && (videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {
             klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: illegal audio sample count %d, wanted %d to %d, "
                 "dropping frames to maintain MP2 sync\n",
                 decklink_opts_->card_idx, sfc,
                 decklink_opts_->audio_sfc_min, decklink_opts_->audio_sfc_max);
         }
-        return S_OK;
+        //return S_OK;
     }
 
     if( decklink_opts_->probe_success )
