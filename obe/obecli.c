@@ -1151,6 +1151,8 @@ extern time_t g_decklink_missing_audio_last_time;
 extern int    g_decklink_missing_video_count;
 extern time_t g_decklink_missing_video_last_time;
 
+extern int g_decklink_record_audio_buffers;
+
 /* Case 4 audio/video clocks */
 extern int64_t cur_pts; /* audio clock */
 extern int64_t cpb_removal_time; /* Last video frame clock */
@@ -1221,6 +1223,9 @@ extern time_t g_decklink_missing_video_last_time;
     printf("sdi_input.missing_video_frame_count = %d -- last: %s",
         g_decklink_missing_video_count,
         ctime(&g_decklink_missing_video_last_time));
+    printf("sdi_input.record_audio_buffers = %d [%s]\n",
+        g_decklink_record_audio_buffers,
+        g_decklink_record_audio_buffers ? "enabled": "disabled");
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
     printf("audio_encoder.last_pts = %" PRIi64 "\n", cur_pts);
@@ -1316,6 +1321,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "sdi_input.monitor_hw_clocks") == 0) {
         g_decklink_monitor_hw_clocks = val;
+    } else
+    if (strcasecmp(var, "sdi_input.record_audio_buffers") == 0) {
+        g_decklink_record_audio_buffers = val;
     } else
     if (strcasecmp(var, "audio_encoder.ac3_offset_ms") == 0) {
         ac3_offset_ms = val;

@@ -995,6 +995,8 @@ time_t        g_decklink_missing_audio_last_time = 0;
 int           g_decklink_missing_video_count = 0;
 time_t        g_decklink_missing_video_last_time = 0;
 
+int           g_decklink_record_audio_buffers = 0;
+
 static obe_raw_frame_t *cached = NULL;
 static void cache_video_frame(obe_raw_frame_t *frame)
 {
@@ -1153,6 +1155,23 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     if (audioframe) {
         sfc = audioframe->GetSampleFrameCount();
         audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
+
+        if (g_decklink_record_audio_buffers) {
+            g_decklink_record_audio_buffers--;
+            static int aidx = 0;
+            char fn[256];
+            int len = sfc * decklink_opts_->num_channels * (32 / 8);
+            sprintf(fn, "/tmp/cardindex%d-audio%03d-srf%d.raw", decklink_opts_->card_idx, aidx++, sfc);
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                void *p;
+                audioframe->GetBytes(&p);
+                fwrite(p, 1, len, fh);
+                fclose(fh);
+                printf("Creating %s\n", fn);
+            }
+        }
+
     } else {
         g_decklink_missing_audio_count++;
         time(&g_decklink_missing_audio_last_time);
