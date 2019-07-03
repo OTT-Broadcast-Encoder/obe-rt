@@ -1145,11 +1145,17 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         width = videoframe->GetWidth();
         height = videoframe->GetHeight();
         stride = videoframe->GetRowBytes();
+    } else {
+        g_decklink_missing_video_count++;
+        time(&g_decklink_missing_video_last_time);
     }
 
     if (audioframe) {
         sfc = audioframe->GetSampleFrameCount();
         audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
+    } else {
+        g_decklink_missing_audio_count++;
+        time(&g_decklink_missing_audio_last_time);
     }
 
     if (0 && decklink_opts_->probe == 0 && decklink_ctx->enabled_mode_fmt) {
