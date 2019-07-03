@@ -1645,6 +1645,17 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
                 decklink_ctx->isHalfDuplex ? AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF :
                     AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_FULL);
             avfm_set_pts_video(&raw_frame->avfm, decklink_ctx->stream_time + clock_offset);
+
+            {
+                /* Video frames use the audio timestamp. If the audio timestamp is missing we'll
+                 * calculate the audio timestamp based on last timestamp.
+                 */
+                static int64_t lastpts = 0;
+                if (packet_time == 0) {
+                    packet_time = lastpts + decklink_ctx->vframe_duration;
+                }
+                lastpts = packet_time;
+            }
             avfm_set_pts_audio(&raw_frame->avfm, packet_time + clock_offset);
             avfm_set_hw_received_time(&raw_frame->avfm);
             avfm_set_video_interval_clk(&raw_frame->avfm, decklink_ctx->vframe_duration);
