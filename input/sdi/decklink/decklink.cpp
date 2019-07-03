@@ -1326,7 +1326,13 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
                 decklink_opts_->card_idx, sfc,
                 decklink_opts_->audio_sfc_min, decklink_opts_->audio_sfc_max);
         }
-        //return S_OK;
+#if 1
+        /* It's hard to reproduce this. For the time being I'm going to assume that we WANT any audio payload
+         * to reach the audio codecs, regardless of how badly we think it's formed.
+         */
+#else
+        return S_OK;
+#endif
     }
 
     if( decklink_opts_->probe_success )
