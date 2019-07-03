@@ -990,6 +990,11 @@ int           g_decklink_injected_frame_count = 0;
 int           g_decklink_injected_frame_count_max = 600;
 int           g_decklink_inject_frame_enable = 0;
 
+int           g_decklink_missing_audio_count = 0;
+time_t        g_decklink_missing_audio_last_time = 0;
+int           g_decklink_missing_video_count = 0;
+time_t        g_decklink_missing_video_last_time = 0;
+
 static obe_raw_frame_t *cached = NULL;
 static void cache_video_frame(obe_raw_frame_t *frame)
 {

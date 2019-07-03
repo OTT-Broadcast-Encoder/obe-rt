@@ -1146,6 +1146,11 @@ extern uint32_t g_decklink_burnwriter_linenr;
 extern int g_decklink_fake_every_other_frame_lose_audio_payload;
 extern time_t g_decklink_fake_every_other_frame_lose_audio_payload_time;
 
+extern int    g_decklink_missing_audio_count;
+extern time_t g_decklink_missing_audio_last_time;
+extern int    g_decklink_missing_video_count;
+extern time_t g_decklink_missing_video_last_time;
+
 /* Case 4 audio/video clocks */
 extern int64_t cur_pts; /* audio clock */
 extern int64_t cpb_removal_time; /* Last video frame clock */
@@ -1191,6 +1196,10 @@ extern int g_core_runtime_statistics_to_file;
 
 void display_variables()
 {
+extern int    g_decklink_missing_audio_count;
+extern time_t g_decklink_missing_audio_last_time;
+extern int    g_decklink_missing_video_count;
+extern time_t g_decklink_missing_video_last_time;
     printf("sdi_input.burnwriter_enable = %d [%s]\n",
         g_decklink_burnwriter_enable,
         g_decklink_burnwriter_enable == 0 ? "disabled" : "enabled");
@@ -1206,6 +1215,12 @@ void display_variables()
         g_decklink_monitor_hw_clocks == 0 ? "disabled" : "enabled");
     printf("sdi_input.fake_every_other_frame_lose_audio_payload = %d [%s]\n", g_decklink_fake_every_other_frame_lose_audio_payload,
         g_decklink_fake_every_other_frame_lose_audio_payload == 0 ? "disabled" : "enabled");
+    printf("sdi_input.missing_audio_frame_count = %d -- last: %s",
+        g_decklink_missing_audio_count,
+        ctime(&g_decklink_missing_audio_last_time));
+    printf("sdi_input.missing_video_frame_count = %d -- last: %s",
+        g_decklink_missing_video_count,
+        ctime(&g_decklink_missing_video_last_time));
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
     printf("audio_encoder.last_pts = %" PRIi64 "\n", cur_pts);
