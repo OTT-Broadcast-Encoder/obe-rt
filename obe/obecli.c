@@ -1134,6 +1134,8 @@ static int set_outputs( char *command, obecli_command_t *child )
 
 #if DO_SET_VARIABLE
 extern int g_decklink_monitor_hw_clocks;
+extern int g_decklink_histogram_reset;
+extern int g_decklink_histogram_print_secs;
 
 /* Case 1 */
 extern int g_decklink_fake_lost_payload;
@@ -1227,6 +1229,12 @@ extern time_t g_decklink_missing_video_last_time;
     printf("sdi_input.record_audio_buffers = %d [%s]\n",
         g_decklink_record_audio_buffers,
         g_decklink_record_audio_buffers ? "enabled": "disabled");
+    printf("sdi_input.max_frame_delay_before_error_us = %d\n",
+        g_sdi_max_delay);
+    printf("sdi_input.histogram_reset = %d\n",
+        g_decklink_histogram_reset);
+    printf("sdi_input.histogram_print_secs = %d\n",
+        g_decklink_histogram_print_secs);
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
     printf("audio_encoder.last_pts = %" PRIi64 "\n", cur_pts);
@@ -1325,6 +1333,15 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "sdi_input.record_audio_buffers") == 0) {
         g_decklink_record_audio_buffers = val;
+    } else
+    if (strcasecmp(var, "sdi_input.max_frame_delay_before_error_us") == 0) {
+        g_sdi_max_delay = val;
+    } else
+    if (strcasecmp(var, "sdi_input.histogram_reset") == 0) {
+        g_decklink_histogram_reset = val;
+    } else
+    if (strcasecmp(var, "sdi_input.histogram_print_secs") == 0) {
+        g_decklink_histogram_print_secs = val;
     } else
     if (strcasecmp(var, "audio_encoder.ac3_offset_ms") == 0) {
         ac3_offset_ms = val;

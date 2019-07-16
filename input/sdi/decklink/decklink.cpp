@@ -54,6 +54,7 @@ extern "C"
 #include <assert.h>
 #include <include/DeckLinkAPI.h>
 #include "include/DeckLinkAPIDispatch.cpp"
+#include "histogram.h"
 
 #define container_of(ptr, type, member) ({          \
     const typeof(((type *)0)->member)*__mptr = (ptr);    \
@@ -281,6 +282,12 @@ typedef struct
     int isHalfDuplex;
     BMDTimeValue vframe_duration;
 
+    struct ltn_histogram_s *callback_hdl;
+    struct ltn_histogram_s *callback_duration_hdl;
+    struct ltn_histogram_s *callback_1_hdl;
+    struct ltn_histogram_s *callback_2_hdl;
+    struct ltn_histogram_s *callback_3_hdl;
+    struct ltn_histogram_s *callback_4_hdl;
 } decklink_ctx_t;
 
 typedef struct
@@ -682,6 +689,7 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE VideoInputFrameArrived(IDeckLinkVideoInputFrame*, IDeckLinkAudioInputPacket*);
     HRESULT STDMETHODCALLTYPE noVideoInputFrameArrived(IDeckLinkVideoInputFrame*, IDeckLinkAudioInputPacket*);
+    HRESULT STDMETHODCALLTYPE timedVideoInputFrameArrived(IDeckLinkVideoInputFrame*, IDeckLinkAudioInputPacket*);
 
 private:
     pthread_mutex_t ref_mutex_;
@@ -976,6 +984,9 @@ time_t        g_decklink_fake_every_other_frame_lose_audio_payload_time = 0;
 static double g_decklink_fake_every_other_frame_lose_audio_count = 0;
 static double g_decklink_fake_every_other_frame_lose_video_count = 0;
 
+int           g_decklink_histogram_reset = 0;
+int           g_decklink_histogram_print_secs = 0;
+
 int           g_decklink_fake_lost_payload = 0;
 time_t        g_decklink_fake_lost_payload_time = 0;
 static int    g_decklink_fake_lost_payload_interval = 60;
@@ -1070,6 +1081,42 @@ HRESULT DeckLinkCaptureDelegate::noVideoInputFrameArrived(IDeckLinkVideoInputFra
 
 HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFrame *videoframe, IDeckLinkAudioInputPacket *audioframe )
 {
+	decklink_ctx_t *decklink_ctx = &decklink_opts_->decklink_ctx;
+
+	if (g_decklink_histogram_reset) {
+		g_decklink_histogram_reset = 0;
+		ltn_histogram_reset(decklink_ctx->callback_hdl);
+		ltn_histogram_reset(decklink_ctx->callback_duration_hdl);
+	}
+
+	ltn_histogram_interval_update(decklink_ctx->callback_hdl);
+
+	ltn_histogram_sample_begin(decklink_ctx->callback_duration_hdl);
+	HRESULT hr = timedVideoInputFrameArrived(videoframe, audioframe);
+	ltn_histogram_sample_end(decklink_ctx->callback_duration_hdl);
+
+
+	uint32_t val[2];
+	decklink_ctx->p_input->GetAvailableVideoFrameCount(&val[0]);
+	decklink_ctx->p_input->GetAvailableAudioSampleFrameCount(&val[1]);
+
+	if (g_decklink_histogram_print_secs > 0) {
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_hdl, g_decklink_histogram_print_secs);
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_duration_hdl, g_decklink_histogram_print_secs);
+#if 0
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_1_hdl, 10);
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_2_hdl, 10);
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_3_hdl, 10);
+		ltn_histogram_interval_print(STDOUT_FILENO, decklink_ctx->callback_4_hdl, 10);
+#endif
+	}
+	//printf("%d.%08d rem vf:%d af:%d\n", diff.tv_sec, diff.tv_usec, val[0], val[1]);
+
+	return hr;
+}
+
+HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInputFrame *videoframe, IDeckLinkAudioInputPacket *audioframe )
+{
     decklink_ctx_t *decklink_ctx = &decklink_opts_->decklink_ctx;
     obe_raw_frame_t *raw_frame = NULL;
     AVPacket pkt;
@@ -1091,6 +1138,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
     int sfc = 0;
     BMDTimeValue packet_time = 0;
 
+    ltn_histogram_sample_begin(decklink_ctx->callback_1_hdl);
 #if AUDIO_PULSE_OFFSET_MEASURMEASURE
     {
         /* For any given video frame demonstrating the one second blip pulse pattern, search
@@ -1211,7 +1259,16 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         if (atime == 0)
             last_atime = 0;
 
-        printf("vtime %012" PRIi64 ":%08" PRIi64 "  atime %012" PRIi64 ":%08" PRIi64 "  vduration %" PRIi64 " a-vdiff: %" PRIi64,
+        static struct timeval lastts;
+        struct timeval ts;
+        struct timeval diff;
+        gettimeofday(&ts, NULL);
+        obe_timeval_subtract(&diff, &ts, &lastts);
+        lastts = ts;
+
+        printf("%lu.%08lu -- vtime %012" PRIi64 ":%08" PRIi64 "  atime %012" PRIi64 ":%08" PRIi64 "  vduration %" PRIi64 " a-vdiff: %" PRIi64,
+            diff.tv_sec,
+            diff.tv_usec,
             vtime,
             vtime - last_vtime,
             atime,
@@ -1224,17 +1281,19 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         if (last_vtime && (vtime - last_vtime != 450450)) {
             if (last_vtime && (vtime - last_vtime != 900900)) {
                 printf(" Bad video interval\n");
-            } else
+            } else {
                 printf("\n");
+            }
         } else
         if (last_atime && (adiff != 450000) && (adiff != 450562) && (adiff != 450563)) {
             printf(" Bad audio interval\n");
-        } else
+        } else {
             printf("\n");
-
+        }
         last_vtime = vtime;
         last_atime = atime;
     } /* if g_decklink_monitor_hw_clocks */
+    ltn_histogram_sample_end(decklink_ctx->callback_1_hdl);
 
     if (g_decklink_inject_frame_enable) {
         if (videoframe && videoframe->GetFlags() & bmdFrameHasNoInputSource) {
@@ -1368,6 +1427,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
     if( videoframe )
     {
+        ltn_histogram_sample_begin(decklink_ctx->callback_2_hdl);
         if( videoframe->GetFlags() & bmdFrameHasNoInputSource )
         {
             syslog( LOG_ERR, "Decklink card index %i: No input signal detected", decklink_opts_->card_idx );
@@ -1597,6 +1657,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
         if( !decklink_opts_->probe )
         {
+            ltn_histogram_sample_begin(decklink_ctx->callback_4_hdl);
             frame = avcodec_alloc_frame();
             if( !frame )
             {
@@ -1698,7 +1759,9 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
             decklink_ctx->non_display_parser.num_vbi = 0;
             decklink_ctx->non_display_parser.num_anc_vbi = 0;
+            ltn_histogram_sample_end(decklink_ctx->callback_4_hdl);
         }
+        ltn_histogram_sample_end(decklink_ctx->callback_2_hdl);
     } /* if video frame */
 
     if (audioframe) {
@@ -1730,6 +1793,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         }
     }
 
+    ltn_histogram_sample_begin(decklink_ctx->callback_3_hdl);
     if( audioframe && !decklink_opts_->probe )
     {
         processAudio(decklink_ctx, decklink_opts_, audioframe, decklink_ctx->stream_time);
@@ -1741,6 +1805,7 @@ end:
 
     av_free_packet( &pkt );
 
+    ltn_histogram_sample_end(decklink_ctx->callback_3_hdl);
     return S_OK;
 
 fail:
@@ -2094,6 +2159,13 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
             fprintf(stderr, "Unable to allocate a SMPTE2038 context.\n");
         }
     }
+
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_hdl, "frame arrival latency");
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_duration_hdl, "frame processing time");
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_1_hdl, "frame section1 time");
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_2_hdl, "frame section2 time");
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_3_hdl, "frame section3 time");
+    ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_4_hdl, "frame section4 time");
 
     for (int i = 0; i < MAX_AUDIO_PAIRS; i++) {
         struct audio_pair_s *pair = &decklink_ctx->audio_pairs[i];
