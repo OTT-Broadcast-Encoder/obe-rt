@@ -1391,7 +1391,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
         else
         {
             int64_t cur_frame_time = obe_mdate();
-            if( cur_frame_time - decklink_ctx->last_frame_time >= SDI_MAX_DELAY )
+            if( cur_frame_time - decklink_ctx->last_frame_time >= g_sdi_max_delay )
             {
                 //system("/storage/dev/DEKTEC-DTU351/DTCOLLECTOR/obe-error.sh");
                 int noFrameMS = (cur_frame_time - decklink_ctx->last_frame_time) / 1000;

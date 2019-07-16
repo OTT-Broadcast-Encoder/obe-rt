@@ -312,7 +312,7 @@ static int handle_video_frame( linsys_opts_t *linsys_opts, uint8_t *data )
     else
     {
         int64_t cur_frame_time = obe_mdate();
-        if( cur_frame_time - linsys_ctx->last_frame_time >= SDI_MAX_DELAY )
+        if( cur_frame_time - linsys_ctx->last_frame_time >= g_sdi_max_delay )
         {
             syslog( LOG_WARNING, "Linsys card index %i: No frame received for %"PRIi64" ms", linsys_opts->card_idx,
                    (cur_frame_time - linsys_ctx->last_frame_time) / 1000 );

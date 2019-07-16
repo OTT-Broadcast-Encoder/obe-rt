@@ -30,7 +30,7 @@
 #include <libavutil/crc.h>
 
 /* In microseconds */
-#define SDI_MAX_DELAY 50000
+extern unsigned int g_sdi_max_delay;
 
 typedef struct
 {

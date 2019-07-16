@@ -33,6 +33,8 @@
         *c++ = (val >> 20) & 0x3ff;  \
     } while (0)
 
+unsigned int g_sdi_max_delay = (100 * 1000); /* acceptible level of signal delay, after which we assume the cable was pulled. */
+
 void obe_v210_planar_unpack_c( const uint32_t *src, uint16_t *y, uint16_t *u, uint16_t *v, int width )
 {
     uint32_t val;

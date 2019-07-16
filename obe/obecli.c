@@ -1152,6 +1152,7 @@ extern int    g_decklink_missing_video_count;
 extern time_t g_decklink_missing_video_last_time;
 
 extern int g_decklink_record_audio_buffers;
+extern unsigned int g_sdi_max_delay;
 
 /* Case 4 audio/video clocks */
 extern int64_t cur_pts; /* audio clock */
