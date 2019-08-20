@@ -2121,7 +2121,9 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     IDeckLinkIterator *decklink_iterator = NULL;
     HRESULT result;
     const struct obe_to_decklink_video *fmt = NULL;
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080500 /* 10.8.5 */
     IDeckLinkStatus *status = NULL;
+#endif
 
     if (klvanc_context_create(&decklink_ctx->vanchdl) < 0) {
         fprintf(stderr, "[decklink] Error initializing VANC library context\n");
@@ -2261,7 +2263,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         goto finish;
     }
 
-
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080500 /* 10.8.5 */
     if (decklink_ctx->p_card->QueryInterface(IID_IDeckLinkStatus, (void**)&status) == S_OK) {
         int64_t ds = bmdDuplexStatusFullDuplex;
         if (status->GetInt(bmdDeckLinkStatusDuplexMode, &ds) == S_OK) {
@@ -2276,6 +2278,9 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
             decklink_ctx->isHalfDuplex = 0;
         }
     }
+#else
+    decklink_ctx->isHalfDuplex = 0;
+#endif
 
     /* Set up the video and audio sources. */
     if( decklink_ctx->p_card->QueryInterface( IID_IDeckLinkConfiguration, (void**)&decklink_ctx->p_config ) != S_OK )
