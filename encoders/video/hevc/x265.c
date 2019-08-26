@@ -101,7 +101,7 @@ void hevc_show_stats()
 {
 	printf(MESSAGE_PREFIX "qp average over last 64 frames %4.2f\n",
 		qp_measures_get_average_qp(&qp_measures[0]));
-	printf(MESSAGE_PREFIX "latency average over last 64 frames %4.2f\n",
+	printf(MESSAGE_PREFIX "latency average over last 64 frames %4.2f (frames)\n",
 		qp_measures_get_average_frame_latency(&qp_measures[0]));
 }
 
