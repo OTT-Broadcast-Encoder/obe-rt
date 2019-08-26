@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common/common.h"
 
 int g_sei_timestamping = 0;
 
@@ -53,6 +54,51 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 	}
 
 	return -1;
+}
+
+int set_timestamp_field_get(unsigned char *buffer, uint32_t nr, uint32_t *value)
+{
+	if (nr < 1 || nr > SEI_TIMESTAMP_FIELD_COUNT)
+		return -1;
+
+	uint32_t v;
+	unsigned char *p = buffer;
+	p += (sizeof(ltn_uuid_sei_timestamp) + ((nr - 1) * 6));
+	v  = (*(p++) << 24);
+	v |= (*(p++) << 16);
+	p++;
+	v |= (*(p++) <<  8);
+	v |= (*(p++) <<  0);
+
+	*value = v;
+
+	return 0;
+}
+
+int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer)
+{
+	struct timeval begin, end;
+	uint32_t v[8];
+	for (int i = 0; i < 8; i++)
+		set_timestamp_field_get(buffer, i, &v[i]);
+
+	begin.tv_sec = v[4];
+	begin.tv_usec = v[5];
+	end.tv_sec = v[6];
+	end.tv_usec = v[7];
+
+	struct timeval diff;
+	obe_timeval_subtract(&diff, &end, &begin);
+
+#if 0
+	printf("%08d: %d.%d - %d.%d = %d.%d\n",
+		v[1], 
+		begin.tv_sec, begin.tv_usec,
+		end.tv_sec, end.tv_usec,
+		diff.tv_sec, diff.tv_usec);
+#endif
+
+	return obe_timediff_to_msecs(&diff);
 }
 
 #endif /* SEI_TIMESTAMPING */

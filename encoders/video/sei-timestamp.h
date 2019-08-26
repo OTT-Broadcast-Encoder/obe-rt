@@ -33,9 +33,12 @@ extern int g_sei_timestamping;
 
 unsigned char *set_timestamp_alloc();
 int            set_timestamp_field_set(unsigned char *buffer, uint32_t nr, uint32_t value);
+int            set_timestamp_field_get(unsigned char *buffer, uint32_t nr, uint32_t *value);
 
 /* Find UUID in buffer, return buffer index or < 0 if found found. */
 int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes);
+
+int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer);
 
 #endif /* SEI_TIMESTAMPING */
 
