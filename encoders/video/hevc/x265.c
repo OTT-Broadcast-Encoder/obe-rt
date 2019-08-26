@@ -538,12 +538,26 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	}
 
 	if (g_x265_nal_debug & 0x02) {
+
+		int64_t codecms = -1;
+		if (g_sei_timestamping) {
+			int offset = ltn_uuid_find(buf, lengthBytes);
+			if (offset >= 0) {
+				codecms = sei_timestamp_query_codec_latency_ms(&buf[offset]);
+			}
+		}
+
 		printf(MESSAGE_PREFIX " --  acquired                                                                            pts %13" PRIi64 " dts %13" PRIi64 ", ",
 			ctx->hevc_picture_out->pts,
 			ctx->hevc_picture_out->dts);
-		printf("sliceType %d [%s]\n",
+		printf("sliceType %d [%s]",
 			ctx->hevc_picture_out->sliceType,
 			sliceTypeDesc(ctx->hevc_picture_out->sliceType));
+		if (!g_sei_timestamping) {
+			printf("\n");
+		} else {
+			printf(", codec frame time %" PRIi64 "ms\n", codecms);
+		}
 	}
 
 	static int64_t last_hw_pts = 0;
