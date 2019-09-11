@@ -98,6 +98,11 @@ static int lookupOBEName(int w, int h, int den, int num)
 typedef struct
 {
 	uint64_t v_counter;
+	uint64_t a_counter;
+	int	reset_v_pts;
+	int	reset_a_pts;
+	int64_t	clock_offset;
+
 
 	/* NDI SDK related */
 	NDIlib_recv_instance_t pNDI_recv;
@@ -126,6 +131,8 @@ typedef struct
     /* Input */
     int card_idx;
 
+	char *ndi_name;
+
     int video_format;
     int num_channels;
 
@@ -147,6 +154,10 @@ typedef struct
 static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 {
 	ndi_ctx_t *ctx = &opts->ctx;
+
+	if (ctx->clock_offset == 0) {
+	   return;
+	}
 
 #if 0
 printf("sample_rate = %d\n", frame->sample_rate);
@@ -175,17 +186,26 @@ if (fh) {
 }
 	return;
 #endif
+	int depth = 32;
 
-	uint8_t *data = (uint8_t *)calloc(16, frame->channel_stride_in_bytes);
-	memcpy(data, frame->p_data, frame->no_channels * frame->channel_stride_in_bytes);
+	NDIlib_audio_frame_interleaved_32s_t a_frame;
+	a_frame.p_data = new int32_t[frame->no_samples * frame->no_channels];
+	NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
+
+	int linesize = a_frame.no_channels * (depth /8);
+	int stride  = a_frame.no_samples * (depth / 4);
+
+	uint8_t *data = (uint8_t *)calloc(16, stride);
+	memcpy(data, a_frame.p_data, a_frame.no_channels * stride);
 
 	rf->release_data = obe_release_audio_data;
 	rf->release_frame = obe_release_frame;
-	rf->audio_frame.num_samples = frame->no_samples;
-	rf->audio_frame.num_channels = frame->no_channels;
+	rf->audio_frame.num_samples = a_frame.no_samples;
 	rf->audio_frame.num_channels = 2;
 	rf->audio_frame.sample_fmt = AV_SAMPLE_FMT_S32P;
 	rf->input_stream_id = 1;
+
+	delete[] a_frame.p_data;
 
 	/* Allocate a new sample buffer ready to hold S32P */
 	if (av_samples_alloc(rf->audio_frame.audio_data,
@@ -207,14 +227,14 @@ printf("new linesize = %d\n", rf->audio_frame.linesize);
 	/* Convert input samples from S16 interleaved into S32P planer. */
 	uint8_t *src[16] = { 0 };
 
-for (int x = 0; x < opts->num_channels; x++) {
-	src[x] = data + (x * frame->channel_stride_in_bytes);
-	//printf("src[%d] %p\n", x, src[x]);
-}
+	for (int x = 0; x < opts->num_channels; x++) {
+		src[x] = data + (x * stride);
+		//printf("src[%d] %p\n", x, src[x]);
+	}
 
 	int out_samples = avresample_convert(ctx->avr,
 		rf->audio_frame.audio_data,
-		8, // rf->audio_frame.linesize,
+		rf->audio_frame.linesize,
 		rf->audio_frame.num_samples,
 		(uint8_t**)&src,
 		0,
@@ -225,11 +245,18 @@ for (int x = 0; x < opts->num_channels; x++) {
 	}
 
 	free(data);
-
+        if (ctx->reset_a_pts == 1) {
+           int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
+	   timecode_pts = timecode_pts + ctx->clock_offset;
+           int64_t pts_diff = av_rescale_q(1, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} );
+           int q = timecode_pts / pts_diff + (timecode_pts % pts_diff > 0);
+           ctx->a_counter = q;
+           ctx->reset_a_pts = 0;
+        }
 // MMM
 //		int64_t pts = av_rescale_q(v4l2_ctx->a_counter++, v4l2_ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
 		//obe_clock_tick(v4l2_ctx->h, pts);
-	int64_t pts = 0;
+	int64_t pts = av_rescale_q(ctx->a_counter++, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} ); 
 	rf->pts = pts;
 
 	/* AVFM */
@@ -273,7 +300,7 @@ lastTimestamp = frame->timestamp;
 	}
 
 	/* TODO: YUYV only. Drivers will non YUYV colorspaces won't work reliably. */
-	rf->alloc_img.csp = (int)PIX_FMT_YUV420P;
+	rf->alloc_img.csp = (int)AV_PIX_FMT_YUV420P;
 	rf->alloc_img.format = opts->video_format;
 	rf->alloc_img.width = opts->width;
 	rf->alloc_img.height = opts->height;
@@ -284,6 +311,21 @@ lastTimestamp = frame->timestamp;
 	rf->alloc_img.stride[1] = opts->width / 2;
 	rf->alloc_img.stride[2] = opts->width / 2;
 	rf->alloc_img.stride[3] = 0;
+
+	if (ctx->v_counter == 0) {
+	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
+	   ctx->clock_offset = (timecode_pts * -1);
+	   printf("Clock offset established as %" PRIi64 "\n", ctx->clock_offset);
+	}
+	if (ctx->reset_v_pts == 1) {
+	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK});
+	   timecode_pts = timecode_pts + ctx->clock_offset;
+	   int64_t pts_diff = av_rescale_q(1, ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
+	   int q = timecode_pts / pts_diff + (timecode_pts % pts_diff > 0);
+	   printf("Q is %d\n",q);
+	   ctx->v_counter = q;
+	   ctx->reset_v_pts = 0;
+	}
 
 	int64_t pts = av_rescale_q(ctx->v_counter++, ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
 	obe_clock_tick(ctx->h, pts);
@@ -336,6 +378,8 @@ static void *ndi_videoThreadFunc(void *p)
 	printf(MODULE_PREFIX "Video thread starts\n");
 
 	ctx->v_counter = 0;
+	ctx->a_counter = 0;
+	ctx->clock_offset = 0;
 	ctx->vthreadRunning = 1;
 	ctx->vthreadComplete = 0;
 	ctx->vthreadTerminate = 0;
@@ -344,8 +388,14 @@ static void *ndi_videoThreadFunc(void *p)
 
 		NDIlib_video_frame_v2_t video_frame;
 		NDIlib_audio_frame_v2_t audio_frame;
+                NDIlib_metadata_frame_t metadata;
+		NDIlib_tally_t tally (true);
+		NDIlib_recv_set_tally(ctx->pNDI_recv, &tally);
 
-		switch (NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000)) {
+		int timeout = av_rescale_q(1000, ctx->v_timebase, (AVRational){1, 1});
+		timeout = timeout + 40;
+
+		switch (NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout)) {
 			case NDIlib_frame_type_video:
 				processFrameVideo(opts, &video_frame);
 				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
@@ -354,6 +404,14 @@ static void *ndi_videoThreadFunc(void *p)
 				processFrameAudio(opts, &audio_frame);
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
+                        case NDIlib_frame_type_metadata:
+                                printf("Metadata content: %s\n", metadata.p_data);
+                                NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata);
+                                break;
+			case NDIlib_frame_type_none:
+				printf("Frame time exceeded timeout of: %d\n", timeout);
+				ctx->reset_v_pts = 1;
+				ctx->reset_a_pts = 1;
 			default:
 				printf("no frame?\n");
 		}
@@ -482,27 +540,6 @@ static int open_device(ndi_opts_t *opts)
 		return -1;
 	}
 
-	opts->card_idx++;
-	printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
-
-	const NDIlib_source_t *p_sources = NULL;
-	uint32_t sourceCount = 0;
-	int i = 0;
-	while (sourceCount == 0) {
-		if (i++ >= 10) {
-			fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
-			return -1;
-		}
-		NDIlib_find_wait_for_sources(pNDI_find, 500 /* ms */);
-		p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
-	}
-
-	for (uint32_t x = 0; x < sourceCount; x++) {
-		printf("Found[%d] %s @ %s\n", x,
-			p_sources[x].p_ndi_name,
-			p_sources[x].p_url_address);
-	}
-
 	// We now have at least one source, so we create a receiver to look at it.
 	ctx->pNDI_recv = NDIlib_recv_create_v3();
 	if (!ctx->pNDI_recv) {
@@ -510,10 +547,35 @@ static int open_device(ndi_opts_t *opts)
 		return -1;
 	}
 
-	printf("p_sources %p\n", p_sources);
 
-	// Connect to source
-	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + 0);
+	if (opts->ndi_name != NULL) {
+		printf("NDI Source name: %s\n", opts->ndi_name);
+		//We where passed a source name, so we connect to it directly!
+		const NDIlib_source_t p_source (opts->ndi_name);
+		NDIlib_recv_connect(ctx->pNDI_recv, &p_source);
+	} else {
+		opts->card_idx++;
+		printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
+		const NDIlib_source_t *p_sources = NULL;
+		uint32_t sourceCount = 0;
+		int i = 0;
+		while (sourceCount == 0) {
+			if (i++ >= 10) {
+				fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
+				return -1;
+			}
+			NDIlib_find_wait_for_sources(pNDI_find, 500 /* ms */);
+			p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
+		}
+
+		for (uint32_t x = 0; x < sourceCount; x++) {
+			printf("Found[%d] %s @ %s\n", x,
+				p_sources[x].p_ndi_name,
+				p_sources[x].p_url_address);
+		}
+	        printf("p_sources %p\n", p_sources);
+                NDIlib_recv_connect(ctx->pNDI_recv, p_sources + 0);
+	}
 
 	/* We don't need this */
 	NDIlib_find_destroy(pNDI_find);
@@ -568,6 +630,7 @@ printf("no_channels = %d\n", audio_frame.no_channels);
 printf("no_samples = %d\n", audio_frame.no_samples);
 printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 #endif
+				opts->num_channels = audio_frame.no_channels;
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
 			default:
@@ -602,10 +665,9 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
         }
 
 	/* Give libavresample our custom audio channel map */
-opts->num_channels = 16;
 	//av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
 	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
-	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_FLTP, 0 );
+	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
 	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_channels) - 1, 0 );
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
@@ -659,10 +721,9 @@ static void *ndi_probe_stream(void *ptr)
 		goto finish;
 	}
 
-	/* TODO: support multi-channel */
-	opts->num_channels = 16;
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
+	opts->ndi_name = user_opts->ndi_name;
 	opts->probe = 1;
 
 	ctx = &opts->ctx;
@@ -686,12 +747,16 @@ static void *ndi_probe_stream(void *ptr)
 		goto finish;
 	}
 
+	//Split audio in seperate stereo tracks
+	//Todo: allow user to specify desired channel count per pair
+	num_streams  = opts->num_channels / 2 + 1;
+
 
 	/* TODO: probe for SMPTE 337M */
 	/* TODO: factor some of the code below out */
 
 	/* Create the video output stream and eight output audio pairs. */
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < num_streams; i++) {
 
 		streams[i] = (obe_int_input_stream_t*)calloc( 1, sizeof(*streams[i]));
 		if (!streams[i])
@@ -715,6 +780,7 @@ static void *ndi_probe_stream(void *ptr)
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
 		else if (i > 0) {
+			printf("loop count = %d\n",i);
 			streams[i]->stream_type = STREAM_TYPE_AUDIO;
 			streams[i]->stream_format = AUDIO_PCM;
 			streams[i]->num_channels  = 2;
@@ -762,15 +828,17 @@ static void *ndi_open_input(void *ptr)
 
 	pthread_cleanup_push(close_thread, (void *)opts);
 
-	opts->num_channels = 16;
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
+	opts->ndi_name = user_opts->ndi_name;
 
 	ctx = &opts->ctx;
 
 	ctx->device = device;
 	ctx->h = h;
 	ctx->v_counter = 0;
+	ctx->a_counter = 0;
+        ctx->clock_offset = 0;
 
 	if (open_device(opts) < 0)
 		return NULL;
