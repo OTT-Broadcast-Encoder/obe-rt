@@ -29,7 +29,9 @@
 #define MODULE "[x264]: "
 
 int64_t cpb_removal_time = 0;
+int64_t g_x264_monitor_bps = 0;
 
+#define MESSAGE_PREFIX "[x264]: "
 #define SERIALIZE_CODED_FRAMES 0
 #if SERIALIZE_CODED_FRAMES
 static void serialize_coded_frame(obe_coded_frame_t *cf)
@@ -227,6 +229,32 @@ static x264_picture_t *x264_picture_copy(x264_picture_t *pic)
 }
 #endif
 
+static void _monitor_bps(obe_vid_enc_params_t *enc_params, int lengthBytes)
+{
+	/* Monitor bps for sanity... */
+	static int codec_bps_current = 0;
+	static int codec_bps = 0;
+	static time_t codec_bps_time = 0;
+	time_t now;
+	time(&now);
+	if (now != codec_bps_time) {
+		codec_bps = codec_bps_current;
+		codec_bps_current = 0;
+		codec_bps_time = now;
+		double dbps = (double)codec_bps;
+		dbps /= 1e6;
+		if (dbps >= enc_params->avc_param.rc.i_vbv_max_bitrate) {
+			fprintf(stderr, MESSAGE_PREFIX " codec output %d bps exceeds vbv_max_bitrate %d @ %s",
+				codec_bps,
+				enc_params->avc_param.rc.i_vbv_max_bitrate,
+				ctime(&now));
+		}
+		if (g_x264_monitor_bps) {
+			printf(MESSAGE_PREFIX " codec output %.02f (Mb/ps) @ %s", dbps, ctime(&now));
+		}
+	}
+	codec_bps_current += (lengthBytes * 8);
+}
 static void *x264_start_encoder( void *ptr )
 {
     obe_vid_enc_params_t *enc_params = ptr;
@@ -526,6 +554,10 @@ printf("Malloc failed\n");
 
         if( frame_size )
         {
+            if (g_x264_monitor_bps) {
+                _monitor_bps(enc_params, frame_size);
+            }
+
             coded_frame = new_coded_frame( encoder->output_stream_id, frame_size );
             if( !coded_frame )
             {
