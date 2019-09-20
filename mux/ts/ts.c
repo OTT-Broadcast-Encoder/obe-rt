@@ -433,6 +433,7 @@ static void mux_monitor_queue(obe_t *h)
 int64_t initial_audio_latency = -1; /* ticks of 27MHz clock. Amount of audio (in time) we have buffered before the first video frame appeared. */
 
 ts_writer_t *g_mux_ts_writer_handle = NULL;
+int g_mux_ts_monitor_bps = 0;
 
 void *open_muxer( void *ptr )
 {
@@ -924,7 +925,20 @@ void *open_muxer( void *ptr )
         if (ts_write_frames( w, frames, num_frames, &output, &len, &pcr_list) != 0) {
             fprintf(stderr, "ts_write_frames failed\n");
         }        
-	
+
+        if (g_mux_ts_monitor_bps) {
+            static int lenbps_old = 0;
+            static int len_current = 0;
+            static time_t lentv, now;
+            now = time(0);
+            if (now != lentv) {
+                lenbps_old = len_current * 8;
+                printf(PREFIX "dequeued bps %d\n", lenbps_old);
+                len_current = 0;
+                lentv = now;
+            }
+            len_current += len;
+        }
 #if 0
 //printf("bb = %d len = %d\n", bb, len);
 static FILE *fh = NULL;

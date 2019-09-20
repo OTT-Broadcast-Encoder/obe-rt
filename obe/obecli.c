@@ -1180,6 +1180,9 @@ extern int g_aac_cf_debug;
 /* SEI Timestamping. */
 extern int g_sei_timestamping;
 
+/* TS Mux */
+extern int g_mux_ts_monitor_bps;
+
 /* Mux Smoother */
 extern int64_t g_mux_smoother_last_item_count;
 extern int64_t g_mux_smoother_last_total_item_size;
@@ -1271,6 +1274,10 @@ extern time_t g_decklink_missing_video_last_time;
         (cur_pts - cpb_removal_time) / 27000);
 
     printf("ts_mux.initial_audio_latency  = %" PRIi64 "\n", initial_audio_latency);
+    printf("ts_mux.monitor_bps = %d [%s]\n",
+        g_mux_ts_monitor_bps,
+        g_mux_ts_monitor_bps == 0 ? "disabled" : "enabled");
+
     printf("mux_smoother.last_item_count  = %" PRIi64 "\n",
         g_mux_smoother_last_item_count);
     printf("mux_smoother.last_total_item_size  = %" PRIi64 " (bytes)\n",
@@ -1386,6 +1393,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "core.runtime_statistics_to_file") == 0) {
         g_core_runtime_statistics_to_file = val;
+    } else
+    if (strcasecmp(var, "ts_mux.monitor_bps") == 0) {
+        g_mux_ts_monitor_bps = val;
     } else
     if (strcasecmp(var, "video_encoder.sei_timestamping") == 0) {
         g_sei_timestamping = val;
