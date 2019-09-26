@@ -1564,7 +1564,7 @@ extern void mux_dump_queue(obe_t *h);
     printf( "Encoder queues:\n" );
     for( int i = 0; i < cli.h->num_output_streams; i++ ) {
         obe_output_stream_t *e = obe_core_get_output_stream_by_index(cli.h, i);
-        if (e->stream_action == STREAM_ENCODE ) {
+        if (e && e->stream_action == STREAM_ENCODE ) {
             q = &cli.h->encoders[i]->queue;
             printf("name: %s depth: %d item(s)\n", q->name, q->size);
         }
