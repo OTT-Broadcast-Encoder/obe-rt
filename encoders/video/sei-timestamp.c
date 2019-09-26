@@ -56,13 +56,13 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 	return -1;
 }
 
-int set_timestamp_field_get(unsigned char *buffer, uint32_t nr, uint32_t *value)
+int set_timestamp_field_get(const unsigned char *buffer, uint32_t nr, uint32_t *value)
 {
 	if (nr < 1 || nr > SEI_TIMESTAMP_FIELD_COUNT)
 		return -1;
 
 	uint32_t v;
-	unsigned char *p = buffer;
+	const unsigned char *p = buffer;
 	p += (sizeof(ltn_uuid_sei_timestamp) + ((nr - 1) * 6));
 	v  = (*(p++) << 24);
 	v |= (*(p++) << 16);
