@@ -32,8 +32,10 @@ LDFLAGS += -L$(BLUEFISH444_SDK)/lib
 LDFLAGS += -lBlueVelvetC64 -lBlueVelvet64 -lrt
 CFLAGS += -I$(BLUEFISH444_SDK)/inc
 endif
-
-CXXFLAGS = $(CFLAGS)
+if WEBSOCKETS
+LDFLAGS += -lwebsockets -ljson-c
+endif
+CXXFLAGS = $(CFLAGS) -std=c++11
 
 bin_PROGRAMS  = obecli
 
@@ -68,6 +70,8 @@ obecli_SOURCES += ../filters/audio/audio.c
 obecli_SOURCES += ../filters/audio/337m/337m.c
 obecli_SOURCES += ../filters/video/cc.c
 obecli_SOURCES += ../filters/video/video.c
+obecli_SOURCES += ../filters/video/convert_jpeg.c
+obecli_SOURCES += ../filters/video/analyze_fp.cpp
 obecli_SOURCES += ../encoders/encoder_smoothing.c
 obecli_SOURCES += ../encoders/audio/lavc/lavc.c
 obecli_SOURCES += ../encoders/audio/mp2/twolame.c
@@ -88,6 +92,7 @@ obecli_SOURCES += ../common/x86/x86inc.asm
 obecli_SOURCES += ../common/x86/x86util.asm
 obecli_SOURCES += ../common/common_lavc.c
 obecli_SOURCES += ../common/queue.c
+obecli_SOURCES += ltn_ws.c
 obecli_SOURCES += x86_sdi.o
 obecli_SOURCES += vfilter.o
 

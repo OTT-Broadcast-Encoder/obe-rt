@@ -35,6 +35,8 @@
 
 #define PREFIX "[decklink]: "
 
+#define typeof __typeof__
+
 extern "C"
 {
 #include "common/common.h"
@@ -55,6 +57,7 @@ extern "C"
 #include <include/DeckLinkAPI.h>
 #include "include/DeckLinkAPIDispatch.cpp"
 #include "histogram.h"
+#include "ltn_ws.h"
 
 #define container_of(ptr, type, member) ({          \
     const typeof(((type *)0)->member)*__mptr = (ptr);    \
@@ -1195,6 +1198,11 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
         width = videoframe->GetWidth();
         height = videoframe->GetHeight();
         stride = videoframe->GetRowBytes();
+
+#if LTN_WS_ENABLE
+	ltn_ws_set_property_signal(g_ltn_ws_handle, width, height, 1 /* progressive */, 5994);
+#endif
+
     } else {
         g_decklink_missing_video_count++;
         time(&g_decklink_missing_video_last_time);

@@ -40,6 +40,7 @@
 #include "obe.h"
 #include "obecli.h"
 #include "common/common.h"
+#include "ltn_ws.h"
 
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
 #define RETURN_IF_ERROR( cond, ... ) RETURN_IF_ERR( cond, "options", NULL, __VA_ARGS__ )
@@ -62,6 +63,10 @@ typedef struct
 } obecli_ctx_t;
 
 obecli_ctx_t cli;
+
+#if LTN_WS_ENABLE
+void *g_ltn_ws_handle = NULL;
+#endif
 
 int  runtime_statistics_start(void **ctx, obecli_ctx_t *cli);
 void runtime_statistics_stop(void *ctx);
@@ -175,6 +180,13 @@ const static uint64_t channel_layouts[] =
     AV_CH_LAYOUT_5POINT0_BACK,
     AV_CH_LAYOUT_5POINT1_BACK,
  };
+
+static char *getSoftwareVersion()
+{
+    char *msg = malloc(128);
+    sprintf(msg, "Version 2.0 (" GIT_VERSION ")");
+    return msg;
+}
 
 void obe_cli_printf( const char *name, const char *fmt, ... )
 {
@@ -1933,11 +1945,23 @@ static int start_encode( char *command, obecli_command_t *child )
     if (g_core_runtime_statistics_to_file)
         runtime_statistics_start(&cli.h->runtime_statistics, &cli);
 
+#if LTN_WS_ENABLE
+    ltn_ws_alloc(&g_ltn_ws_handle, &cli, 8443);
+    char *version = getSoftwareVersion();
+    ltn_ws_set_property_software_version(g_ltn_ws_handle, version);
+    ltn_ws_set_property_hardware_version(g_ltn_ws_handle, "571");
+    free(version);
+#endif
+
     return 0;
 }
 
 static int stop_encode( char *command, obecli_command_t *child )
 {
+#if LTN_WS_ENABLE
+    ltn_ws_free(g_ltn_ws_handle);
+#endif
+
     if (cli.h->runtime_statistics)
         runtime_statistics_stop(cli.h->runtime_statistics);
 
@@ -2083,10 +2107,10 @@ static void _usage(const char *prog, int exitcode)
     printf("\nOpen Broadcast Encoder command line interface.\n");
     printf("Including Kernel Labs enhancements.\n");
 
-    char msg[128];
-    sprintf(msg, "Version 2.0 (" GIT_VERSION ")");
-    printf("%s\n", msg);
-    syslog(LOG_INFO, msg);
+    char *version = getSoftwareVersion();
+    printf("%s\n", version);
+    syslog(LOG_INFO, version);
+    free(version);
 
     printf("Built %s @ %s\n", __DATE__, __TIME__);
     printf("x264 build#%d (%dbit support)\n", X264_BUILD, X264_BIT_DEPTH);

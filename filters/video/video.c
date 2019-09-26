@@ -31,6 +31,17 @@
 #include "x86/vfilter.h"
 #include "input/sdi/sdi.h"
 
+#define DO_JPG 0
+#if DO_JPG
+#include "convert.h"
+#endif
+
+#define DO_CRYSTAL_FP 0
+#if DO_CRYSTAL_FP
+/* Crystall CC */
+#include "analyze_fp.h"
+#endif
+
 #if X264_BIT_DEPTH > 8
 typedef uint16_t pixel;
 #else
@@ -695,6 +706,16 @@ static void *start_filter_video( void *ptr )
     int h_shift, v_shift;
     const AVPixFmtDescriptor *pfd;
 
+#if DO_JPG
+    struct filter_compress_ctx *fc_ctx = NULL;
+    filter_compress_alloc(&fc_ctx);
+#endif
+
+#if DO_CRYSTAL_FP
+    struct filter_analyze_fp_ctx *fp_ctx = NULL;
+    filter_analyze_fp_alloc(&fp_ctx);
+#endif
+
     obe_vid_filter_ctx_t *vfilt = calloc( 1, sizeof(*vfilt) );
     if( !vfilt )
     {
@@ -773,6 +794,14 @@ static void *start_filter_video( void *ptr )
 
         remove_from_queue( &filter->queue );
 //PRINT_OBE_IMAGE(&raw_frame->img, "VIDEO FILTER POST");
+
+#if DO_JPG
+	filter_compress_jpg(fc_ctx, raw_frame);
+#endif
+#if DO_CRYSTAL_FP
+	filter_analyze_fp_process(fp_ctx, raw_frame);
+#endif
+
         add_to_encode_queue( h, raw_frame, 0 );
     }
 
@@ -786,6 +815,12 @@ end:
     }
 
     free( filter_params );
+#if DO_JPG
+    filter_compress_free(fc_ctx);
+#endif
+#if DO_CRYSTAL_FP
+    filter_analyze_fp_free(fp_ctx);
+#endif
 
     return NULL;
 }
