@@ -684,6 +684,14 @@ int obe_image_compare(obe_image_t *dst, obe_image_t *src);
 void obe_raw_frame_free(obe_raw_frame_t *frame);
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int obe_getTimestamp(char *s, time_t *when);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif
