@@ -1,3 +1,5 @@
+#define __STDC_CONSTANT_MACROS
+
 #include "common/common.h"
 #include "common/bitstream.h"
 #include "ltn_ws.h"
@@ -49,7 +51,7 @@ int filter_analyze_fp_process(struct filter_analyze_fp_ctx *ctx, obe_raw_frame_t
 	if (!ctx || !rf)
 		return -1;
 
-	if (rf->img.csp != PIX_FMT_YUV420P) {
+	if (rf->img.csp != AV_PIX_FMT_YUV420P) {
 		return -1; /* Unsupported input colorspace */
 	}
 

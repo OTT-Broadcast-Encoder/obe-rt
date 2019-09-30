@@ -24,6 +24,7 @@
 #ifndef OBE_FILTERS_AUDIO_H
 #define OBE_FILTERS_AUDIO_H
 #include <libavutil/samplefmt.h>
+#include <libavutil/channel_layout.h>
 
 typedef struct
 {

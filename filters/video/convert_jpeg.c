@@ -58,7 +58,7 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 		exit(1);
 	}
 
-	AVFrame *frame = avcodec_alloc_frame();
+	AVFrame *frame = av_frame_alloc();
 	if (!frame) {
 		printf("Could not allocate video frame\n");
 		exit(1);
@@ -86,11 +86,24 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 	frame->pts = 1;
 
 	int got_output = 0;
+        ret = avcodec_send_frame(c, frame);
+        while (ret >= 0) {
+                ret = avcodec_receive_packet(c, &pkt);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                        return -1;
+                else if (ret < 0) {
+                }
+                got_output = 1;
+                break;
+        }
+
+#if 0
 	ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
 	if (ret < 0) {
 		printf("Error encoding frame\n");
 		exit(1);
 	}
+#endif
 
 	if (got_output) {
 #if LTN_WS_ENABLE
@@ -103,13 +116,13 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 		fwrite(pkt.data, 1, pkt.size, f);
 		fclose(f);
 #endif
-		av_free_packet(&pkt);
+		av_packet_unref(&pkt);
 	}
 
 	avcodec_close(c);
 	av_free(c);
 	av_freep(&frame->data[0]);
-	avcodec_free_frame(&frame);
+	av_frame_free(&frame);
 
 	return 0;
 }

@@ -47,11 +47,10 @@ extern "C"
 #include "input/sdi/ancillary.h"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
-#include <libavresample/avresample.h>
 #include <libavutil/opt.h>
 }
 
@@ -150,7 +149,6 @@ static void *v210_videoThreadFunc(void *p)
 {
 	v210_opts_t *opts = (v210_opts_t *)p;
 	v210_ctx_t *ctx = &opts->ctx;
-	int finished = 0;
 
 	printf(MODULE_PREFIX "Video thread starts\n");
 
@@ -167,7 +165,7 @@ static void *v210_videoThreadFunc(void *p)
 			break;
 		}
 
-		AVFrame *frame = avcodec_alloc_frame();
+		AVFrame *frame = av_frame_alloc();
 		ctx->codec->width = opts->width;
 		ctx->codec->height = opts->height;
 
@@ -179,9 +177,13 @@ static void *v210_videoThreadFunc(void *p)
 		pkt.data = getNextFrameAddress(opts);
 		pkt.size = ctx->frameSizeBytesVideo;
 
-		int ret = avcodec_decode_video2(ctx->codec, frame, &finished, &pkt);
-		if (ret < 0 || !finished) {
-			fprintf(stderr, MODULE_PREFIX "Could not decode video frame\n");
+		int ret = avcodec_send_packet(ctx->codec, &pkt);
+		while (ret >= 0) {
+			ret = avcodec_receive_frame(ctx->codec, frame);
+			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+				return NULL;
+			else if (ret < 0) {
+			}
 			break;
 		}
 
@@ -190,9 +192,10 @@ static void *v210_videoThreadFunc(void *p)
 
 		memcpy(raw_frame->alloc_img.stride, frame->linesize, sizeof(raw_frame->alloc_img.stride));
 		memcpy(raw_frame->alloc_img.plane, frame->data, sizeof(raw_frame->alloc_img.plane));
-		avcodec_free_frame(&frame);
-		raw_frame->alloc_img.csp = (int)ctx->codec->pix_fmt;
-		raw_frame->alloc_img.planes = av_pix_fmt_descriptors[raw_frame->alloc_img.csp].nb_components;
+		av_frame_free(&frame);
+		raw_frame->alloc_img.csp = ctx->codec->pix_fmt;
+                const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+		raw_frame->alloc_img.planes = d->nb_components;
 		raw_frame->alloc_img.width = opts->width;
 		raw_frame->alloc_img.height = opts->height;
 		raw_frame->alloc_img.format = opts->video_format;
@@ -222,9 +225,9 @@ static void *v210_videoThreadFunc(void *p)
 		}
 
 		if (frame)
-			avcodec_free_frame(&frame);
+			av_frame_free(&frame);
 
-		av_free_packet(&pkt);
+		av_packet_unref(&pkt);
 	}
 	printf(MODULE_PREFIX "Video thread complete\n");
 
@@ -321,8 +324,6 @@ static int open_device(v210_opts_t *opts)
 		opts->width, opts->height,
 		opts->timebase_den, opts->timebase_num);
 
-	avcodec_register_all();
-
 	ctx->dec = avcodec_find_decoder(AV_CODEC_ID_V210);
 	if (!ctx->dec) {
 		fprintf(stderr, MODULE_PREFIX "Could not find v210 decoder\n");
@@ -333,10 +334,12 @@ static int open_device(v210_opts_t *opts)
 		fprintf(stderr, MODULE_PREFIX "Could not allocate a codec context\n");
 	}
 
+#if 0
 	ctx->codec->get_buffer = obe_get_buffer;
 	ctx->codec->release_buffer = obe_release_buffer;
 	ctx->codec->reget_buffer = obe_reget_buffer;
 	ctx->codec->flags |= CODEC_FLAG_EMU_EDGE;
+#endif
 
 	if (avcodec_open2(ctx->codec, ctx->dec, NULL) < 0) {
 		fprintf(stderr, MODULE_PREFIX "Could not open libavcodec\n");
@@ -425,7 +428,7 @@ static void *v210_probe_stream(void *ptr)
 			streams[i]->height = opts->height;
 			streams[i]->timebase_num = opts->timebase_num;
 			streams[i]->timebase_den = opts->timebase_den;
-			streams[i]->csp    = PIX_FMT_YUV422P10;
+			streams[i]->csp    = AV_PIX_FMT_YUV422P10;
 			streams[i]->interlaced = opts->interlaced;
 			streams[i]->tff = 1; /* NTSC is bff in baseband but coded as tff */
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */

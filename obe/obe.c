@@ -502,12 +502,14 @@ obe_t *obe_setup(const char *syslogSuffix)
 
     pthread_mutex_init( &h->device_list_mutex, NULL );
 
+#if 0
     if( av_lockmgr_register( obe_lavc_lockmgr ) < 0 )
     {
         fprintf( stderr, "Could not register lavc lock manager\n" );
         free( h );
         return NULL;
     }
+#endif
 
     return h;
 }
@@ -1607,9 +1609,6 @@ void obe_close( obe_t *h )
     free(obe_core_get_output_stream_by_index(h, 0));
     /* TODO: free other things */
 
-    /* Destroy lock manager */
-    av_lockmgr_register( NULL );
-
     free( h );
     h = NULL;
 }
@@ -1618,7 +1617,7 @@ void obe_raw_frame_printf(obe_raw_frame_t *rf)
 {
     printf("raw_frame %p width = %d ", rf, rf->img.width);
     printf("height = %d ", rf->img.height);
-    printf("csp = %d (%s) ", rf->img.csp, rf->img.csp == PIX_FMT_YUV422P10 ? "PIX_FMT_YUV422P10" : "PIX_FMT_YUV422");
+    printf("csp = %d (%s) ", rf->img.csp, rf->img.csp == AV_PIX_FMT_YUV422P10 ? "AV_PIX_FMT_YUV422P10" : "AV_PIX_FMT_YUV422");
     printf("planes[%d] = ", rf->img.planes);
     for (int i = 0; i < rf->img.planes; i++) {
         printf("%p ", rf->img.plane[i]);

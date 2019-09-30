@@ -69,7 +69,7 @@ PRINT_OBE_IMAGE(&raw_frame->alloc_img, "alloc X264->img");
     memcpy( pic->img.i_stride, img->stride, sizeof(img->stride) );
     memcpy( pic->img.plane, img->plane, sizeof(img->plane) );
     pic->img.i_plane = img->planes;
-    pic->img.i_csp = img->csp == PIX_FMT_YUV422P || img->csp == PIX_FMT_YUV422P10 ? X264_CSP_I422 : X264_CSP_I420;
+    pic->img.i_csp = img->csp == AV_PIX_FMT_YUV422P || img->csp == AV_PIX_FMT_YUV422P10 ? X264_CSP_I422 : X264_CSP_I420;
 #if 0
     pic->img.i_csp = X264_CSP_I422;
 #endif

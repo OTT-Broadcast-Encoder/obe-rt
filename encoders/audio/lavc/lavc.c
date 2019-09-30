@@ -71,8 +71,6 @@ static void *aac_start_encoder( void *ptr )
     struct avfm_s avfm;
     int64_t lastOutputFramePTS = 0; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
 
-    avcodec_register_all();
-
     codec = avcodec_alloc_context3( NULL );
     if( !codec )
     {
@@ -169,7 +167,7 @@ static void *aac_start_encoder( void *ptr )
         goto finish;
     }
 
-    frame = avcodec_alloc_frame();
+    frame = av_frame_alloc();
     if( !frame )
     {
         fprintf(stderr, MODULE "Could not allocate frame\n");
@@ -249,7 +247,7 @@ printf(MODULE "codec frame size %d\n", codec->frame_size);
         while( avresample_available( avr ) >= codec->frame_size )
         {
             got_pkt = 0;
-            avcodec_get_frame_defaults( frame );
+            //avcodec_get_frame_defaults( frame );
             frame->nb_samples = codec->frame_size;
             memcpy( frame->data, audio_planes, sizeof(frame->data) );
             avresample_read( avr, frame->data, codec->frame_size );
@@ -382,7 +380,7 @@ printf(MODULE "codec frame size %d\n", codec->frame_size);
 
 finish:
     if( frame )
-       avcodec_free_frame( &frame );
+       av_frame_free( &frame );
 
     if( audio_planes[0] )
         av_free( audio_planes[0] );

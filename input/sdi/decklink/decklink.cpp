@@ -47,8 +47,10 @@ extern "C"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
 #include "input/sdi/smpte337_detector.h"
-#include <libavresample/avresample.h>
+#include <libavcodec/avcodec.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
+#include <libavutil/pixdesc.h>
 #include <libklvanc/vanc.h>
 #include <libklscte35/scte35.h>
 }
@@ -248,7 +250,7 @@ typedef struct
     AVCodecContext  *codec;
 
     /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
-    AVAudioResampleContext *avr;
+    struct SwrContext *avr;
 
     int64_t last_frame_time;
 
@@ -810,12 +812,10 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                 }
 
                 /* Convert input samples from S32 interleaved into S32P planer. */
-                if (avresample_convert(decklink_ctx->avr,
+                if (swr_convert(decklink_ctx->avr,
                         raw_frame->audio_frame.audio_data,
-                        raw_frame->audio_frame.linesize,
                         raw_frame->audio_frame.num_samples,
-                        (uint8_t**)&frame_bytes,
-                        0,
+                        (const uint8_t**)&frame_bytes,
                         raw_frame->audio_frame.num_samples) < 0)
                 {
                     syslog( LOG_ERR, "[decklink] Sample format conversion failed\n" );
@@ -1126,7 +1126,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
     AVFrame *frame = NULL;
     void *frame_bytes, *anc_line;
     obe_t *h = decklink_ctx->h;
-    int finished = 0, ret, num_anc_lines = 0, anc_line_stride,
+    int ret, num_anc_lines = 0, anc_line_stride,
     lines_read = 0, first_line = 0, last_line = 0, line, num_vbi_lines, vii_line;
     uint32_t *frame_ptr;
     uint16_t *anc_buf, *anc_buf_pos;
@@ -1666,7 +1666,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
         if( !decklink_opts_->probe )
         {
             ltn_histogram_sample_begin(decklink_ctx->callback_4_hdl);
-            frame = avcodec_alloc_frame();
+            frame = av_frame_alloc();
             if( !frame )
             {
                 syslog( LOG_ERR, "[decklink]: Could not allocate video frame\n" );
@@ -1678,11 +1678,19 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             pkt.data = (uint8_t*)frame_bytes;
             pkt.size = stride * height;
 
-            ret = avcodec_decode_video2( decklink_ctx->codec, frame, &finished, &pkt );
-            if( ret < 0 || !finished )
-            {
-                syslog( LOG_ERR, "[decklink]: Could not decode video frame\n" );
-                goto end;
+//frame->width = width;
+//frame->height = height;
+//frame->format = decklink_ctx->codec->pix_fmt;
+//
+
+            ret = avcodec_send_packet(decklink_ctx->codec, &pkt);
+            while (ret >= 0) {
+                ret = avcodec_receive_frame(decklink_ctx->codec, frame);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                    return -1;
+                else if (ret < 0) {
+                }
+                break;
             }
 
             raw_frame->release_data = obe_release_video_data;
@@ -1690,9 +1698,11 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 
             memcpy( raw_frame->alloc_img.stride, frame->linesize, sizeof(raw_frame->alloc_img.stride) );
             memcpy( raw_frame->alloc_img.plane, frame->data, sizeof(raw_frame->alloc_img.plane) );
-            avcodec_free_frame( &frame );
-            raw_frame->alloc_img.csp = (int)decklink_ctx->codec->pix_fmt;
-            raw_frame->alloc_img.planes = av_pix_fmt_descriptors[raw_frame->alloc_img.csp].nb_components;
+            av_frame_free( &frame );
+            raw_frame->alloc_img.csp = decklink_ctx->codec->pix_fmt;
+
+            const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+            raw_frame->alloc_img.planes = d->nb_components;
             raw_frame->alloc_img.width = width;
             raw_frame->alloc_img.height = height;
             raw_frame->alloc_img.format = decklink_opts_->video_format;
@@ -1809,9 +1819,9 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 
 end:
     if( frame )
-        avcodec_free_frame( &frame );
+        av_frame_free( &frame );
 
-    av_free_packet( &pkt );
+    av_packet_unref( &pkt );
 
     ltn_histogram_sample_end(decklink_ctx->callback_3_hdl);
     return S_OK;
@@ -1875,8 +1885,8 @@ static void close_card( decklink_opts_t *decklink_opts )
     if( IS_SD( decklink_opts->video_format ) )
         vbi_raw_decoder_destroy( &decklink_ctx->non_display_parser.vbi_decoder );
 
-    if( decklink_ctx->avr )
-        avresample_free( &decklink_ctx->avr );
+    if (decklink_ctx->avr)
+        swr_free(&decklink_ctx->avr);
 
 }
 
@@ -2125,10 +2135,10 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     uint32_t    flags = 0;
     bool        supported;
 
+    const struct obe_to_decklink_video *fmt = NULL;
     IDeckLinkDisplayModeIterator *p_display_iterator = NULL;
     IDeckLinkIterator *decklink_iterator = NULL;
     HRESULT result;
-    const struct obe_to_decklink_video *fmt = NULL;
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080500 /* 10.8.5 */
     IDeckLinkStatus *status = NULL;
 #endif
@@ -2194,7 +2204,6 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
 
     decklink_ctx->h->verbose_bitmask = INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104;
 
-    avcodec_register_all();
     decklink_ctx->dec = avcodec_find_decoder( AV_CODEC_ID_V210 );
     if( !decklink_ctx->dec )
     {
@@ -2209,10 +2218,12 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         goto finish;
     }
 
-    decklink_ctx->codec->get_buffer = obe_get_buffer;
+    decklink_ctx->codec->get_buffer2 = obe_get_buffer2;
+#if 0
     decklink_ctx->codec->release_buffer = obe_release_buffer;
     decklink_ctx->codec->reget_buffer = obe_reget_buffer;
     decklink_ctx->codec->flags |= CODEC_FLAG_EMU_EDGE;
+#endif
 
     /* TODO: setup custom strides */
     if( avcodec_open2( decklink_ctx->codec, decklink_ctx->dec, NULL ) < 0 )
@@ -2469,24 +2480,25 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
 
     if( !decklink_opts->probe )
     {
-        decklink_ctx->avr = avresample_alloc_context();
-        if( !decklink_ctx->avr )
+        decklink_ctx->avr = swr_alloc();
+        if (!decklink_ctx->avr)
         {
             fprintf( stderr, "[decklink-sdiaudio] couldn't setup sample rate conversion \n" );
             ret = -1;
             goto finish;
         }
 
-        /* Give libavresample a made up channel map */
+        /* Give libswresample a made up channel map */
         av_opt_set_int( decklink_ctx->avr, "in_channel_layout",   (1 << decklink_opts->num_channels) - 1, 0 );
         av_opt_set_int( decklink_ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
         av_opt_set_int( decklink_ctx->avr, "in_sample_rate",      48000, 0 );
         av_opt_set_int( decklink_ctx->avr, "out_channel_layout",  (1 << decklink_opts->num_channels) - 1, 0 );
         av_opt_set_int( decklink_ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
+        av_opt_set_int( decklink_ctx->avr, "out_sample_rate",     48000, 0 );
 
-        if( avresample_open( decklink_ctx->avr ) < 0 )
+        if (swr_init(decklink_ctx->avr) < 0)
         {
-            fprintf( stderr, "Could not open AVResample\n" );
+            fprintf(stderr, "Could not open libswresample\n");
             goto finish;
         }
     }
@@ -2623,7 +2635,7 @@ static void *probe_stream( void *ptr )
     streams[cur_stream]->height = decklink_opts->height;
     streams[cur_stream]->timebase_num = decklink_opts->timebase_num;
     streams[cur_stream]->timebase_den = decklink_opts->timebase_den;
-    streams[cur_stream]->csp    = PIX_FMT_YUV422P10;
+    streams[cur_stream]->csp    = AV_PIX_FMT_YUV422P10;
     streams[cur_stream]->interlaced = decklink_opts->interlaced;
     streams[cur_stream]->tff = 1; /* NTSC is bff in baseband but coded as tff */
     streams[cur_stream]->sar_num = streams[cur_stream]->sar_den = 1; /* The user can choose this when encoding */

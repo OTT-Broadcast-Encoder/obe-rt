@@ -46,7 +46,7 @@
 
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 
 #define SDIVIDEO_DEVICE         "/dev/sdivideorx%u"
@@ -149,7 +149,7 @@ typedef struct
     unsigned int abuffer_size;
     int64_t      a_counter;
     AVRational   a_timebase;
-    AVAudioResampleContext *avr;
+    struct SwrContext *avr;
 
     int64_t      last_frame_time;
 
@@ -284,7 +284,7 @@ static void close_card( linsys_opts_t *linsys_opts )
     close( linsys_ctx->afd );
 
     if( linsys_ctx->avr )
-        avresample_free( &linsys_ctx->avr );
+        swr_free(&linsys_ctx->avr);
 }
 
 static int handle_video_frame( linsys_opts_t *linsys_opts, uint8_t *data )
@@ -344,15 +344,16 @@ static int handle_video_frame( linsys_opts_t *linsys_opts, uint8_t *data )
     raw_frame->release_frame = obe_release_frame;
     raw_frame->arrival_time = linsys_ctx->last_frame_time;
 
-    output->csp = PIX_FMT_YUV422P10;
-    output->planes = av_pix_fmt_descriptors[output->csp].nb_components;
+    output->csp = AV_PIX_FMT_YUV422P10;
+    const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+    output->planes = d->nb_components;
     output->width = linsys_ctx->width;
     output->height = linsys_opts->height;
 
     if( av_image_fill_linesizes( output->stride, output->csp, output->width ) < 0 )
         goto fail;
 
-    if( av_image_alloc( output->plane, output->stride, linsys_ctx->width, linsys_ctx->coded_height + 1, PIX_FMT_YUV422P10, 16 ) < 0 )
+    if( av_image_alloc( output->plane, output->stride, linsys_ctx->width, linsys_ctx->coded_height + 1, AV_PIX_FMT_YUV422P10, 16 ) < 0 )
         goto fail;
 
     uint16_t *y_dst = (uint16_t*)output->plane[0];
@@ -585,8 +586,9 @@ static int handle_video_frame( linsys_opts_t *linsys_opts, uint8_t *data )
                 cur_line = sdi_next_line( linsys_opts->video_format, cur_line );
             }
 
-            raw_frame->img.csp = PIX_FMT_YUV422P10;
-            raw_frame->img.planes = av_pix_fmt_descriptors[raw_frame->img.csp].nb_components;
+            raw_frame->img.csp = AV_PIX_FMT_YUV422P10;
+            const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+            raw_frame->img.planes = d->nb_components;
             raw_frame->img.plane[0] = (uint8_t*)y_src;
             raw_frame->img.plane[1] = (uint8_t*)u_src;
             raw_frame->img.plane[2] = (uint8_t*)v_src;
@@ -659,9 +661,8 @@ static int handle_audio_frame( linsys_opts_t *linsys_opts, uint8_t *data )
         return -1;
     }
 
-    if( avresample_convert( linsys_ctx->avr, raw_frame->audio_frame.audio_data, raw_frame->audio_frame.linesize,
-                            raw_frame->audio_frame.num_samples, &data,
-                            linsys_ctx->abuffer_size, raw_frame->audio_frame.num_samples ) < 0 )
+    if (swr_convert(linsys_ctx->avr, raw_frame->audio_frame.audio_data, raw_frame->audio_frame.num_samples,
+                            (const uint8_t **)&data, raw_frame->audio_frame.num_samples) < 0)
     {
         syslog( LOG_ERR, "[linsys-sdiaudio] Sample format conversion failed\n" );
         return -1;
@@ -993,7 +994,7 @@ static int open_card( linsys_opts_t *linsys_opts )
 
     if( !linsys_opts->probe )
     {
-        linsys_ctx->avr = avresample_alloc_context();
+        linsys_ctx->avr = swr_alloc();
         if( !linsys_ctx->avr )
         {
             fprintf( stderr, "[linsys-sdiaudio] couldn't setup sample rate conversion \n" );
@@ -1007,8 +1008,9 @@ static int open_card( linsys_opts_t *linsys_opts )
         av_opt_set_int( linsys_ctx->avr, "in_sample_rate",      48000, 0 );
         av_opt_set_int( linsys_ctx->avr, "out_channel_layout",  (1 << linsys_opts->num_channels) - 1, 0 );
         av_opt_set_int( linsys_ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
+        av_opt_set_int( linsys_ctx->avr, "out_sample_rate",     48000, 0 );
 
-        if( avresample_open( linsys_ctx->avr ) < 0 )
+        if (swr_init(linsys_ctx->avr) < 0)
         {
             fprintf( stderr, "Could not open AVResample\n" );
             goto finish;
@@ -1192,7 +1194,7 @@ static void *probe_stream( void *ptr )
             streams[i]->height = linsys_opts.height;
             streams[i]->timebase_num = linsys_opts.timebase_num;
             streams[i]->timebase_den = linsys_opts.timebase_den;
-            streams[i]->csp    = PIX_FMT_YUV422P10;
+            streams[i]->csp    = AV_PIX_FMT_YUV422P10;
             streams[i]->interlaced = linsys_opts.interlaced;
             streams[i]->tff = linsys_opts.tff;
             streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */

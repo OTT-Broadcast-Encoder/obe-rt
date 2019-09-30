@@ -174,16 +174,16 @@ typedef struct
 
 const static obe_cli_csp_t obe_cli_csps[] =
 {
-	[PIX_FMT_YUV420P]   = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2,  8 },
-	[PIX_FMT_NV12]      = { 2, { 1,  1 },     { 1, .5 },     2, 2,  8 },
-	[PIX_FMT_YUV420P10] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 10 },
-	[PIX_FMT_YUV422P10] = { 3, { 1, .5, .5 }, { 1, 1, 1 },   2, 2, 10 },
-	[PIX_FMT_YUV420P16] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 16 },
+	[AV_PIX_FMT_YUV420P]   = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2,  8 },
+	[AV_PIX_FMT_NV12]      = { 2, { 1,  1 },     { 1, .5 },     2, 2,  8 },
+	[AV_PIX_FMT_YUV420P10] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 10 },
+	[AV_PIX_FMT_YUV422P10] = { 3, { 1, .5, .5 }, { 1, 1, 1 },   2, 2, 10 },
+	[AV_PIX_FMT_YUV420P16] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 16 },
 };
 
 static int csp_num_interleaved( int csp, int plane )
 {
-	return (csp == PIX_FMT_NV12 && plane == 1) ? 2 : 1;
+	return (csp == AV_PIX_FMT_NV12 && plane == 1) ? 2 : 1;
 }
 /* end -- Duplicated from video.c */
 
@@ -331,10 +331,11 @@ static int convert_interleaved_to_topbottom(struct context_s *ctx, obe_raw_frame
 	obe_image_t tmp_image = {0};
 	obe_image_t *out = &tmp_image;
 
-	tmp_image.csp = img->csp == PIX_FMT_YUV422P10 ? PIX_FMT_YUV422P : PIX_FMT_YUV420P;
+	tmp_image.csp = img->csp == AV_PIX_FMT_YUV422P10 ? AV_PIX_FMT_YUV422P : AV_PIX_FMT_YUV420P;
 	tmp_image.width = raw_frame->img.width;
 	tmp_image.height = raw_frame->img.height;
-	tmp_image.planes = av_pix_fmt_descriptors[tmp_image.csp].nb_components;
+        const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+	tmp_image.planes = d->nb_components;
 	tmp_image.format = raw_frame->img.format;
 
 	if (av_image_alloc(tmp_image.plane, tmp_image.stride, tmp_image.width, tmp_image.height + 1, tmp_image.csp, 16) < 0) {
@@ -437,7 +438,7 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		p->planes[i] = img->plane[i];
 	}
 
-	p->colorSpace = img->csp == PIX_FMT_YUV422P || img->csp == PIX_FMT_YUV422P10 ? X265_CSP_I422 : X265_CSP_I420;
+	p->colorSpace = img->csp == AV_PIX_FMT_YUV422P || img->csp == AV_PIX_FMT_YUV422P10 ? X265_CSP_I422 : X265_CSP_I420;
 #ifdef HIGH_BIT_DEPTH
 	p->colorSpace |= X265_CSP_HIGH_DEPTH;
 #endif
