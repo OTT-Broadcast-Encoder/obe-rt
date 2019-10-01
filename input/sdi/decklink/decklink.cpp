@@ -2143,6 +2143,13 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     IDeckLinkStatus *status = NULL;
 #endif
 
+    /* Avoid compilier bug that throws a spurious warning because it thinks fmt
+     * is never used.
+     */
+    if (fmt == NULL) {
+        i = 0;
+    }
+
     if (klvanc_context_create(&decklink_ctx->vanchdl) < 0) {
         fprintf(stderr, "[decklink] Error initializing VANC library context\n");
     } else {
