@@ -818,7 +818,7 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                         (const uint8_t**)&frame_bytes,
                         raw_frame->audio_frame.num_samples) < 0)
                 {
-                    syslog( LOG_ERR, "[decklink] Sample format conversion failed\n" );
+                    syslog(LOG_ERR, PREFIX "Sample format conversion failed\n");
                     return -1;
                 }
 
@@ -2483,7 +2483,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         decklink_ctx->avr = swr_alloc();
         if (!decklink_ctx->avr)
         {
-            fprintf( stderr, "[decklink-sdiaudio] couldn't setup sample rate conversion \n" );
+            fprintf(stderr, PREFIX "Could not alloc libswresample context\n");
             ret = -1;
             goto finish;
         }
@@ -2498,7 +2498,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
 
         if (swr_init(decklink_ctx->avr) < 0)
         {
-            fprintf(stderr, "Could not open libswresample\n");
+            fprintf(stderr, PREFIX "couldn't setup sample rate conversion\n");
             goto finish;
         }
     }
@@ -2509,7 +2509,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     result = decklink_ctx->p_input->StartStreams();
     if( result != S_OK )
     {
-        fprintf( stderr, "[decklink] Could not start streaming from card\n" );
+        fprintf(stderr, PREFIX "Could not start streaming from card\n");
         ret = -1;
         goto finish;
     }
