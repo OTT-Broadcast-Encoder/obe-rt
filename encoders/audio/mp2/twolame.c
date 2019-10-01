@@ -25,7 +25,7 @@
 #include "encoders/audio/audio.h"
 #include <twolame.h>
 #include <libavutil/fifo.h>
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 
@@ -101,7 +101,7 @@ static void *start_encoder_mp2( void *ptr )
     int output_size, frame_size, linesize; /* Linesize in libavresample terminology is the entire buffer size for packed formats */
     float *audio_buf = NULL;
     uint8_t *output_buf = NULL;
-    AVAudioResampleContext *avr = NULL;
+    struct SwrContext *avr = NULL;
     AVFifoBuffer *fifo = NULL;
 
 #if REPORT_AUDIO_DISCONTINUITIES
@@ -148,8 +148,8 @@ static void *start_encoder_mp2( void *ptr )
         goto end;
     }
 
-    avr = avresample_alloc_context();
-    if( !avr )
+    avr = swr_alloc();
+    if (!avr)
     {
         fprintf( stderr, "Malloc failed\n" );
         goto end;
@@ -160,9 +160,10 @@ static void *start_encoder_mp2( void *ptr )
     av_opt_set_int( avr, "in_sample_rate",      enc_params->sample_rate, 0 );
     av_opt_set_int( avr, "out_channel_layout",  stream->channel_layout, 0 );
     av_opt_set_int( avr, "out_sample_fmt",      AV_SAMPLE_FMT_FLT,   0 );
-    av_opt_set_int( avr, "dither_method",       AV_RESAMPLE_DITHER_TRIANGULAR_NS, 0 );
+    av_opt_set_int( avr, "dither_method",       SWR_DITHER_TRIANGULAR, 0 );
+    av_opt_set_int( avr, "out_sample_rate",     enc_params->sample_rate, 0 );
 
-    if( avresample_open( avr ) < 0 )
+    if (swr_init(avr) < 0)
     {
         fprintf( stderr, "Could not open AVResample\n" );
         goto end;
@@ -213,7 +214,7 @@ static void *start_encoder_mp2( void *ptr )
 
             /* Drain the conversion fifos else we induce drift. */
             av_fifo_drain(fifo, av_fifo_size(fifo));
-            avresample_read(avr, NULL, avresample_available(avr));
+            swr_drop_output(avr, 65535);
 
             output_size = twolame_encode_flush(tl_opts, output_buf, MP2_AUDIO_BUFFER_SIZE);
         }
@@ -244,14 +245,12 @@ static void *start_encoder_mp2( void *ptr )
             goto end;
         }
 
-        if( avresample_convert( avr, NULL, 0, raw_frame->audio_frame.num_samples, raw_frame->audio_frame.audio_data,
-                                raw_frame->audio_frame.linesize, raw_frame->audio_frame.num_samples ) < 0 )
+        if (swr_convert(avr, (uint8_t **)&audio_buf, raw_frame->audio_frame.num_samples, (const uint8_t **)raw_frame->audio_frame.audio_data,
+                                raw_frame->audio_frame.num_samples) < 0)
         {
             syslog( LOG_ERR, "[twolame] Sample format conversion failed\n" );
             break;
         }
-
-        avresample_read( avr, (uint8_t**)&audio_buf, avresample_available( avr ) );
 
         output_size = twolame_encode_buffer_float32_interleaved( tl_opts, audio_buf, raw_frame->audio_frame.num_samples, output_buf, MP2_AUDIO_BUFFER_SIZE );
 
@@ -369,7 +368,7 @@ end:
         free( audio_buf );
 
     if( avr )
-        avresample_free( &avr );
+        swr_free( &avr );
 
     if( fifo )
         av_fifo_free( fifo );
