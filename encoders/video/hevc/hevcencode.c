@@ -409,7 +409,9 @@ static  int hevc_packedheader = 0;
 static  int hevc_maxref = 16;
 
 //static  char *coded_fn = NULL, *srcyuv_fn = NULL, *recyuv_fn = NULL;
-static  FILE *coded_fp = NULL, *srcyuv_fp = NULL, *recyuv_fp = NULL;
+//static  FILE *coded_fp = NULL;
+static  FILE *srcyuv_fp = NULL;
+//static  FILE *recyuv_fp = NULL;
 static  unsigned long long srcyuv_frames = 0;
 static  int srcyuv_fourcc = VA_FOURCC_NV12;
 //static  int calc_psnr = 0;
