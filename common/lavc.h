@@ -31,10 +31,12 @@ void obe_release_buffer( AVCodecContext *codec, AVFrame *pic );
 int obe_reget_buffer( AVCodecContext *codec, AVFrame *pic );
 int obe_lavc_lockmgr( void **mutex, enum AVLockOp op );
 
+#if 0
 #define obe_free_packet( pkt )\
 {\
     av_free_packet( pkt );\
     av_init_packet( pkt );\
 }
+#endif
 
 #endif
