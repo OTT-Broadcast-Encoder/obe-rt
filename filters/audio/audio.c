@@ -25,6 +25,101 @@
 
 #define LOCAL_DEBUG 0
 
+/* Bitmask:
+ * 0 = mute right
+ * 1 = mute left
+ * 2 = static right
+ * 3 = static left
+ * 4 = buzz right
+ * 5 = buzz left
+ * 6 = attenuate right
+ * 7 = attenuate left
+ * 8 = clip right
+ * 9 = clip left
+ */
+int g_filter_audio_effect_pcm = 0;
+
+static void applyEffects(obe_raw_frame_t *rf)
+{
+    if (g_filter_audio_effect_pcm & 0x03) {
+        /* Mute audio right (or left or both) - assumption 32bit samples S32P from decklink */
+        uint32_t *l = (uint32_t *)rf->audio_frame.audio_data[0];
+        uint32_t *r = (uint32_t *)rf->audio_frame.audio_data[1];
+        for (int i = 0; i < rf->audio_frame.num_samples; i++) {
+            if (g_filter_audio_effect_pcm & (1 << 0)) {
+                *(r++) = 0; /* Mute Right */
+            }
+            if (g_filter_audio_effect_pcm & (1 << 1)) {
+                *(l++) = 0; /* Mute Left */
+            }
+        }
+    }
+    if (g_filter_audio_effect_pcm & 0x0c) {
+        /* Static audio right (or left or both) - assumption 32bit samples S32P from decklink */
+        int32_t *l = (int32_t *)rf->audio_frame.audio_data[0];
+        int32_t *r = (int32_t *)rf->audio_frame.audio_data[1];
+        for (int i = 0; i < rf->audio_frame.num_samples; i++) {
+            if (g_filter_audio_effect_pcm & (1 << 2)) {
+                *(r++) = rand(); /* Right */
+            }
+            if (g_filter_audio_effect_pcm & (1 << 3)) {
+                *(l++) = rand(); /* Left */
+            }
+        }
+    }
+    if (g_filter_audio_effect_pcm & 0x30) {
+        /* Buzz audio right (or left or both) - assumption 32bit samples S32P from decklink */
+        int32_t *l = (int32_t *)rf->audio_frame.audio_data[0];
+        int32_t *r = (int32_t *)rf->audio_frame.audio_data[1];
+        for (int i = 0; i < rf->audio_frame.num_samples / 16; i++) {
+            if (g_filter_audio_effect_pcm & (1 << 4)) {
+                *(r++) = -200000000; /* Right */
+                *(r++) = -200000000; /* Right */
+                *(r++) = -200000000; /* Right */
+                *(r++) = -200000000; /* Right */
+                r += 12;
+            }
+            if (g_filter_audio_effect_pcm & (1 << 5)) {
+                *(l++) = -200000000; /* left */
+                *(l++) = -200000000; /* left */
+                *(l++) = -200000000; /* left */
+                *(l++) = -200000000; /* left */
+                l += 12;
+            }
+        }
+    }
+    if (g_filter_audio_effect_pcm & 0xf0) {
+        /* attenuate audio right (or left or both) - assumption 32bit samples S32P from decklink */
+        int32_t *l = (int32_t *)rf->audio_frame.audio_data[0];
+        int32_t *r = (int32_t *)rf->audio_frame.audio_data[1];
+        for (int i = 0; i < rf->audio_frame.num_samples; i++) {
+            if (g_filter_audio_effect_pcm & (1 << 6)) {
+                *r /= 4; /* Right */
+                 r++;
+            }
+            if (g_filter_audio_effect_pcm & (1 << 7)) {
+                *l /= 4; /* Right */
+                 l++;
+            }
+        }
+    }
+    if (g_filter_audio_effect_pcm & 0x300) {
+        /* amplify and clip audio right (or left or both) - assumption 32bit samples S32P from decklink */
+        int32_t *l = (int32_t *)rf->audio_frame.audio_data[0];
+        int32_t *r = (int32_t *)rf->audio_frame.audio_data[1];
+        for (int i = 0; i < rf->audio_frame.num_samples; i++) {
+            if (g_filter_audio_effect_pcm & (1 << 8)) {
+                *r *= 8; /* Right */
+                 r++;
+            }
+            if (g_filter_audio_effect_pcm & (1 << 9)) {
+                *l *= 8; /* left */
+                 l++;
+            }
+        }
+    }
+}
+
 static void *start_filter_audio( void *ptr )
 {
     obe_raw_frame_t *raw_frame, *split_raw_frame;
@@ -101,6 +196,8 @@ static void *start_filter_audio( void *ptr )
                             split_raw_frame->audio_frame.num_samples,
                             num_channels,
                             split_raw_frame->audio_frame.sample_fmt);
+
+            applyEffects(split_raw_frame);
 
             add_to_encode_queue(h, split_raw_frame, h->encoders[i]->output_stream_id);
         } /* For all PCM encoders */
