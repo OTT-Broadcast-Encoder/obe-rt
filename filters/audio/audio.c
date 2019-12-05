@@ -51,12 +51,13 @@ static void *start_filter_audio( void *ptr )
         pthread_mutex_unlock( &filter->queue.mutex );
 
 #if LOCAL_DEBUG
-printf("%s() raw_frame->input_stream_id = %d, num_encoders = %d\n", __func__, raw_frame->input_stream_id, h->num_encoders);
+        printf("%s() raw_frame->input_stream_id = %d, num_encoders = %d\n", __func__,
+            raw_frame->input_stream_id, h->num_encoders);
         printf("%s() linesize = %d, num_samples = %d, num_channels = %d, sample_fmt = %d\n",
-                __func__,
-                raw_frame->audio_frame.linesize,
-                raw_frame->audio_frame.num_samples, raw_frame->audio_frame.num_channels,
-                raw_frame->audio_frame.sample_fmt);
+            __func__,
+            raw_frame->audio_frame.linesize,
+            raw_frame->audio_frame.num_samples, raw_frame->audio_frame.num_channels,
+            raw_frame->audio_frame.sample_fmt);
 #endif
 
         /* ignore the video track, process all PCM encoders first */
