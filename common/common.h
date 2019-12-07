@@ -474,6 +474,8 @@ typedef struct
     int is_ready;
     int is_video;
 
+    enum stream_formats_e stream_format;
+
     pthread_t encoder_thread;
     obe_queue_t queue;
     int cancel_thread;
@@ -666,6 +668,15 @@ __inline__ static obe_output_stream_t *obe_core_get_output_stream_by_index(struc
 	return &s->priv_output_streams[nr];
 }
 void obe_core_dump_output_stream(obe_output_stream_t *s, int index);
+
+__inline__ static obe_encoder_t *obe_core_encoder_alloc(enum stream_formats_e stream_format)
+{
+	obe_encoder_t *e = (obe_encoder_t *)calloc(1, sizeof(*e));
+	e->stream_format = stream_format;
+	printf("%s() Created encoder for stream_format id %2d (%s)\n",
+		__func__, e->stream_format, stream_format_name(e->stream_format));
+	return e;
+}
 
 int64_t get_wallclock_in_mpeg_ticks( void );
 void sleep_mpeg_ticks( int64_t i_delay );
