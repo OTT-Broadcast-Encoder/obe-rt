@@ -21,15 +21,22 @@
  *
  ******************************************************************************/
 
+#include <stdio.h>
 #include "stream_formats.h"
 
+static char lbl[64]; /* in non-typical use cases. */
 const char *stream_format_name(enum stream_formats_e id)
 {
 	switch(id) {
 	case AUDIO_MP2: return "AUDIO_MP2";
+	case VIDEO_UNCOMPRESSED: return "VIDEO_UNCOMPRESSED";
 	case VIDEO_HEVC_X265: return "VIDEO_HEVC_X265";
 	case VIDEO_AVC_GPU_AVCODEC: return "VIDEO_AVC_GPU_AVCODEC";
-	default: return "UNDEFINED";
+	default:
+		{
+		sprintf(lbl,  "UNDEFINED id %d", id);
+		return lbl;
+		}
 	}
 }
 
