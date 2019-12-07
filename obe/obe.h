@@ -26,6 +26,7 @@
 
 #include <inttypes.h>
 #include <x264.h>
+#include "stream_formats.h"
 
 #define OBE_VERSION_MAJOR 0
 #define OBE_VERSION_MINOR 1
@@ -133,68 +134,6 @@ enum stream_type_e
     STREAM_TYPE_AUDIO,
     STREAM_TYPE_SUBTITLE,
     STREAM_TYPE_MISC,
-};
-
-/* Don't add anything new to this unless it goes ad the end,
- * else various internal lists and structs will break their
- * hard index values.
- */
-enum stream_formats_e
-{
-    /* Separate Streams */
-    VIDEO_UNCOMPRESSED,
-    VIDEO_AVC,
-    VIDEO_MPEG2,
-
-    AUDIO_PCM,
-    AUDIO_MP2,    /* MPEG-1 Layer II */
-    AUDIO_AC_3,   /* ATSC A/52B / AC-3 */
-    AUDIO_E_AC_3, /* ATSC A/52B Annex E / Enhanced AC-3 */
-//    AUDIO_E_DIST, /* E Distribution Audio */
-    AUDIO_AAC,
-    AUDIO_AC_3_BITSTREAM,   /* ATSC A/52B / AC-3 Bitstream passthorugh */
-
-    SUBTITLES_DVB,
-    MISC_TELETEXT,
-    MISC_TELETEXT_INVERTED,
-    MISC_WSS,
-    MISC_VPS,
-
-    /* Per-frame Streams/Data */
-    CAPTIONS_CEA_608,
-    CAPTIONS_CEA_708,
-    MISC_AFD,
-    MISC_BAR_DATA,
-    MISC_PAN_SCAN,
-
-    /* VBI data services */
-    VBI_RAW,         /* location flag */
-    VBI_AMOL_48,
-    VBI_AMOL_96,
-    VBI_NABTS,
-    VBI_TVG2X,
-    VBI_CP,
-    VBI_VITC,
-    VBI_VIDEO_INDEX, /* location flag */
-
-    /* Vertical Ancillary (location flags) */
-    VANC_GENERIC,
-    VANC_DVB_SCTE_VBI,
-    VANC_OP47_SDP,
-    VANC_OP47_MULTI_PACKET,
-    VANC_ATC,
-    VANC_DTV_PROGRAM_DESCRIPTION,
-    VANC_DTV_DATA_BROADCAST,
-    VANC_SMPTE_VBI,
-    VANC_SCTE_104,
-
-    /* Kernel Labs, a generic handler */
-    DVB_TABLE_SECTION,
-    SMPTE2038,
-    VIDEO_HEVC_X265,
-    VIDEO_AVC_VAAPI,
-    VIDEO_HEVC_VAAPI,
-    VIDEO_AVC_GPU_AVCODEC,
 };
 
 enum mp2_mode_e
