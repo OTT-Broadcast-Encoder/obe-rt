@@ -28,6 +28,7 @@ const char *stream_format_name(enum stream_formats_e id)
 	switch(id) {
 	case AUDIO_MP2: return "AUDIO_MP2";
 	case VIDEO_HEVC_X265: return "VIDEO_HEVC_X265";
+	case VIDEO_AVC_GPU_AVCODEC: return "VIDEO_AVC_GPU_AVCODEC";
 	default: return "UNDEFINED";
 	}
 }
