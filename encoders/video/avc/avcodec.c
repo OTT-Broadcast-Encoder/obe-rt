@@ -415,8 +415,12 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	memcpy(ctx->encoder->encoder_params, &ctx->enc_params->avc_param, sizeof(ctx->enc_params->avc_param));
 
 #if DO_VAAPI
-	ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
-	//ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
+	}
 #else
 	ctx->codec = avcodec_find_encoder_by_name("libx264");
 	//ctx->codec = avcodec_find_encoder_by_name("libx265");
