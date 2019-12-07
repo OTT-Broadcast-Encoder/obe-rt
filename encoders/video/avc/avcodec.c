@@ -267,7 +267,7 @@ static int _init_codec(struct context_s *ctx)
 	c->pix_fmt = AV_PIX_FMT_YUV420P;
 #endif
 
-	if (ctx->hw_device_ctx && ctx->c->codec_id == AV_CODEC_ID_H264) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
 		/* gpu codec --  H264 */
 printf("mode a\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
