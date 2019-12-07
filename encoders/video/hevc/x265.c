@@ -1,7 +1,7 @@
 /*****************************************************************************
  * x265.c : x265 encoding functions
  *****************************************************************************
- * Copyright (C) 2018 LTN
+ * Copyright (C) 2018-2019 LiveTimeNet Inc. All Rights Reserved.
  *
  * Authors: Steven Toth <stoth@ltnglobal.com>
  * Using the x264 template developed by: Kieran Kunhya <kieran@kunhya.com>
