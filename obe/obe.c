@@ -1120,7 +1120,6 @@ int obe_start( obe_t *h )
         if (os->stream_action == STREAM_ENCODE )
         {
             h->encoders[h->num_encoders] = obe_core_encoder_alloc(os->stream_format);
-            h->encoders[h->num_encoders] = calloc( 1, sizeof(obe_encoder_t) );
             if( !h->encoders[h->num_encoders] )
             {
                 fprintf( stderr, "Malloc failed \n" );
