@@ -591,11 +591,21 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	cf->real_dts                 = ctx->hevc_picture_out->dts;
 #endif
 
+#if 1
+        static int64_t iat = 0;
+        cf->cpb_initial_arrival_time = iat;
+
+	double bit_rate = ctx->enc_params->avc_param.rc.i_vbv_max_bitrate;
+        double fraction = bit_rate / 216000.0;
+        double estimated_final = ((double)cf->len / fraction) + (double)cf->cpb_initial_arrival_time;
+        cf->cpb_final_arrival_time  = estimated_final;
+        iat = cf->cpb_final_arrival_time;
+#else
 	cf->cpb_initial_arrival_time = cf->real_pts;
 
 	double estimated_final = ((double)cf->len / 0.0810186) + (double)cf->cpb_initial_arrival_time;
 	cf->cpb_final_arrival_time   = estimated_final;
-
+#endif
 	cf->priority = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
 	cf->random_access = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
 
