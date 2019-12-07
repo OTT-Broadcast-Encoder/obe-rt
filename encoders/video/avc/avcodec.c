@@ -202,7 +202,7 @@ static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_r
 	cf->priority = pkt->flags & AV_PKT_FLAG_KEY;
 	cf->random_access = pkt->flags & AV_PKT_FLAG_KEY;
 
-	coded_frame_print(cf);
+	//coded_frame_print(cf);
 
 	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
 		cf->arrival_time = rf->arrival_time;
