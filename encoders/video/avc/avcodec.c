@@ -269,11 +269,23 @@ static int _init_codec(struct context_s *ctx)
 
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
 		/* gpu codec --  H264 */
-printf("mode a\n");
+printf("mode VIDEO_AVC_GPU_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
 		av_opt_set(c->priv_data, "profile", "high", 0);
+		av_opt_set(c->priv_data, "level", "51", 0);
+		av_opt_set(c->priv_data, "g", "30", 0);
+		//av_opt_set(c->priv_data, "bf", "0", 0);
+		//av_opt_set(c->priv_data, "qp", "28", 0);
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+		/* gpu codec --  HEVC */
+printf("mode VIDEO_HEVC_GPU_AVCODEC\n");
+		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
+		av_opt_set(c->priv_data, "sei", "1", 0);
+		av_opt_set(c->priv_data, "timing", "1", 0);
+		av_opt_set(c->priv_data, "profile", "main", 0);
 		av_opt_set(c->priv_data, "level", "51", 0);
 		av_opt_set(c->priv_data, "g", "30", 0);
 		//av_opt_set(c->priv_data, "bf", "0", 0);
