@@ -872,9 +872,6 @@ static int reconfigure_encoder(struct context_s *ctx)
  */
 static void *x265_start_encoder( void *ptr )
 {
-	printf(MESSAGE_PREFIX "%s() preset_name = %s\n", __func__, g_video_encoder_preset_name);
-	printf(MESSAGE_PREFIX "%s() tuning_name = %s\n", __func__, g_video_encoder_tuning_name);
-
 	struct context_s ectx, *ctx = &ectx;
 	memset(ctx, 0, sizeof(*ctx));
 
@@ -884,6 +881,11 @@ static void *x265_start_encoder( void *ptr )
 	ctx->h = ctx->enc_params->h;
 	ctx->encoder = ctx->enc_params->encoder;
 	int ret;
+
+	printf(MESSAGE_PREFIX "Starting encoder: %s\n",
+		stream_format_name(obe_core_encoder_get_stream_format(ctx->encoder)));
+	printf(MESSAGE_PREFIX "%s() preset_name = %s\n", __func__, g_video_encoder_preset_name);
+	printf(MESSAGE_PREFIX "%s() tuning_name = %s\n", __func__, g_video_encoder_tuning_name);
 
 	reconfigure_encoder(ctx);
 

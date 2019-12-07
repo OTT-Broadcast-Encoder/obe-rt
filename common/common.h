@@ -41,6 +41,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "obe.h"
+#include "stream_formats.h"
 #include <common/queue.h>
 
 /* Enable some realtime debugging commands */
@@ -474,7 +475,7 @@ typedef struct
     int is_ready;
     int is_video;
 
-    enum stream_formats_e stream_format;
+    enum stream_formats_e priv_stream_format;
 
     pthread_t encoder_thread;
     obe_queue_t queue;
@@ -669,12 +670,17 @@ __inline__ static obe_output_stream_t *obe_core_get_output_stream_by_index(struc
 }
 void obe_core_dump_output_stream(obe_output_stream_t *s, int index);
 
+__inline__ enum stream_formats_e obe_core_encoder_get_stream_format(obe_encoder_t *e)
+{
+	return e->priv_stream_format;
+}
+
 __inline__ static obe_encoder_t *obe_core_encoder_alloc(enum stream_formats_e stream_format)
 {
 	obe_encoder_t *e = (obe_encoder_t *)calloc(1, sizeof(*e));
-	e->stream_format = stream_format;
+	e->priv_stream_format = stream_format;
 	printf("%s() Created encoder for stream_format id %2d (%s)\n",
-		__func__, e->stream_format, stream_format_name(e->stream_format));
+		__func__, stream_format, stream_format_name(stream_format));
 	return e;
 }
 

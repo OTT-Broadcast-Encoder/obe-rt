@@ -390,6 +390,9 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	ctx->h = ctx->enc_params->h;
 	ctx->encoder = ctx->enc_params->encoder;
 
+	printf(MESSAGE_PREFIX "Starting encoder: %s\n",
+		stream_format_name(obe_core_encoder_get_stream_format(ctx->encoder)));
+
 #if 0
 	printf(MESSAGE_PREFIX "Initializing as %dx%d\n",
 		ctx->enc_params->avc_param.i_width,
