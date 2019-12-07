@@ -279,7 +279,7 @@
 #include "common/common.h"
 #include "mux/mux.h"
 #include <libmpegts.h>
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 
 #define MIN_PID 0x30
 #define MAX_PID 0x1fff
@@ -292,6 +292,7 @@ static const int mpegts_stream_info[][3] =
     { VIDEO_MPEG2, LIBMPEGTS_VIDEO_MPEG2,    LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_HEVC_X265,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_AVC_VAAPI,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_AVC_GPU_AVCODEC,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_HEVC_VAAPI,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     /* TODO 302M */
     { AUDIO_MP2,   LIBMPEGTS_AUDIO_MPEG2,    LIBMPEGTS_STREAM_ID_MPEGAUDIO },
@@ -569,7 +570,7 @@ void *open_muxer( void *ptr )
             stream->stream_identifier = output_stream->ts_opts.stream_identifier;
         }
 
-        if (stream_format == VIDEO_AVC || stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_AVC_VAAPI || stream_format == VIDEO_HEVC_VAAPI)
+        if (stream_format == VIDEO_AVC || stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_AVC_VAAPI || stream_format == VIDEO_HEVC_VAAPI || stream_format == VIDEO_AVC_GPU_AVCODEC)
         {
             encoder_wait( h, output_stream->output_stream_id );
 
@@ -644,6 +645,13 @@ void *open_muxer( void *ptr )
             if( ts_setup_mpegvideo_stream( w, stream->pid, p_param->i_level_idc, avc_profiles[j][1], 0, 0, 0 ) < 0 )
             {
                 fprintf( stderr, "[ts] Could not setup AVC video stream\n" );
+                goto end;
+            }
+        }
+        else if (stream_format == VIDEO_AVC_GPU_AVCODEC)
+        {
+            if (ts_setup_mpegvideo_stream(w, stream->pid, 40, AVC_HIGH, 0, 0, 0) < 0) {
+                fprintf(stderr, "[ts] Could not setup AVC GPU video stream\n");
                 goto end;
             }
         }

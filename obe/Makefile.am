@@ -15,15 +15,15 @@ CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFS
 	-DHAVE_DECKLINK
 
 LDFLAGS += -lpthread -lz -lx264 -lyuv
-LDFLAGS += -lavformat -lavcodec -lavresample -ldl -lasound -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
-LDFLAGS += -lklscte35 -lklvanc
+LDFLAGS += -lavformat -lavcodec -ldl -lasound -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
+LDFLAGS += -lklscte35 -lklvanc -llzma
 LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses
 if LIBX265
 LDFLAGS += -lx265
 endif
 if LIBVA
 LDFLAGS += -L../../vaapi/libva-utils/common/.libs
-LDFLAGS += -lva -lva-display
+LDFLAGS += -lva -lva-display -llzma
 CFLAGS += -I../../vaapi/libva-utils/common
 endif
 if BLUEFISH444
@@ -82,6 +82,7 @@ if LIBX265
 obecli_SOURCES += ../encoders/video/hevc/x265.c
 endif
 if LIBVA
+obecli_SOURCES += ../encoders/video/avc/avcodec.c
 obecli_SOURCES += ../encoders/video/avc/vaapi.c
 obecli_SOURCES += ../encoders/video/hevc/vaapi-hevc.c
 endif

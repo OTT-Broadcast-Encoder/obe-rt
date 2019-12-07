@@ -194,6 +194,7 @@ enum stream_formats_e
     VIDEO_HEVC_X265,
     VIDEO_AVC_VAAPI,
     VIDEO_HEVC_VAAPI,
+    VIDEO_AVC_GPU_AVCODEC,
 };
 
 enum mp2_mode_e
