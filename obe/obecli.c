@@ -1217,6 +1217,9 @@ extern int g_decklink_injected_frame_count;
 /* Core */
 extern int g_core_runtime_statistics_to_file;
 
+/* Filters */
+extern int g_filter_audio_effect_pcm;
+
 void display_variables()
 {
 extern int    g_decklink_missing_audio_count;
@@ -1312,6 +1315,29 @@ extern time_t g_decklink_missing_video_last_time;
         g_udp_output_bps);
     printf("core.runtime_statistics_to_file    = %d\n",
         g_core_runtime_statistics_to_file);
+    printf("filter.audio.pcm.adjustment        = 0x%08x (bitmask)",
+        g_filter_audio_effect_pcm);
+    if (g_filter_audio_effect_pcm & (1 << 0))
+        printf(" MUTE_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 1))
+        printf(" MUTE_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 2))
+        printf(" STATIC_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 3))
+        printf(" STATIC_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 4))
+        printf(" BUZZ_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 5))
+        printf(" BUZZ_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 6))
+        printf(" ATTENUATE_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 7))
+        printf(" ATTENUATE_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 8))
+        printf(" CLIP_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 9))
+        printf(" CLIP_LEFT");
+    printf("\n");
 }
 
 static int set_variable(char *command, obecli_command_t *child)
@@ -1411,6 +1437,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "video_encoder.sei_timestamping") == 0) {
         g_sei_timestamping = val;
+    } else
+    if (strcasecmp(var, "filter.audio.pcm.adjustment") == 0) {
+        g_filter_audio_effect_pcm = val;
     } else {
         printf("illegal variable name.\n");
         return -1;
