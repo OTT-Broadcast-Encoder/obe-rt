@@ -404,7 +404,7 @@ static char *get_format_name(int stream_format, const obecli_format_name_t *name
     return  long_name ? names[i].long_name : names[i].format_name;
 }
 
-const char *obe_core_get_format_name_short(int stream_format)
+const char *obe_core_get_format_name_short(enum stream_formats_e stream_format)
 {
 	return (const char *)get_format_name(stream_format, format_names, 0);
 }
@@ -948,7 +948,7 @@ extern char g_video_encoder_tuning_name[64];
                 if( action )
                     parse_enum_value( action, stream_actions, &cli.output_streams[output_stream_id].stream_action );
                 if( format )
-                    parse_enum_value( format, encode_formats, &cli.output_streams[output_stream_id].stream_format );
+                    parse_enum_value( format, encode_formats, (int *)&cli.output_streams[output_stream_id].stream_format );
                 if( audio_type )
                     parse_enum_value( audio_type, audio_types, &cli.output_streams[output_stream_id].ts_opts.audio_type );
                 if( channel_map )

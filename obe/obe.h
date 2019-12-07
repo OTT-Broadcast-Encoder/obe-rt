@@ -223,7 +223,7 @@ typedef struct
 {
     int input_stream_id;
     int stream_type;
-    int stream_format;
+    enum stream_formats_e stream_format;
 
     char lang_code[4];
 
@@ -435,7 +435,7 @@ typedef struct
     int stream_action;
 
     /** Encode options **/
-    int stream_format;
+    enum stream_formats_e stream_format;
 
     /* Video */
     int is_wide;
@@ -559,5 +559,5 @@ int obe_stop( obe_t *h );
 
 void obe_close( obe_t *h );
 
-const char *obe_core_get_format_name_short(int stream_format);
+const char *obe_core_get_format_name_short(enum stream_formats_e stream_format);
 #endif
