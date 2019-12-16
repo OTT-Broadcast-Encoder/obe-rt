@@ -33,8 +33,6 @@
 
 #define MESSAGE_PREFIX "[avcodec]: "
 
-#define DO_VAAPI 1
-
 struct context_s
 {
 	obe_vid_enc_params_t *enc_params;
@@ -60,7 +58,6 @@ struct context_s
 
 static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type);
 
-#if DO_VAAPI
 static int encode_write(struct context_s *ctx, AVCodecContext *avctx, AVFrame *frame, obe_raw_frame_t *rf)
 {
     int ret = 0;
@@ -118,7 +115,6 @@ static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBuffe
     av_buffer_unref(&hw_frames_ref);
     return err;
 }
-#endif
 
 #define SERIALIZE_CODED_FRAMES 0
 #if SERIALIZE_CODED_FRAMES
@@ -234,13 +230,19 @@ static int _init_codec(struct context_s *ctx)
 	obe_vid_enc_params_t *ep = ctx->enc_params;
 	AVCodecContext *c = ctx->c;
 
-#if DO_VAAPI
-	int err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
-	if (err < 0) {
-		fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
-		return -1;
+	int err;
+	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+	case VIDEO_AVC_GPU_AVCODEC:
+	case VIDEO_HEVC_GPU_AVCODEC:
+		err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
+		if (err < 0) {
+			fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
+			return -1;
+		}
+		break;
+	default:
+		break;
 	}
-#endif
 
 	printf(MESSAGE_PREFIX "Initializing as %dx%d\n", ep->avc_param.i_width, ep->avc_param.i_height);
 	printf(MESSAGE_PREFIX "bitrate %d\n", ep->avc_param.rc.i_bitrate);
@@ -261,11 +263,15 @@ static int _init_codec(struct context_s *ctx)
 	ctx->c->sample_aspect_ratio = (AVRational) {
 		ep->avc_param.vui.i_sar_width,
 		ep->avc_param.vui.i_sar_height };
-#if DO_VAAPI
-	c->pix_fmt = AV_PIX_FMT_VAAPI;
-#else
-	c->pix_fmt = AV_PIX_FMT_YUV420P;
-#endif
+
+        switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+        case VIDEO_AVC_GPU_AVCODEC:
+        case VIDEO_HEVC_GPU_AVCODEC:
+		c->pix_fmt = AV_PIX_FMT_VAAPI;
+		break;
+	default:
+		c->pix_fmt = AV_PIX_FMT_YUV420P;
+	}
 
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
 		/* gpu codec --  H264 */
@@ -314,13 +320,18 @@ printf("mode c\n");
 printf("mode undefined\n");
 	}
 
-#if DO_VAAPI
-	/* set hw_frames_ctx for encoder's AVCodecContext */
-	if ((err = set_hwframe_ctx(ctx, ctx->c, ctx->hw_device_ctx)) < 0) {
-		fprintf(stderr, MESSAGE_PREFIX "Failed to set hwframe context.\n");
-		exit(1);
+        switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+        case VIDEO_AVC_GPU_AVCODEC:
+        case VIDEO_HEVC_GPU_AVCODEC:
+		/* set hw_frames_ctx for encoder's AVCodecContext */
+		if ((err = set_hwframe_ctx(ctx, ctx->c, ctx->hw_device_ctx)) < 0) {
+			fprintf(stderr, MESSAGE_PREFIX "Failed to set hwframe context.\n");
+			exit(1);
+		}
+		break;
+	default:
+		break;
 	}
-#endif
 
 	int ret = avcodec_open2(ctx->c, ctx->codec, NULL);
 	if (ret < 0) {
@@ -331,9 +342,8 @@ printf("mode undefined\n");
 	return 0;
 }
 
-#if 0
 // MMM
-static int _encode(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame, AVPacket *pkt)
+static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame, AVPacket *pkt)
 {
 	int count = 0;
 
@@ -387,7 +397,6 @@ static int _encode(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame, A
 
 	return 0;
 }
-#endif
 
 /* OBE will pass us a AVC struct initially. Pull out any important pieces
  * and pass those to x265.
@@ -426,18 +435,17 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 	memcpy(ctx->encoder->encoder_params, &ctx->enc_params->avc_param, sizeof(ctx->enc_params->avc_param));
 
-#if DO_VAAPI
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
+	} else {
+		ctx->codec = avcodec_find_encoder_by_name("libx264");
+		//ctx->codec = avcodec_find_encoder_by_name("libx265");
+		//ctx->codec = avcodec_find_encoder_by_name("mpeg2video");
 	}
-#else
-	ctx->codec = avcodec_find_encoder_by_name("libx264");
-	//ctx->codec = avcodec_find_encoder_by_name("libx265");
-	//ctx->codec = avcodec_find_encoder_by_name("mpeg2video");
-#endif
+
 	if (!ctx->codec) {
 		fprintf(stderr, MESSAGE_PREFIX "Unable to locate codec\n");
 		exit(1);
@@ -472,11 +480,16 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 		fprintf(stderr, MESSAGE_PREFIX "Unable to allocate frame\n");
 		exit(1);
 	}
-#if DO_VAAPI
-	frame->format = AV_PIX_FMT_NV12;
-#else
-	frame->format = ctx->c->pix_fmt;
-#endif
+
+	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+	case VIDEO_AVC_GPU_AVCODEC:
+	case VIDEO_HEVC_GPU_AVCODEC:
+		frame->format = AV_PIX_FMT_NV12;
+		break;
+	default:
+		frame->format = ctx->c->pix_fmt;
+	}
+
 	frame->width = ctx->c->width;
 	frame->height = ctx->c->height;
 
@@ -561,7 +574,18 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 //		obe_raw_frame_printf(rf);
 
-#if DO_VAAPI
+		int useHW;
+		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+		case VIDEO_AVC_GPU_AVCODEC:
+		case VIDEO_HEVC_GPU_AVCODEC:
+			useHW = 1;
+			break;
+		default:
+			useHW = 0;
+			break;
+		}
+
+		if (useHW) {
 			AVFrame *hw_frame = av_frame_alloc();
 			hw_frame->pts = rf->avfm.audio_pts;
 			hw_frame->sample_aspect_ratio = (AVRational){ rf->sar_width, rf->sar_height };
@@ -599,14 +623,14 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 			av_frame_free(&hw_frame);
 //			av_frame_free(&frame);
-#else
-		memcpy(frame->data[0], rf->img.plane[0], plane_len[0]);
-		memcpy(frame->data[1], rf->img.plane[1], plane_len[1]);
-		memcpy(frame->data[2], rf->img.plane[2], plane_len[2]);
-		//_av_frame_dump(frame);
+		} else {
+			memcpy(frame->data[0], rf->img.plane[0], plane_len[0]);
+			memcpy(frame->data[1], rf->img.plane[1], plane_len[1]);
+			memcpy(frame->data[2], rf->img.plane[2], plane_len[2]);
+			//_av_frame_dump(frame);
 
-		_encode(ctx, rf, frame, pkt);
-#endif
+			_encodeSW(ctx, rf, frame, pkt);
+		}
 
 		rf->release_data(rf);
 		rf->release_frame(rf);
