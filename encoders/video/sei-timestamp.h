@@ -1,10 +1,6 @@
 #ifndef SEI_TIMESTAMP_H
 #define SEI_TIMESTAMP_H
 
-#define SEI_TIMESTAMPING 1
-
-#if SEI_TIMESTAMPING
-
 #include <stdint.h>
 
 /* Marker to prevent 21 consequtive zeros, its illegal. */
@@ -32,14 +28,13 @@ extern int g_sei_timestamping;
 #define SEI_TIMESTAMP_PAYLOAD_LENGTH (sizeof(ltn_uuid_sei_timestamp) + (SEI_TIMESTAMP_FIELD_COUNT * 6))
 
 unsigned char *set_timestamp_alloc();
-int            set_timestamp_field_set(unsigned char *buffer, uint32_t nr, uint32_t value);
-int            set_timestamp_field_get(const unsigned char *buffer, uint32_t nr, uint32_t *value);
+int            set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value);
+int            set_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value);
 
 /* Find UUID in buffer, return buffer index or < 0 if found found. */
 int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes);
 
-int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer);
-
-#endif /* SEI_TIMESTAMPING */
+int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int lengthBytes);
+void sei_timestamp_hexdump(const unsigned char *buffer, int lengthBytes);
 
 #endif /* SEI_TIMESTAMP_H */

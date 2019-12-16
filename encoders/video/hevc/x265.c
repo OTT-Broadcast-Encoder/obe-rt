@@ -499,15 +499,15 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 
-		set_timestamp_field_set(x->payload, 1, framecount);
-		set_timestamp_field_set(x->payload, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-		set_timestamp_field_set(x->payload, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-		set_timestamp_field_set(x->payload, 4, tv.tv_sec);
-		set_timestamp_field_set(x->payload, 5, tv.tv_usec);
-		set_timestamp_field_set(x->payload, 6, 0);
-		set_timestamp_field_set(x->payload, 7, 0);
-		set_timestamp_field_set(x->payload, 8, 0);
-		set_timestamp_field_set(x->payload, 9, 0);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0);
+		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0);
 
 		/* The remaining 8 bytes (time exit from compressor fields)
 		 * will be filled when the frame exists the compressor. */
@@ -544,7 +544,7 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 		if (g_sei_timestamping) {
 			int offset = ltn_uuid_find(buf, lengthBytes);
 			if (offset >= 0) {
-				codecms = sei_timestamp_query_codec_latency_ms(&buf[offset]);
+				codecms = sei_timestamp_query_codec_latency_ms(&buf[offset], lengthBytes - offset);
 			}
 		}
 
@@ -699,8 +699,8 @@ static void _process_nals(struct context_s *ctx, int64_t arrival_time)
 				gettimeofday(&tv, NULL);
 
 				/* Add the time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], 6, tv.tv_sec);
-				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], 7, tv.tv_usec);
+				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 6, tv.tv_sec);
+				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 7, tv.tv_usec);
 			}
 		}
 	}

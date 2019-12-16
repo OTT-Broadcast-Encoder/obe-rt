@@ -1,7 +1,5 @@
 #include <encoders/video/sei-timestamp.h>
 
-#if SEI_TIMESTAMPING
-
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -25,13 +23,19 @@ unsigned char *set_timestamp_alloc()
 	return p;
 }
 
-int set_timestamp_field_set(unsigned char *buffer, uint32_t nr, uint32_t value)
+int set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value)
 {
 	if (nr < 1 || nr > SEI_TIMESTAMP_FIELD_COUNT)
 		return -1;
 
 	unsigned char *p = buffer;
 	p += (sizeof(ltn_uuid_sei_timestamp) + ((nr - 1) * 6));
+
+	if (lengthBytes - (p - buffer) < 6) {
+		printf("%s() overflow\n", __func__);
+		return -EOVERFLOW;
+	}
+
 	*(p++) = (value >> 24) & 0xff;
 	*(p++) = (value >> 16) & 0xff;
 	*(p++) = SEI_BIT_DELIMITER;
@@ -56,7 +60,7 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 	return -1;
 }
 
-int set_timestamp_field_get(const unsigned char *buffer, uint32_t nr, uint32_t *value)
+int set_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value)
 {
 	if (nr < 1 || nr > SEI_TIMESTAMP_FIELD_COUNT)
 		return -1;
@@ -75,12 +79,12 @@ int set_timestamp_field_get(const unsigned char *buffer, uint32_t nr, uint32_t *
 	return 0;
 }
 
-int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer)
+int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int lengthBytes)
 {
 	struct timeval begin, end;
 	uint32_t v[8];
 	for (int i = 0; i < 8; i++)
-		set_timestamp_field_get(buffer, i, &v[i]);
+		set_timestamp_field_get(buffer, lengthBytes, i, &v[i]);
 
 	begin.tv_sec = v[4];
 	begin.tv_usec = v[5];
@@ -101,4 +105,23 @@ int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer)
 	return obe_timediff_to_msecs(&diff);
 }
 
-#endif /* SEI_TIMESTAMPING */
+void sei_timestamp_hexdump(const unsigned char *buffer, int lengthBytes)
+{
+	int len = SEI_TIMESTAMP_PAYLOAD_LENGTH;
+	if (lengthBytes < len)
+		len = lengthBytes;
+
+	int v = 0;
+	for (int i = 1; i <= len; i++) {
+		printf("%02x ", *(buffer + i - 1));
+		if (i == sizeof(ltn_uuid_sei_timestamp))
+			printf(" ");
+		if (i > sizeof(ltn_uuid_sei_timestamp)) {
+			if (v++ == 2) {
+				printf(" ");
+				v = 0;
+			}
+		}
+	}
+	printf("\n");
+}

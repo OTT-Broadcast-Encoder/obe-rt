@@ -316,9 +316,7 @@ int udp_open( hnd_t *p_handle, obe_udp_opts_t *udp_opts )
     return -1;
 }
 
-#if 0
 #include <encoders/video/sei-timestamp.h>
-#endif
 
 int udp_write( hnd_t handle, uint8_t *buf, int size )
 {
@@ -337,35 +335,35 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
     s->bps_current += (size * 8);
 
     if (!s->is_connected) {
-#if 0 /* SEI_TIMESTAMPING */
-        if (size == 1316) {
-            //printf("%s() %d bytes\n", __func__, size);
+        if (g_sei_timestamping > 1) {
+            if (size == 1316) {
+                //printf("%s() %d bytes\n", __func__, size);
+                for (int i = 0; i < size; i += 188) {
+                    int offset = ltn_uuid_find(buf + i, 188);
+                    if (offset < 0)
+                          continue;
 
-            for (int i = 0; i < size; i += 188) {
-                int offset = ltn_uuid_find(buf + i, 188);
-                if (offset < 0)
-                      continue;
+                    struct timeval now;
+                    gettimeofday(&now, NULL);
 
-                struct timeval now;
-                gettimeofday(&now, NULL);
+                    /* FIXME/TODO:
+                     * Highly experimental, can lead to packet corruption if the offset PLUS
+                     * the position of variables 8 and 9 overwrite a following transport header.
+                     */
+                    set_timestamp_field_set(buf + i + offset, 188 - offset, 8, now.tv_sec);
+                    set_timestamp_field_set(buf + i + offset, 188 - offset, 9, now.tv_usec);
 
-#if 0
-                /* Highly experimenetal, can lead to packet corruption in some circumstance. */
-                set_timestamp_field_set(buf + i + offset, 8, now.tv_sec);
-                set_timestamp_field_set(buf + i + offset, 9, now.tv_usec);
-#endif
-#if 0
-                for (int j = 0; j < 64; j++) {
-                    printf("%02x ", *(buf + i + offset + j));
+                    if (g_sei_timestamping > 2) {
+                        sei_timestamp_hexdump(buf + i + offset, 188 - offset);
+                    }
                 }
-                printf("\n");
-#endif
             }
-        }
-#endif
+        } /* (g_sei_timestamping) */
         ret = sendto( s->udp_fd, buf, size, 0, (struct sockaddr *)&s->dest_addr, s->dest_addr_len );
-    } else
+    } else {
+        /* !s->is_connected */
         ret = send( s->udp_fd, buf, size, 0 );
+    }
 
     if( ret < 0 )
     {
