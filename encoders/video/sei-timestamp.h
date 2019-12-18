@@ -28,6 +28,7 @@ extern int g_sei_timestamping;
 #define SEI_TIMESTAMP_PAYLOAD_LENGTH (sizeof(ltn_uuid_sei_timestamp) + (SEI_TIMESTAMP_FIELD_COUNT * 6))
 
 unsigned char *set_timestamp_alloc();
+int            set_timestamp_init(unsigned char *buffer, int lengthBytes);
 int            set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value);
 int            set_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value);
 

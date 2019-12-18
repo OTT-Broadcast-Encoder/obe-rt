@@ -23,6 +23,17 @@ unsigned char *set_timestamp_alloc()
 	return p;
 }
 
+int set_timestamp_init(unsigned char *buf, int lengthBytes)
+{
+	if (lengthBytes < SEI_TIMESTAMP_PAYLOAD_LENGTH)
+		return -1;
+
+	memset(buf, 0, lengthBytes);
+	memcpy(buf, &ltn_uuid_sei_timestamp[0], sizeof(ltn_uuid_sei_timestamp));
+
+	return 0;
+}
+
 int set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value)
 {
 	if (nr < 1 || nr > SEI_TIMESTAMP_FIELD_COUNT)
