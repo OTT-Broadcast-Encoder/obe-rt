@@ -56,35 +56,67 @@ struct context_s
 
 };
 
-static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type);
+static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type);
 
-static int encode_write(struct context_s *ctx, AVCodecContext *avctx, AVFrame *frame, obe_raw_frame_t *rf)
+#if 0
+static int _encodeHW(struct context_s *ctx, AVCodecContext *avctx, AVFrame *frame, obe_raw_frame_t *rf)
 {
-    int ret = 0;
-    AVPacket enc_pkt;
+	int ret = 0;
+	AVPacket enc_pkt;
 
-    av_init_packet(&enc_pkt);
-    enc_pkt.data = NULL;
-    enc_pkt.size = 0;
+        /* TODO: sei timestamping */
+        //frame->nb_size_data = count;
+	AVFrameSideData *sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AFD, sizeof(uint8_t));
+	if (sd) {
+		*sd->data = 10; /* sei.afd.active_format_description */
+	}
 
-    if ((ret = avcodec_send_frame(avctx, frame)) < 0) {
-        fprintf(stderr, "Error code: %s\n", av_err2str(ret));
-        goto end;
-    }
-    while (1) {
-        ret = avcodec_receive_packet(avctx, &enc_pkt);
-        if (ret)
-            break;
+	if (g_sei_timestamping) {
+		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+		if (sd) {
+			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
+				struct timeval tv;
+				gettimeofday(&tv, NULL);
 
-        enc_pkt.stream_index = 0;
-	avc_vaapi_deliver_nals(ctx, &enc_pkt, rf, 0);
-        av_packet_unref(&enc_pkt);
-    }
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
+			
+				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+			}
+		}
+	} /* if (g_sei_timestamping) */
+
+	if ((ret = avcodec_send_frame(avctx, frame)) < 0) {
+		fprintf(stderr, "Error code: %s\n", av_err2str(ret));
+		goto end;
+	}
+	while (1) {
+
+		av_init_packet(&enc_pkt);
+		enc_pkt.data = NULL;
+		enc_pkt.size = 0;
+
+		ret = avcodec_receive_packet(avctx, &enc_pkt);
+		if (ret)
+			break;
+
+		enc_pkt.stream_index = 0;
+		_deliver_nals(ctx, &enc_pkt, rf, 0);
+		av_packet_unref(&enc_pkt);
+	}
 
 end:
-    ret = ((ret == AVERROR(EAGAIN)) ? 0 : -1);
-    return ret;
+	ret = ((ret == AVERROR(EAGAIN)) ? 0 : -1);
+	return ret;
 }
+#endif
 
 static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBufferRef *hw_device_ctx)
 {
@@ -130,7 +162,7 @@ static void serialize_coded_frame(obe_coded_frame_t *cf)
 }
 #endif
 
-static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type)
+static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type)
 {
 	obe_coded_frame_t *cf = new_coded_frame(ctx->encoder->output_stream_id, pkt->size);
 	if (!cf) {
@@ -156,6 +188,7 @@ static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_r
 
 	//struct avfm_s *avfm = &rf->avfm;
 	memcpy(&cf->avfm, &rf->avfm, sizeof(struct avfm_s));
+
 	//avfm_dump(&rf->avfm);
 
 #if 0
@@ -172,33 +205,36 @@ static size_t avc_vaapi_deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_r
 	cf->type         = CF_VIDEO;
 	cf->arrival_time = rf->arrival_time;
 
-	//int64_t offset = 24299700;
-	int64_t offset = 0;
-
-	cf->real_pts                 = offset + pkt->pts;
-	cf->real_dts                 = offset + pkt->dts;
+	cf->real_pts                 = pkt->pts;
+	cf->real_dts                 = pkt->dts;
 	cf->pts                      = cf->real_pts;
 
 	static int64_t iat = 0;
 	cf->cpb_initial_arrival_time = iat;
 
-#if 1
 	AVCodecContext *c = ctx->c;
 	double fraction = ((double)c->bit_rate / 1000.0) / 216000.0;
 	double estimated_final = ((double)cf->len / fraction) + (double)cf->cpb_initial_arrival_time;
 	cf->cpb_final_arrival_time  = estimated_final;
 	iat = cf->cpb_final_arrival_time;
-#else
-	//double estimated_final = ((double)cf->len / 0.0810186) + (double)cf->cpb_initial_arrival_time;
-	double estimated_final = ((double)cf->len / 0.0720000) + (double)cf->cpb_initial_arrival_time;
-	cf->cpb_final_arrival_time   = estimated_final;
-	iat += (cf->cpb_final_arrival_time - iat);
-#endif
 
 	cf->priority = pkt->flags & AV_PKT_FLAG_KEY;
 	cf->random_access = pkt->flags & AV_PKT_FLAG_KEY;
 
 	//coded_frame_print(cf);
+
+	if (g_sei_timestamping) {
+		/* Walk through each of the NALS and insert current time into any LTN sei timestamp frames we find. */
+		int offset = ltn_uuid_find(cf->data, pkt->size);
+		if (offset >= 0) {
+			struct timeval tv;
+			gettimeofday(&tv, NULL);
+
+			/* Add the time exit from compressor seconds/useconds. */
+			set_timestamp_field_set(&cf->data[offset], pkt->size - offset, 6, tv.tv_sec);
+			set_timestamp_field_set(&cf->data[offset], pkt->size - offset, 7, tv.tv_usec);
+		}
+	}
 
 	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
 		cf->arrival_time = rf->arrival_time;
@@ -297,20 +333,20 @@ printf("mode VIDEO_HEVC_GPU_AVCODEC\n");
 		//av_opt_set(c->priv_data, "bf", "0", 0);
 		//av_opt_set(c->priv_data, "qp", "28", 0);
 	} else
-	if (!ctx->hw_device_ctx && ctx->c->codec_id == AV_CODEC_ID_H264) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_CPU_AVCODEC) {
 		/* s/w codec - libx264 */
-printf("mode b\n");
-		av_opt_set(c->priv_data, "preset", "veryfast", 0);
+printf("mode VIDEO_AVC_CPU_AVCODEC\n");
+		av_opt_set(c->priv_data, "preset", "faster", 0);
 		av_opt_set(c->priv_data, "tune", "zerolatency", 0);
 		av_opt_set(c->priv_data, "threads", "4", 0);
-		av_opt_set(c->priv_data, "slices", "4", 0);
+		av_opt_set(c->priv_data, "slices", "1", 0);
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		int ret = av_opt_set_int(c->priv_data, "afd", 1, 0);
 		printf("AFD set ret %d\n", ret);
-	}
-	else if (!ctx->hw_device_ctx && ctx->c->codec_id == AV_CODEC_ID_H265) {
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
 		/* s/w codec -- libx265 */
-printf("mode c\n");
+printf("mode VIDEO_HEVC_CPU_AVCODEC\n");
 		av_opt_set(c->priv_data, "preset", "ultrafast", 0);
 		av_opt_set(c->priv_data, "tune", "zerolatency", 0);
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
@@ -342,7 +378,7 @@ printf("mode undefined\n");
 	return 0;
 }
 
-// MMM
+#if 0
 static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame, AVPacket *pkt)
 {
 	int count = 0;
@@ -368,6 +404,28 @@ static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame,
 		*sd->data = 10; /* sei.afd.active_format_description */
 	}
 
+	if (g_sei_timestamping) {
+		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+		if (sd) {
+			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
+				struct timeval tv;
+				gettimeofday(&tv, NULL);
+
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
+			
+				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+			}
+		}
+	} /* if (g_sei_timestamping) */
+
 	int ret = avcodec_send_frame(ctx->c, frame);
 	if (ret < 0) {
 		fprintf(stderr, MESSAGE_PREFIX "error encoding frame\n");
@@ -383,7 +441,7 @@ static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame,
 			exit(1);
 		}
 
-		avc_vaapi_deliver_nals(ctx, pkt, rf, 0);
+		_deliver_nals(ctx, pkt, rf, 0);
 #if 0
 		static FILE *fh = NULL;
 		if (!fh) {
@@ -393,6 +451,83 @@ static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame,
 			fwrite(pkt->data, 1, pkt->size, fh);
 #endif
 		av_packet_unref(pkt);
+	}
+
+	return 0;
+}
+#endif
+
+static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame)
+{
+	AVPacket enc_pkt;
+
+#if 0
+	/* TODO: Handle SEI / AFD / User payloads. */
+	for (int i = 0; i < rf->num_user_data; i++) {
+		/* Disregard any data types that we don't fully support. */
+		int type = rf->user_data[i].type;
+		printf("[side%d] type 0x%02x len 0x%02x data : ", i,
+			rf->user_data[i].type, rf->user_data[i].len);
+		for (int j = 0; j < rf->user_data[i].len; j++)
+			printf("%02x ", rf->user_data[i].data[j]);
+		printf("\n");
+		if (type == USER_DATA_AVC_REGISTERED_ITU_T35 /*|| type == USER_DATA_AVC_UNREGISTERED */) {
+			count++;
+		}
+	}
+#endif
+
+	/* TODO: sei timestamping */
+	//frame->nb_size_data = count;
+	AVFrameSideData *sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AFD, sizeof(uint8_t));
+	if (sd) {
+		*sd->data = 10; /* sei.afd.active_format_description */
+	}
+
+	if (g_sei_timestamping) {
+		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+		if (sd) {
+			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
+				struct timeval tv;
+				gettimeofday(&tv, NULL);
+
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
+				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
+			
+				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
+			}
+		}
+	} /* if (g_sei_timestamping) */
+
+	int ret = avcodec_send_frame(ctx->c, frame);
+	if (ret < 0) {
+		fprintf(stderr, MESSAGE_PREFIX "error encoding frame\n");
+		exit(1);
+	}
+
+	while (ret >= 0) {
+		av_init_packet(&enc_pkt);
+		enc_pkt.data = NULL;
+		enc_pkt.size = 0;
+
+		ret = avcodec_receive_packet(ctx->c, &enc_pkt);
+		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+			return 1;
+		} else if (ret < 0) {
+			fprintf(stderr, MESSAGE_PREFIX "Error during encoding\n");
+			exit(1);
+		}
+
+		enc_pkt.stream_index = 0;
+		_deliver_nals(ctx, &enc_pkt, rf, 0);
+		av_packet_unref(&enc_pkt);
 	}
 
 	return 0;
@@ -438,12 +573,14 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
 	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_CPU_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("libx264");
+	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
-	} else {
-		ctx->codec = avcodec_find_encoder_by_name("libx264");
-		//ctx->codec = avcodec_find_encoder_by_name("libx265");
-		//ctx->codec = avcodec_find_encoder_by_name("mpeg2video");
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("libx265");
 	}
 
 	if (!ctx->codec) {
@@ -547,6 +684,9 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 		printf(MESSAGE_PREFIX " popped raw_frame[%" PRIu64 "] -- pts %" PRIi64 "\n", ctx->raw_frame_count, rf->avfm.audio_pts);
 #endif
 
+		/* Re-using the prior frame, remove previous side data else we append. Bug */
+		av_frame_remove_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED);
+		av_frame_remove_side_data(frame, AV_FRAME_DATA_AFD);
 		ret = av_frame_make_writable(frame);
 		if (ret < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Unable to get frame buffer\n");
@@ -619,7 +759,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 				exit(1);
 			}
 
-			encode_write(ctx, ctx->c, hw_frame, rf);
+			_encode_frame(ctx, rf, hw_frame);
+			//_encodeHW(ctx, ctx->c, hw_frame, rf);
 
 			av_frame_free(&hw_frame);
 //			av_frame_free(&frame);
@@ -629,7 +770,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 			memcpy(frame->data[2], rf->img.plane[2], plane_len[2]);
 			//_av_frame_dump(frame);
 
-			_encodeSW(ctx, rf, frame, pkt);
+			//_encodeSW(ctx, rf, frame, pkt);
+			_encode_frame(ctx, rf, frame);
 		}
 
 		rf->release_data(rf);
