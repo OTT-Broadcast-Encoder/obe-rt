@@ -43,7 +43,6 @@ int set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr,
 	p += (sizeof(ltn_uuid_sei_timestamp) + ((nr - 1) * 6));
 
 	if (lengthBytes - (p - buffer) < 6) {
-		printf("%s() overflow\n", __func__);
 		return -EOVERFLOW;
 	}
 
