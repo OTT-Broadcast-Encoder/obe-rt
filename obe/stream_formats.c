@@ -31,8 +31,10 @@ const char *stream_format_name(enum stream_formats_e id)
 	case AUDIO_MP2: return "AUDIO_MP2";
 	case VIDEO_UNCOMPRESSED: return "VIDEO_UNCOMPRESSED";
 	case VIDEO_HEVC_X265: return "VIDEO_HEVC_X265";
+	case VIDEO_AVC_CPU_AVCODEC: return "VIDEO_AVC_CPU_AVCODEC";
 	case VIDEO_AVC_GPU_AVCODEC: return "VIDEO_AVC_GPU_AVCODEC";
 	case VIDEO_HEVC_GPU_AVCODEC: return "VIDEO_HEVC_GPU_AVCODEC";
+	case VIDEO_HEVC_CPU_AVCODEC: return "VIDEO_HEVC_CPU_AVCODEC";
 	default:
 		{
 		sprintf(lbl,  "UNDEFINED id %d", id);
