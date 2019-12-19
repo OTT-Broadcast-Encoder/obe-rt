@@ -349,9 +349,11 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
                     /* FIXME/TODO:
                      * Highly experimental, can lead to packet corruption if the offset PLUS
                      * the position of variables 8 and 9 overwrite a following transport header.
+                     * field_set() will catch this and return error, resulting in zero values in the final SEI output.
                      */
-                    set_timestamp_field_set(buf + i + offset, 188 - offset, 8, now.tv_sec);
-                    set_timestamp_field_set(buf + i + offset, 188 - offset, 9, now.tv_usec);
+                    if (set_timestamp_field_set(buf + i + offset, 188 - offset, 8, now.tv_sec) >= 0) {
+                        set_timestamp_field_set(buf + i + offset, 188 - offset, 9, now.tv_usec);
+                    }
 
                     if (g_sei_timestamping > 2) {
                         sei_timestamp_hexdump(buf + i + offset, 188 - offset);
