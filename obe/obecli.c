@@ -739,6 +739,12 @@ static int set_stream( char *command, obecli_command_t *child )
                 else
                 if (strcasecmp(video_codec, "HEVC_GPU_AVCODEC") == 0)
                     video_codec_id = 5; /* HEVC via AVCODEC (GPU encode) */
+                else
+                if (strcasecmp(video_codec, "AVC_CPU_AVCODEC") == 0)
+                    video_codec_id = 6; /* AVC via AVCODEC (CPU encode) */
+                else
+                if (strcasecmp(video_codec, "HEVC_CPU_AVCODEC") == 0)
+                    video_codec_id = 7; /* HEVC via AVCODEC (CPU encode) */
 #endif
                 else {
                     fprintf(stderr, "video codec selection is invalid\n" );
@@ -843,6 +849,12 @@ extern char g_video_encoder_tuning_name[64];
                 } else
                 if (video_codec_id == 5) {
                     cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_AVCODEC;
+                } else
+                if (video_codec_id == 6) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_CPU_AVCODEC;
+                } else
+                if (video_codec_id == 7) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_CPU_AVCODEC;
                 }
 
                 avc_param->rc.i_vbv_max_bitrate = obe_otoi( vbv_maxrate, 0 );
@@ -1830,10 +1842,14 @@ static int show_output_streams( char *command, obecli_command_t *child )
                 printf( "Video: AVC (VAAPI)\n" );
             else if (output_stream->stream_format == VIDEO_HEVC_VAAPI)
                 printf( "Video: HEVC (VAAPI)\n" );
+            else if (output_stream->stream_format == VIDEO_AVC_CPU_AVCODEC)
+                printf( "Video: AVC (AVCODEC CPU)\n" );
             else if (output_stream->stream_format == VIDEO_AVC_GPU_AVCODEC)
                 printf( "Video: AVC (AVCODEC GPU)\n" );
             else if (output_stream->stream_format == VIDEO_HEVC_GPU_AVCODEC)
                 printf( "Video: HEVC (AVCODEC GPU)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_CPU_AVCODEC)
+                printf( "Video: HEVC (AVCODEC CPU)\n" );
             else 
                 printf( "Video: AVC OR HEVC\n");
         }
