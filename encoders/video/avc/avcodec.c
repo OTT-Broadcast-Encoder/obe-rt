@@ -58,66 +58,6 @@ struct context_s
 
 static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type);
 
-#if 0
-static int _encodeHW(struct context_s *ctx, AVCodecContext *avctx, AVFrame *frame, obe_raw_frame_t *rf)
-{
-	int ret = 0;
-	AVPacket enc_pkt;
-
-        /* TODO: sei timestamping */
-        //frame->nb_size_data = count;
-	AVFrameSideData *sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AFD, sizeof(uint8_t));
-	if (sd) {
-		*sd->data = 10; /* sei.afd.active_format_description */
-	}
-
-	if (g_sei_timestamping) {
-		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
-		if (sd) {
-			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
-				struct timeval tv;
-				gettimeofday(&tv, NULL);
-
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
-			
-				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
-			}
-		}
-	} /* if (g_sei_timestamping) */
-
-	if ((ret = avcodec_send_frame(avctx, frame)) < 0) {
-		fprintf(stderr, "Error code: %s\n", av_err2str(ret));
-		goto end;
-	}
-	while (1) {
-
-		av_init_packet(&enc_pkt);
-		enc_pkt.data = NULL;
-		enc_pkt.size = 0;
-
-		ret = avcodec_receive_packet(avctx, &enc_pkt);
-		if (ret)
-			break;
-
-		enc_pkt.stream_index = 0;
-		_deliver_nals(ctx, &enc_pkt, rf, 0);
-		av_packet_unref(&enc_pkt);
-	}
-
-end:
-	ret = ((ret == AVERROR(EAGAIN)) ? 0 : -1);
-	return ret;
-}
-#endif
-
 static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBufferRef *hw_device_ctx)
 {
     AVBufferRef *hw_frames_ref;
@@ -377,85 +317,6 @@ printf("mode undefined\n");
 
 	return 0;
 }
-
-#if 0
-static int _encodeSW(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame, AVPacket *pkt)
-{
-	int count = 0;
-
-	/* Handle SEI / AFD / User payloads. */
-	for (int i = 0; i < rf->num_user_data; i++) {
-		/* Disregard any data types that we don't fully support. */
-		int type = rf->user_data[i].type;
-		printf("[side%d] type 0x%02x len 0x%02x data : ", i,
-			rf->user_data[i].type, rf->user_data[i].len);
-		for (int j = 0; j < rf->user_data[i].len; j++)
-			printf("%02x ", rf->user_data[i].data[j]);
-		printf("\n");
-		if (type == USER_DATA_AVC_REGISTERED_ITU_T35 /*|| type == USER_DATA_AVC_UNREGISTERED */) {
-			count++;
-		}
-	}
-
-	/* TODO: sei timestamping */
-	//frame->nb_size_data = count;
-	AVFrameSideData *sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AFD, sizeof(uint8_t));
-	if (sd) {
-		*sd->data = 10; /* sei.afd.active_format_description */
-	}
-
-	if (g_sei_timestamping) {
-		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
-		if (sd) {
-			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
-				struct timeval tv;
-				gettimeofday(&tv, NULL);
-
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
-			
-				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
-			}
-		}
-	} /* if (g_sei_timestamping) */
-
-	int ret = avcodec_send_frame(ctx->c, frame);
-	if (ret < 0) {
-		fprintf(stderr, MESSAGE_PREFIX "error encoding frame\n");
-		exit(1);
-	}
-
-	while (ret >= 0) {
-		ret = avcodec_receive_packet(ctx->c, pkt);
-		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-			return 1;
-		} else if (ret < 0) {
-			fprintf(stderr, MESSAGE_PREFIX "Error during encoding\n");
-			exit(1);
-		}
-
-		_deliver_nals(ctx, pkt, rf, 0);
-#if 0
-		static FILE *fh = NULL;
-		if (!fh) {
-			fh = fopen("/tmp/avcodec.nals", "wb");
-		}
-		if (fh)
-			fwrite(pkt->data, 1, pkt->size, fh);
-#endif
-		av_packet_unref(pkt);
-	}
-
-	return 0;
-}
-#endif
 
 static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame)
 {
@@ -760,7 +621,6 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 			}
 
 			_encode_frame(ctx, rf, hw_frame);
-			//_encodeHW(ctx, ctx->c, hw_frame, rf);
 
 			av_frame_free(&hw_frame);
 //			av_frame_free(&frame);
@@ -770,7 +630,6 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 			memcpy(frame->data[2], rf->img.plane[2], plane_len[2]);
 			//_av_frame_dump(frame);
 
-			//_encodeSW(ctx, rf, frame, pkt);
 			_encode_frame(ctx, rf, frame);
 		}
 
