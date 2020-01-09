@@ -184,7 +184,7 @@ const static uint64_t channel_layouts[] =
 static char *getSoftwareVersion()
 {
     char *msg = malloc(128);
-    sprintf(msg, "Version 2.0 (" GIT_VERSION ")");
+    sprintf(msg, "Version 3.0 (" GIT_VERSION ")");
     return msg;
 }
 
