@@ -1211,7 +1211,7 @@ extern int g_x265_min_qp_new;
 extern int g_x264_monitor_bps;
 
 /* LAVC */
-extern int g_aac_cf_debug;
+extern int g_audio_cf_debug;
 
 /* SEI Timestamping. */
 extern int g_sei_timestamping;
@@ -1297,9 +1297,9 @@ extern time_t g_decklink_missing_video_last_time;
         g_x264_monitor_bps,
         g_x264_monitor_bps == 0 ? "disabled" : "enabled");
 
-    printf("codec.aac.debug = %d [%s]\n",
-        g_aac_cf_debug,
-        g_aac_cf_debug == 0 ? "disabled" : "enabled");
+    printf("codec.audio.debug = %d [%s]\n",
+        g_audio_cf_debug,
+        g_audio_cf_debug == 0 ? "disabled" : "enabled");
 
     printf("codec.x265.qpmin = %d\n", g_x265_min_qp);
 
@@ -1417,8 +1417,8 @@ static int set_variable(char *command, obecli_command_t *child)
     if (strcasecmp(var, "codec.x264.monitor_bps") == 0) {
         g_x264_monitor_bps = val;
     } else
-    if (strcasecmp(var, "codec.aac.debug") == 0) {
-        g_aac_cf_debug = val;
+    if (strcasecmp(var, "codec.audio.debug") == 0) {
+        g_audio_cf_debug = val;
     } else
     if (strcasecmp(var, "codec.x265.nal_debug") == 0) {
         g_x265_nal_debug = val;

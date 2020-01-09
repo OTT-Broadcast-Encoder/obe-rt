@@ -35,7 +35,7 @@
 #define MODULE "[lavc]: "
 #define LOCAL_DEBUG 0
 
-int g_aac_cf_debug = 0;
+int g_audio_cf_debug = 0;
 
 struct context_s
 {
@@ -154,7 +154,7 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
     coded_frame->random_access = 1; /* Every frame output is a random access point */
     coded_frame->type = CF_AUDIO;
 
-    if (g_aac_cf_debug && ctx->encoder->output_stream_id == 1) {
+    if (g_audio_cf_debug && ctx->encoder->output_stream_id == 1) {
         double interval = coded_frame->pts - ctx->lastOutputFramePTS;
         printf(MODULE "strm %d output pts %13" PRIi64 " size %6d bytes, pts-interval %6.0fticks/%6.2fms\n",
             ctx->encoder->output_stream_id,
