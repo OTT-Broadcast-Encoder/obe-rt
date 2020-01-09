@@ -94,8 +94,7 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
     av_fifo_generic_write(fifo, pkt->data, pkt->size, NULL);
 
     if (ctx->num_frames != ctx->enc_params->frames_per_pes) {
-        printf("num_frames %d != frames_per_pes %d\n", ctx->num_frames, ctx->enc_params->frames_per_pes);
-	exit(1);
+        /* Buffer enough codec content frames, to file the desired pes size. */
         return;
     }
 
