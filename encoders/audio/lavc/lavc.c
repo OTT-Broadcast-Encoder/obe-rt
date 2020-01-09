@@ -49,6 +49,7 @@ struct context_s
     int64_t cur_pts, pts_increment;
     int64_t ptsfixup;
     int64_t lastOutputFramePTS; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
+    int64_t frameLengthTicks; /* TODO: Isn't this the same as pts_internal, If yes, remove this */
 
     int num_frames;
     int total_size_bytes;
@@ -190,6 +191,7 @@ static void *aac_start_encoder(void *ptr)
     ctx->encoder = ctx->enc_params->encoder;
     ctx->cur_pts = -1;
     ctx->stream = ctx->enc_params->stream;
+    ctx->frameLengthTicks = 576000;
 
     obe_raw_frame_t *raw_frame;
     int i, frame_size, ret;
