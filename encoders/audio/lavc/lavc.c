@@ -58,13 +58,14 @@ typedef struct
 {
     int obe_name;
     int lavc_name;
+    char *display_name;
 } lavc_encoder_t;
 
 static const lavc_encoder_t lavc_encoders[] =
 {
-    { AUDIO_AC_3,   AV_CODEC_ID_AC3 },
-    { AUDIO_E_AC_3, AV_CODEC_ID_EAC3 },
-    { AUDIO_AAC,    AV_CODEC_ID_AAC },
+    { AUDIO_AC_3,   AV_CODEC_ID_AC3,  "AC_3" },
+    { AUDIO_E_AC_3, AV_CODEC_ID_EAC3, "E_AC_3" },
+    { AUDIO_AAC,    AV_CODEC_ID_AAC,  "AAC" },
     { -1, -1 },
 };
 
