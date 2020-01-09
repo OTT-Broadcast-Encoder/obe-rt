@@ -164,21 +164,20 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
             interval,
             interval / 27000.0);
     }
-    if (ctx->lastOutputFramePTS + (576000 * ctx->enc_params->frames_per_pes) != coded_frame->pts) {
+    if (ctx->lastOutputFramePTS + (ctx->frameLengthTicks * ctx->enc_params->frames_per_pes) != coded_frame->pts) {
         if (ctx->encoder->output_stream_id == 1) {
-        printf(MODULE "strm %d Output PTS discontinuity\n\tShould be %" PRIi64 " was %" PRIi64 " diff %9" PRIi64 " frames_per_pes %d\n",
-            ctx->encoder->output_stream_id,
-            ctx->lastOutputFramePTS + (576000 * ctx->enc_params->frames_per_pes),
-            coded_frame->pts,
-            coded_frame->pts - (ctx->lastOutputFramePTS + (576000 * ctx->enc_params->frames_per_pes)),
-            ctx->enc_params->frames_per_pes);
+            printf(MODULE "strm %d Output PTS discontinuity\n\tShould be %" PRIi64 " was %" PRIi64 " diff %9" PRIi64 " frames_per_pes %d\n",
+                ctx->encoder->output_stream_id,
+                ctx->lastOutputFramePTS + (ctx->frameLengthTicks * ctx->enc_params->frames_per_pes),
+                coded_frame->pts,
+                coded_frame->pts - (ctx->lastOutputFramePTS + (ctx->frameLengthTicks * ctx->enc_params->frames_per_pes)),
+                ctx->enc_params->frames_per_pes);
         }
     }
 
     ctx->lastOutputFramePTS = coded_frame->pts;
     add_to_queue(&ctx->h->mux_queue, coded_frame);
 
-    /* We need to generate PTS because frame sizes have changed */
     ctx->cur_pts += ctx->pts_increment;
     ctx->total_size_bytes = ctx->num_frames = 0;
 }
@@ -205,17 +204,17 @@ static void *aac_start_encoder(void *ptr)
     uint8_t *audio_planes[8] = { NULL };
     int dst_linesize = -1;
 
-    codec = avcodec_alloc_context3( NULL );
-    if( !codec )
-    {
-        fprintf(stderr, MODULE "Malloc failed\n");
+    codec = avcodec_alloc_context3(NULL);
+    if (!codec) {
+        fprintf(stderr, MODULE "avcodec_alloc_context3 failed\n");
         goto finish;
     }
 
     for( i = 0; lavc_encoders[i].obe_name != -1; i++ )
     {
-        if( lavc_encoders[i].obe_name == ctx->stream->stream_format )
+        if( lavc_encoders[i].obe_name == ctx->stream->stream_format ) {
             break;
+        }
     }
 
     if( lavc_encoders[i].obe_name == -1 )
@@ -224,16 +223,34 @@ static void *aac_start_encoder(void *ptr)
         goto finish;
     }
 
-    /* Bugfix: newer ffmpeg build are using the aac encoder, instead of
-     * the preferred Fraunhoffer encoder. The regular aac encoder isn't
-     * working, and we don't want to us it anyway. Specifically call
-     * for the fraunhoffer codec.
-     */
-    AVCodec *enc = avcodec_find_encoder_by_name("libfdk_aac");
-    if (!enc)
-    {
-        fprintf(stderr, MODULE "Could not find encoder2\n");
-        goto finish;
+    printf(MODULE "Searching for audio encoder %s (id 0x%08x)\n",
+        lavc_encoders[i].display_name,
+        lavc_encoders[i].lavc_name);
+
+    AVCodec *enc = NULL;
+    if (lavc_encoders[i].lavc_name == AV_CODEC_ID_AC3) {
+        ctx->frameLengthTicks = 864000; /* 32ms = 32 * 90 * 300 */
+        enc = avcodec_find_encoder(lavc_encoders[i].lavc_name);
+    } else
+    if (lavc_encoders[i].lavc_name == AV_CODEC_ID_EAC3) {
+        ctx->frameLengthTicks = 864000; /* 32ms = 32 * 90 * 300 */
+        enc = avcodec_find_encoder(lavc_encoders[i].lavc_name);
+    } else
+    if (lavc_encoders[i].lavc_name == AV_CODEC_ID_AAC) {
+        /* Bugfix: newer ffmpeg build are using the aac encoder, instead of
+         * the preferred Fraunhoffer encoder. The regular aac encoder isn't
+         * working, and we don't want to us it anyway. Specifically call
+         * for the fraunhoffer codec.
+         */
+        ctx->frameLengthTicks = 576000;
+        enc = avcodec_find_encoder_by_name("libfdk_aac");
+    } else {
+        printf(MODULE "Abnormal, no such audio encoder, aborting\n");
+        exit(1);
+    }
+    if (!enc) {
+        fprintf(stderr, MODULE "Could not find audio encoder\n");
+        exit(1);
     }
 
     if( enc->sample_fmts[0] == -1 )
@@ -331,13 +348,15 @@ static void *aac_start_encoder(void *ptr)
 
 /* AAC has 1 frame per pes in lowest latency mode, frame size 1024. */
 /* AAC has 6 frame per pes in normal latency mode, frame size 2048. */
-    printf(MODULE "frames per pes    = %d\n", ctx->enc_params->frames_per_pes);
-    printf(MODULE "dst_linesize      = %d\n", dst_linesize);
-    printf(MODULE "codec->frame_size = %d\n", codec->frame_size);
-    printf(MODULE "codec->channels   = %d\n", codec->channels);
-    printf(MODULE "codec->sample_fmt = %d\n", codec->sample_fmt);
-    printf(MODULE "bytes_per_sample  = %d\n", av_get_bytes_per_sample(codec->sample_fmt));
-    printf(MODULE "is_planar         = %d\n", av_sample_fmt_is_planar(codec->sample_fmt));
+    printf(MODULE "frames per pes     = %d\n", ctx->enc_params->frames_per_pes);
+    printf(MODULE "dst_linesize       = %d\n", dst_linesize);
+    printf(MODULE "codec->frame_size  = %d\n", codec->frame_size);
+    printf(MODULE "codec->channels    = %d\n", codec->channels);
+    printf(MODULE "codec->sample_fmt  = %d\n", codec->sample_fmt);
+    printf(MODULE "bytes_per_sample   = %d\n", av_get_bytes_per_sample(codec->sample_fmt));
+    printf(MODULE "is_planar          = %d\n", av_sample_fmt_is_planar(codec->sample_fmt));
+    printf(MODULE "frameLengthTicks   = %" PRIi64 "\n", ctx->frameLengthTicks);
+    printf(MODULE "pts_increment      = %" PRIi64 "\n", ctx->pts_increment);
 
     while (1)
     {
@@ -365,7 +384,7 @@ static void *aac_start_encoder(void *ptr)
                 raw_frame->audio_frame.num_samples);
         }
 #endif
-        if (raw_frame->avfm.audio_pts - ctx->avfm.audio_pts >= (2 * 576000)) {
+        if (raw_frame->avfm.audio_pts - ctx->avfm.audio_pts >= (2 * ctx->frameLengthTicks)) {
             ctx->cur_pts = -1; /* Reset the audio timebase from the hardware. */
         }
         memcpy(&ctx->avfm, &raw_frame->avfm, sizeof(ctx->avfm));
@@ -464,6 +483,7 @@ static void *aac_start_encoder(void *ptr)
                }
 
                /* Process the compressed audio */
+               //printf(MODULE "pkt.size = %d\n", pkt.size);
                ctx->total_size_bytes += pkt.size;
                ctx->num_frames++;
 
