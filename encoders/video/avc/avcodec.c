@@ -30,6 +30,7 @@
 #include <libyuv.h>
 
 #define LOCAL_DEBUG 0
+#define DEBUG_CODEC_TIMING 0
 
 #define MESSAGE_PREFIX "[avcodec]: "
 
@@ -55,8 +56,6 @@ struct context_s
 	pthread_cond_t encode_cond;
 
 };
-
-static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type);
 
 static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBufferRef *hw_device_ctx)
 {
@@ -163,6 +162,24 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 
 	//coded_frame_print(cf);
 
+#if DEBUG_CODEC_TIMING
+	{
+		static int64_t last_real_pts = 0;
+		static int64_t last_real_dts = 0;
+
+		printf("adjust: real_pts %12" PRIi64 " ( %12" PRIi64 " )  real_dts %12" PRIi64 " ( %12" PRIi64 " )  iat %12" PRIi64 "  fat %12" PRIi64 "  audio_pts %10" PRIi64" \n",
+			cf->real_pts,
+			cf->real_pts - last_real_pts,
+			cf->real_dts,
+			cf->real_dts - last_real_dts,
+			cf->cpb_initial_arrival_time,
+			cf->cpb_final_arrival_time,
+			cf->pts);
+
+		last_real_pts = cf->real_pts;
+		last_real_dts = cf->real_dts;
+}
+#endif
 	if (g_sei_timestamping) {
 		/* Walk through each of the NALS and insert current time into any LTN sei timestamp frames we find. */
 		int offset = ltn_uuid_find(cf->data, pkt->size);
