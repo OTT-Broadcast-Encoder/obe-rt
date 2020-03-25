@@ -50,6 +50,7 @@ struct context_s
     int64_t ptsfixup;
     int64_t lastOutputFramePTS; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
     int64_t frameLengthTicks; /* TODO: Isn't this the same as pts_internal, If yes, remove this */
+    int encoderMode;
 
     int num_frames;
     int total_size_bytes;
@@ -252,6 +253,7 @@ static void *aac_start_encoder(void *ptr)
         fprintf(stderr, MODULE "Could not find audio encoder\n");
         exit(1);
     }
+    ctx->encoderMode = lavc_encoders[i].lavc_name;
 
     if( enc->sample_fmts[0] == -1 )
     {
