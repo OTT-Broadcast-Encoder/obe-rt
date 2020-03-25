@@ -151,6 +151,10 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
     if (ctx->h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
         //coded_frame->pts += (8 * 2700LL);
     }
+    if (ctx->encoderMode == AV_CODEC_ID_AC3) {
+        coded_frame->pts += (38 * 27000LL);
+    }
+
     coded_frame->pts += (ctx->ptsfixup * -1);
     coded_frame->pts += ((int64_t)ctx->stream->audio_offset_ms * 27000);
     coded_frame->random_access = 1; /* Every frame output is a random access point */
