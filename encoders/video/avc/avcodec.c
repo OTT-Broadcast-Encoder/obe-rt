@@ -218,6 +218,13 @@ static void _av_frame_dump(AVFrame *f)
 }
 #endif
 
+#if 0
+void my_log_callback(void *ptr, int level, const char *fmt, va_list vargs)
+{
+    vprintf(fmt, vargs);
+}
+#endif
+
 static int _init_codec(struct context_s *ctx)
 {
 	obe_vid_enc_params_t *ep = ctx->enc_params;
@@ -246,6 +253,11 @@ static int _init_codec(struct context_s *ctx)
 		ep->avc_param.i_fps_num, ep->avc_param.i_fps_den);
 
 	c->bit_rate = ep->avc_param.rc.i_bitrate * 1000;
+#if 0
+	c->thread_count = 8;
+	c->rc_buffer_size = ep->avc_param.rc.i_bitrate * 1000;
+	c->rc_max_rate = ep->avc_param.rc.i_bitrate * 1000;
+#endif
 
 	c->width = ep->avc_param.i_width;
 	c->height = ep->avc_param.i_height;
@@ -293,6 +305,9 @@ printf("mode VIDEO_HEVC_GPU_AVCODEC\n");
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_CPU_AVCODEC) {
 		/* s/w codec - libx264 */
 printf("mode VIDEO_AVC_CPU_AVCODEC\n");
+#if 0
+		av_opt_set(c->priv_data, "profile", "main", 0);
+#endif
 		av_opt_set(c->priv_data, "preset", "faster", 0);
 		av_opt_set(c->priv_data, "tune", "zerolatency", 0);
 		av_opt_set(c->priv_data, "threads", "4", 0);
@@ -303,12 +318,29 @@ printf("mode VIDEO_AVC_CPU_AVCODEC\n");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
 		/* s/w codec -- libx265 */
+#if 0
 printf("mode VIDEO_HEVC_CPU_AVCODEC\n");
-		av_opt_set(c->priv_data, "preset", "ultrafast", 0);
-		av_opt_set(c->priv_data, "tune", "zerolatency", 0);
+av_log_set_level(9);
+av_log_set_callback(my_log_callback);
+#endif
+
+		av_opt_set(c->priv_data, "preset", "superfast", 0);
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
-		int ret = av_opt_set_int(c->priv_data, "afd", 1, 0);
-		printf("AFD set ret %d\n", ret);
+		//int ret = av_opt_set_int(c->priv_data, "afd", 1, 0);
+		//printf("AFD set ret %d\n", ret);
+
+		av_opt_set(c->priv_data, "x265-params", "ctu=32:rc-lookahead=15:min-keyint=6:frame-threads=8:bframes=8:ref=3:keyint=60:vbv-maxrate=5000:vbv-bufsize=20000:log-level=4:qpmin=15", 0);
+#if 0
+                x265_param_parse(ctx->hevc_params, "ctu", "32");
+                x265_param_parse(ctx->hevc_params, "bframes", "8");
+                x265_param_parse(ctx->hevc_params, "ref", "3");
+        }
+
+        sprintf(&val[0], "%d", g_x265_min_qp);
+        printf(MESSAGE_PREFIX "Setting QPmin to %s\n", val);
+        x265_param_parse(ctx->hevc_params, "qpmin", val);
+
+#endif
 	} else {
 printf("mode undefined\n");
 	}
