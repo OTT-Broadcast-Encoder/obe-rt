@@ -58,6 +58,7 @@ extern "C"
 #include <assert.h>
 #include <include/DeckLinkAPI.h>
 #include "include/DeckLinkAPIDispatch.cpp"
+#include <include/DeckLinkAPIVersion.h>
 #include "histogram.h"
 #include "ltn_ws.h"
 
