@@ -618,6 +618,11 @@ struct obe_t
 
     /* Runtime statistics */
     void *runtime_statistics;
+
+    /* Version information */
+    uint8_t sw_major;
+    uint8_t sw_minor;
+    uint8_t sw_patch;
 };
 
 typedef struct

@@ -1,6 +1,10 @@
 AUTOMAKE_OPTIONS = foreign
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 
+VERSION_MAJOR = 3
+VERSION_MINOR = 0
+VERSION_PATCH = 1
+
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 
 # This will be ignored of libklmonitoring is not installed in the system.
@@ -12,7 +16,10 @@ CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFS
 	-I$(top_srcdir) \
 	-DKL_USERSPACE -D__STDC_FORMAT_MACROS \
 	-DGIT_VERSION=\"$(GIT_VERSION)\" \
-	-DHAVE_DECKLINK
+	-DHAVE_DECKLINK \
+	-DVERSION_MAJOR=$(VERSION_MAJOR) \
+	-DVERSION_MINOR=$(VERSION_MINOR) \
+	-DVERSION_PATCH=$(VERSION_PATCH)
 
 LDFLAGS += -lpthread -lz -lx264 -lyuv
 LDFLAGS += -lavformat -lavcodec -ldl -lasound -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample

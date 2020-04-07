@@ -500,6 +500,11 @@ obe_t *obe_setup(const char *syslogSuffix)
     }
     h->probe_time_seconds = MAX_PROBE_TIME;
 
+    /* MMM Convert GIT string into a major, minor, patch */
+    h->sw_major = VERSION_MAJOR;
+    h->sw_minor = VERSION_MINOR;
+    h->sw_patch = VERSION_PATCH;
+
     pthread_mutex_init( &h->device_list_mutex, NULL );
 
 #if 0
