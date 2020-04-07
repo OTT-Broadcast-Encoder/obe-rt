@@ -442,16 +442,16 @@ static void *aac_start_encoder(void *ptr)
             break;
         }
 
-        raw_frame->release_data(raw_frame);
-        raw_frame->release_frame(raw_frame);
-        remove_from_queue(&ctx->encoder->queue);
-
         /* Push the converted samples into the audio pcm fifo. */
         ret = av_audio_fifo_write(ctx->audio_pcm_fifo, (void **)audio_planes, raw_frame->audio_frame.num_samples);
         if (ret != raw_frame->audio_frame.num_samples) {
             fprintf(stderr, MODULE "Unable to write to audio fifo\n");
             exit(1);
         }
+
+        raw_frame->release_data(raw_frame);
+        raw_frame->release_frame(raw_frame);
+        remove_from_queue(&ctx->encoder->queue);
 
 	/* Number of samples less than required codec samples reqd? */
         while (av_audio_fifo_size(ctx->audio_pcm_fifo) >= codec->frame_size) {
