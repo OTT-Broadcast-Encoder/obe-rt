@@ -282,7 +282,6 @@
 #include <libswresample/swresample.h>
 
 #define MIN_PID 0x30
-#define MAX_PID 0x1fff
 
 #define PREFIX "[Mux]: "
 
