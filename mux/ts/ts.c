@@ -280,6 +280,7 @@
 #include "mux/mux.h"
 #include <libmpegts.h>
 #include <libswresample/swresample.h>
+#include <libltntstools/ltntstools.h>
 
 #define MIN_PID 0x30
 
@@ -464,6 +465,9 @@ void *open_muxer( void *ptr )
     obe_coded_frame_t *coded_frame;
     char *service_name = "OBE Service";
     char *provider_name = "Open Broadcast Encoder";
+
+    struct ltntstools_stream_statistics_s streamstats;
+    ltntstools_pid_stats_reset(&streamstats);
 
     struct sched_param param = {0};
     param.sched_priority = 99;
@@ -967,6 +971,13 @@ if (fh)
 
         if( len )
         {
+            ltntstools_pid_stats_update(&streamstats, output, len / 188);
+
+            uint32_t null_pct = ltntstools_pid_stats_stream_padding_pct(&streamstats);
+            if (null_pct < 3) {
+                printf(PREFIX "Warning: null padding 2%% or less (%d%%), codec exceeding the muxer capability.\n", null_pct);
+            }
+
             muxed_data = new_muxed_data( len );
             if( !muxed_data )
             {
