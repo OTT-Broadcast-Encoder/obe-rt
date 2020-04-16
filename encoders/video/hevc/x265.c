@@ -590,9 +590,9 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	cf->type                     = CF_VIDEO;
 #if USE_CODEC_CLOCKS
 	/* Rely on the PTS time that comes from the s/w codec. */
-	cf->pts                      = ctx->hevc_picture_out->pts;
-	cf->real_pts                 = ctx->hevc_picture_out->pts;
-	cf->real_dts                 = ctx->hevc_picture_out->dts;
+	cf->pts                      = ctx->hevc_picture_out->pts + (2 * g_frame_duration);
+	cf->real_pts                 = ctx->hevc_picture_out->pts + (2 * g_frame_duration);
+	cf->real_dts                 = ctx->hevc_picture_out->dts + (2 * g_frame_duration);
 #else
 	/* Recalculate a new real pts/dts based on the hardware time, not the codec time. */
 	cf->real_pts                 = cf->pts;
@@ -600,14 +600,33 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 #endif
 
 #if 1
-        static int64_t iat = 0;
-        cf->cpb_initial_arrival_time = iat;
+        //static int64_t iat = 0;
+        //cf->cpb_initial_arrival_time = iat;
+        cf->cpb_initial_arrival_time = cf->real_dts - 1801800; /* 4x frame interval */
+        cf->cpb_initial_arrival_time = cf->real_dts -  900900; /* 2x frame interval */
+        cf->cpb_initial_arrival_time = cf->real_dts -  450450; /* 1x frame interval */
+        cf->cpb_initial_arrival_time = cf->real_dts - 1351350; /* 3x frame interval */
 
 	double bit_rate = ctx->enc_params->avc_param.rc.i_vbv_max_bitrate;
+bit_rate = 6800;
         double fraction = bit_rate / 216000.0;
-        double estimated_final = ((double)cf->len / fraction) + (double)cf->cpb_initial_arrival_time;
+        double estimated = ((double)cf->len / fraction);
+        double estimated_final = estimated + (double)cf->cpb_initial_arrival_time;
         cf->cpb_final_arrival_time  = estimated_final;
-        iat = cf->cpb_final_arrival_time;
+       	//iat = cf->cpb_final_arrival_time;
+
+	//static int64_t last_dts = 0;
+	//int64_t last_dts_diff = cf->real_dts - last_dts;
+	//last_dts = cf->real_dts;
+
+	static int64_t framecount = 0;
+	//if (framecount == 0)
+//		iat = 112;
+
+//       	iat += (last_dts_diff - (cf->cpb_final_arrival_time - cf->cpb_initial_arrival_time));
+
+	framecount++;
+	
 #else
 	cf->cpb_initial_arrival_time = cf->real_pts;
 
