@@ -427,7 +427,7 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		for (int i = 0; i < p->userSEI.numPayloads; i++) {
 			free(p->userSEI.payloads[i].payload);
 			p->userSEI.payloads[i].payload = NULL;
-			p->userSEI.payloads[idx].payloadSize = 0;
+			p->userSEI.payloads[i].payloadSize = 0;
 		}
 		free(p->userSEI.payloads);
 		p->userSEI.payloads = NULL;
