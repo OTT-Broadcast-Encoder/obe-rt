@@ -800,6 +800,8 @@ static int reconfigure_encoder(struct context_s *ctx)
 	if (getenv("OBE_X265_STREAM_INJECT_DETAILS") == NULL)
 		x265_param_parse(ctx->hevc_params, "info", "0");
 
+	//x265_param_parse(ctx->hevc_params, "hrd", "1");
+
 	/* The decklink module sets TFF to always true for interlaced formats, which isn't technically
          * correct. NTSC is BFF. A comment suggests NTSC should be BFF but is packed as TFF.
          * We'll obey the params here, and leave this comment that NTSC could be wrong if the original
