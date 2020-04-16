@@ -437,6 +437,7 @@ int64_t initial_audio_latency = -1; /* ticks of 27MHz clock. Amount of audio (in
 
 ts_writer_t *g_mux_ts_writer_handle = NULL;
 int g_mux_ts_monitor_bps = 0;
+int64_t g_mux_dtstotal = 0;
 
 void *open_muxer( void *ptr )
 {
@@ -936,7 +937,7 @@ void *open_muxer( void *ptr )
         pthread_mutex_unlock( &h->mux_queue.mutex );
 
         // TODO figure out last frame
-        if (ts_write_frames( w, frames, num_frames, &output, &len, &pcr_list) != 0) {
+        if (ts_write_frames( w, frames, num_frames, &output, &len, &pcr_list, &g_mux_dtstotal) != 0) {
             fprintf(stderr, "ts_write_frames failed\n");
         }        
 

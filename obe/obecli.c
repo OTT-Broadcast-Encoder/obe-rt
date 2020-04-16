@@ -1222,6 +1222,7 @@ extern int g_sei_timestamping;
 
 /* TS Mux */
 extern int g_mux_ts_monitor_bps;
+extern int64_t g_mux_dtstotal;
 
 /* Mux Smoother */
 extern int64_t g_mux_smoother_last_item_count;
@@ -2440,6 +2441,9 @@ static void *runtime_statistics_thread(void *p)
 				break;
 			}
 		}
+
+		/* Mux */
+		sprintf(APPEND(line), ",mux_dtstotal=%" PRIi64, g_mux_dtstotal);
 
 		/* Thermals */
 		if (ctx->thermal_bm == 0) {
