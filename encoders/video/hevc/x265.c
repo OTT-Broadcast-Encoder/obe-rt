@@ -551,7 +551,7 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 		printf(MESSAGE_PREFIX " --  acquired                                                                            pts %13" PRIi64 " dts %13" PRIi64 ", ",
 			ctx->hevc_picture_out->pts,
 			ctx->hevc_picture_out->dts);
-		printf("sliceType %d [%s]",
+		printf("sliceType %d [%4s]",
 			ctx->hevc_picture_out->sliceType,
 			sliceTypeDesc(ctx->hevc_picture_out->sliceType));
 		if (!g_sei_timestamping) {
