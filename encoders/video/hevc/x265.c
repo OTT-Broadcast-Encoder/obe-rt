@@ -867,12 +867,14 @@ static int reconfigure_encoder(struct context_s *ctx)
 		x265_param_parse(ctx->hevc_params, "rc-lookahead", val);
 	}
 
+#if 0
 	if ((strcmp(preset_name, "faster") == 0) && strcmp(tuning_name, "") == 0) {
 		printf(MESSAGE_PREFIX "Assuming coffeelake performance via adjustments\n");
 		x265_param_parse(ctx->hevc_params, "ctu", "32");
 		x265_param_parse(ctx->hevc_params, "bframes", "8");
 		x265_param_parse(ctx->hevc_params, "ref", "3");
 	}
+#endif
 
 	sprintf(&val[0], "%d", g_x265_min_qp);
 	printf(MESSAGE_PREFIX "Setting QPmin to %s\n", val);
