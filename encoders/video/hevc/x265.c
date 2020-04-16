@@ -641,6 +641,9 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 			cf->real_dts);
 	}
 
+	if (g_x265_nal_debug & 0x04)
+		coded_frame_print(cf);
+
 	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
 		cf->arrival_time = arrival_time;
 #if SERIALIZE_CODED_FRAMES
