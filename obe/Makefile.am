@@ -62,6 +62,7 @@ obecli_SOURCES += ../output/file/file.c
 obecli_SOURCES += ../input/sdi/ancillary.c
 obecli_SOURCES += ../input/sdi/sdi.c
 obecli_SOURCES += ../input/sdi/vbi.c
+obecli_SOURCES += ../input/sdi/v210.c
 obecli_SOURCES += ../input/sdi/smpte337_detector.c
 obecli_SOURCES += ../input/sdi/smpte337_detector2.c
 obecli_SOURCES += ../input/sdi/decklink/decklink.cpp
