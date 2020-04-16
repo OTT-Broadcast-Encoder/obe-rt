@@ -30,6 +30,7 @@
 
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
+int g_x264_nal_debug = 0;
 
 #define MESSAGE_PREFIX "[x264]: "
 #define SERIALIZE_CODED_FRAMES 0
@@ -687,6 +688,9 @@ if (fh)
             coded_frame->random_access = pic_out.b_keyframe;
             coded_frame->priority = IS_X264_TYPE_I( pic_out.i_type );
             free( pic_out.opaque );
+
+            if (g_x264_nal_debug & 0x04)
+                coded_frame_print(coded_frame);
 
             if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY )
             {
