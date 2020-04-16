@@ -2246,6 +2246,8 @@ int main( int argc, char **argv )
     int opt;
     const char *syslogSuffix = NULL;
 
+    obe_setProcessStartTime();
+
     while ((opt = getopt(argc, argv, "c:C:hL:")) != -1) {
         switch (opt) {
         case 'C':

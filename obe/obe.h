@@ -499,4 +499,9 @@ int obe_stop( obe_t *h );
 void obe_close( obe_t *h );
 
 const char *obe_core_get_format_name_short(enum stream_formats_e stream_format);
+
+void obe_setProcessStartTime();
+time_t obe_getProcessStartTime();
+uint32_t obe_getProcessRuntimeSeconds();
+
 #endif

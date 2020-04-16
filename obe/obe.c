@@ -1959,3 +1959,20 @@ int obe_getTimestamp(char *s, time_t *when)
 
 	return 0;
 }
+
+static time_t g_processStartTime = 0;
+void obe_setProcessStartTime()
+{
+	g_processStartTime = time(NULL);
+}
+
+time_t obe_getProcessStartTime()
+{
+	return g_processStartTime;
+}
+
+uint32_t obe_getProcessRuntimeSeconds()
+{
+	return time(NULL) - obe_getProcessStartTime();
+}
+
