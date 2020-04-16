@@ -974,10 +974,12 @@ if (fh)
             ltntstools_pid_stats_update(&streamstats, output, len / 188);
 
             uint32_t null_pct = ltntstools_pid_stats_stream_padding_pct(&streamstats);
-            if (null_pct < 3) {
+            uint32_t null_pct_val = 3;
+            /* Report null padding issues after the few first seconds of startup. */
+            if (null_pct <= null_pct_val && obe_getProcessRuntimeSeconds() > 3) {
                 char ts[64];
                 obe_getTimestamp(ts, NULL);
-                printf(PREFIX "%s : Warning: null padding 2%% or less (%d%%), codec exceeding the muxer capability.\n", ts, null_pct);
+                printf(PREFIX "%s : Warning: null padding %d%% or less (%d%%), codec exceeding the muxer capability.\n", ts, null_pct_val, null_pct);
             }
 
             muxed_data = new_muxed_data( len );
