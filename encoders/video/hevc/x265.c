@@ -203,9 +203,12 @@ static void x265_picture_analyze_stats(struct context_s *ctx, x265_picture *pic)
 
 	qp_measures_add(&qp_measures[0], s->qp, s->frameLatency);
 
+static int64_t last_dts = 0;
+static int64_t last_pts = 0;
+
 	if (g_x265_nal_debug & 0x01) {
 		printf(MESSAGE_PREFIX
-			"poc %8d type %c bits %9" PRIu64 " latency %d encoderOrder %8d sceneCut:%d qp %6.2f pts %13" PRIi64 " dts %13" PRIi64 "\n",
+			"poc %8d type %c bits %9" PRIu64 " latency %d encoderOrder %8d sceneCut:%d qp %6.2f pts %13" PRIi64 " dts %13" PRIi64 " dtsdiff %" PRIi64 " ptsdiff %" PRIi64 "\n",
 			s->poc,
 			s->sliceType,
 			s->bits,
@@ -213,8 +216,13 @@ static void x265_picture_analyze_stats(struct context_s *ctx, x265_picture *pic)
 			s->encoderOrder,
 			s->bScenecut,
 			s->qp,
-			pic->pts,
-			pic->dts);
+			((pic->pts) / 300) + 900000,
+			((pic->dts) / 300) + 900000,
+			(pic->dts - last_dts) / 300,
+			(pic->pts - last_pts) / 300);
+
+		last_dts = pic->dts;
+		last_pts = pic->pts;
 
 		if (s->bScenecut)
 			printf("\n");
