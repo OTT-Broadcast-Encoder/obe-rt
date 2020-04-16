@@ -173,6 +173,37 @@ void coded_frame_print(obe_coded_frame_t *cf)
 		printf("%02x ", cf->data[i]);
 
 	printf("\n");
+
+#if 0
+static int64_t iat_last = 0;
+int64_t iat_interval = cf->cpb_initial_arrival_time - iat_last;
+iat_last = cf->cpb_initial_arrival_time;
+
+static int64_t fat_last = 0;
+int64_t fat_interval = cf->cpb_final_arrival_time - fat_last;
+fat_last = cf->cpb_final_arrival_time;
+
+static int64_t pts_last = 0;
+int64_t pts_interval = cf->real_pts - pts_last;
+pts_last = cf->real_pts;
+
+static int64_t dts_last = 0;
+int64_t dts_interval = cf->real_dts - dts_last;
+dts_last = cf->real_dts;
+	if (cf->cpb_final_arrival_time > cf->real_pts) {
+		printf("fat > pts, should never happen\n");
+	}
+	if (cf->cpb_initial_arrival_time > cf->real_pts) {
+		printf("iat > pts, should never happen\n");
+	}
+
+	printf("                                  %13" PRIi64 "       %13" PRIi64 "      %13" PRIi64 "      %13" PRIi64 " --  dts minus iat %13" PRIi64 "\n",
+		pts_interval,
+		dts_interval,
+		iat_interval,
+		fat_interval,
+		cf->real_dts - cf->cpb_initial_arrival_time);
+#endif
 }
 
 size_t coded_frame_serializer_read(FILE *fh, obe_coded_frame_t **f)
