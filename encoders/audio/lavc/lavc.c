@@ -445,7 +445,7 @@ static void *aac_start_encoder(void *ptr)
         /* Push the converted samples into the audio pcm fifo. */
         ret = av_audio_fifo_write(ctx->audio_pcm_fifo, (void **)audio_planes, raw_frame->audio_frame.num_samples);
         if (ret != raw_frame->audio_frame.num_samples) {
-            fprintf(stderr, MODULE "Unable to write to audio fifo\n");
+            fprintf(stderr, MODULE "Unable to write to audio fifo, ret = %d - should be %d\n", ret, raw_frame->audio_frame.num_samples);
             exit(1);
         }
 
