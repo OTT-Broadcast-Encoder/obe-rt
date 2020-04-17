@@ -187,6 +187,20 @@ static int csp_num_interleaved( int csp, int plane )
 }
 /* end -- Duplicated from video.c */
 
+static void x265_picture_free_userSEI(x265_picture *p)
+{
+	if (p->userSEI.numPayloads) {
+		for (int i = 0; i < p->userSEI.numPayloads; i++) {
+			free(p->userSEI.payloads[i].payload);
+			p->userSEI.payloads[i].payload = NULL;
+			p->userSEI.payloads[i].payloadSize = 0;
+		}
+		free(p->userSEI.payloads);
+		p->userSEI.numPayloads = 0;
+	}
+	p->userSEI.payloads = NULL;
+}
+
 /* Free the shallow copy. */
 static void x265_picture_free_all(x265_picture *pic)
 {
@@ -423,16 +437,7 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 #endif
 
 	/* Dealloc any previous SEI pointers and payload, if we had any. */
-	if (p->userSEI.numPayloads) {
-		for (int i = 0; i < p->userSEI.numPayloads; i++) {
-			free(p->userSEI.payloads[i].payload);
-			p->userSEI.payloads[i].payload = NULL;
-			p->userSEI.payloads[i].payloadSize = 0;
-		}
-		free(p->userSEI.payloads);
-		p->userSEI.payloads = NULL;
-	}
-
+	x265_picture_free_userSEI(p);
 	x265_picture_init(ctx->hevc_params, p);
 
 	p->sliceType = X265_TYPE_AUTO;
