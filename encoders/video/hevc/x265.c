@@ -604,40 +604,18 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	cf->real_dts                 = ctx->hevc_picture_out->dts;
 #endif
 
-#if 1
-        //static int64_t iat = 0;
-        //cf->cpb_initial_arrival_time = iat;
-        cf->cpb_initial_arrival_time = cf->real_dts - 1801800; /* 4x frame interval */
-        cf->cpb_initial_arrival_time = cf->real_dts -  900900; /* 2x frame interval */
-        cf->cpb_initial_arrival_time = cf->real_dts -  450450; /* 1x frame interval */
-        cf->cpb_initial_arrival_time = cf->real_dts - 1351350; /* 3x frame interval */
+	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
+        	cf->cpb_initial_arrival_time = cf->real_dts - 1351350; /* 3x frame interval */
+	} else {
+        	cf->cpb_initial_arrival_time = cf->real_pts - 1351350; /* 3x frame interval */
+	}
 
 	double bit_rate = ctx->enc_params->avc_param.rc.i_vbv_max_bitrate;
-bit_rate = 6800;
         double fraction = bit_rate / 216000.0;
         double estimated = ((double)cf->len / fraction);
         double estimated_final = estimated + (double)cf->cpb_initial_arrival_time;
         cf->cpb_final_arrival_time  = estimated_final;
-       	//iat = cf->cpb_final_arrival_time;
 
-	//static int64_t last_dts = 0;
-	//int64_t last_dts_diff = cf->real_dts - last_dts;
-	//last_dts = cf->real_dts;
-
-	static int64_t framecount = 0;
-	//if (framecount == 0)
-//		iat = 112;
-
-//       	iat += (last_dts_diff - (cf->cpb_final_arrival_time - cf->cpb_initial_arrival_time));
-
-	framecount++;
-	
-#else
-	cf->cpb_initial_arrival_time = cf->real_pts;
-
-	double estimated_final = ((double)cf->len / 0.0810186) + (double)cf->cpb_initial_arrival_time;
-	cf->cpb_final_arrival_time   = estimated_final;
-#endif
 	cf->priority = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
 	cf->random_access = IS_X265_TYPE_I(ctx->hevc_picture_out->sliceType);
 
