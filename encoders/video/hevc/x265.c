@@ -44,6 +44,11 @@ static int64_t g_frame_duration = 0;
 char g_video_encoder_preset_name[64] = { 0 };
 char g_video_encoder_tuning_name[64] = { 0 };
 
+#if DEV_ABR
+int g_x265_bitrate_bps = 0;
+int g_x265_bitrate_bps_new = 0;
+#endif
+
 #define SERIALIZE_CODED_FRAMES 0
 #if SERIALIZE_CODED_FRAMES
 static FILE *sfh = NULL;
@@ -738,6 +743,35 @@ static void _process_nals(struct context_s *ctx, int64_t arrival_time)
 	_monitor_bps(ctx, nalbuffer_size);
 }
 
+#if DEV_ABR
+static int rapid_reconfigure_encoder(struct context_s *ctx)
+{
+	int ret;
+	char val[64];
+
+	sprintf(&val[0], "%d", ctx->enc_params->avc_param.rc.i_bitrate);
+	x265_param_parse(ctx->hevc_params, "bitrate", val);
+	printf(MESSAGE_PREFIX "%s() bitrate %s\n", __func__, val);
+
+	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY) {
+		/* Found that in lowest mode, obe doesn't accept the param, but the codec reports underruns. */
+		ctx->enc_params->avc_param.rc.i_vbv_buffer_size = ctx->enc_params->avc_param.rc.i_vbv_max_bitrate;
+	}
+	sprintf(&val[0], "%d", ctx->enc_params->avc_param.rc.i_vbv_buffer_size);
+	x265_param_parse(ctx->hevc_params, "vbv-bufsize", val);
+	printf(MESSAGE_PREFIX "%s() vbv-bufsize = %s\n", __func__, val);
+
+	sprintf(&val[0], "%d", ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
+	x265_param_parse(ctx->hevc_params, "vbv-maxrate", val);
+	printf(MESSAGE_PREFIX "%s() vbv-maxrate = %d\n", __func__, ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
+
+	//int ret = x265_encoder_reconfig_zone(ctx->hevc_encoder, ctx->hevc_params);
+	ret =  x265_encoder_reconfig(ctx->hevc_encoder, ctx->hevc_params);
+
+	return ret;
+}
+#endif
+
 static int reconfigure_encoder(struct context_s *ctx)
 {
 	x265_param_free(ctx->hevc_params);
@@ -842,6 +876,7 @@ static int reconfigure_encoder(struct context_s *ctx)
 
 	sprintf(&val[0], "%d", ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
 	x265_param_parse(ctx->hevc_params, "vbv-maxrate", val);
+	printf(MESSAGE_PREFIX "vbv-maxrate = %d\n", ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
 	x265_param_parse(ctx->hevc_params, "vbv-init", "0.9");
 
 	if (ctx->enc_params->avc_param.rc.i_lookahead > 0) {
@@ -875,6 +910,7 @@ static int reconfigure_encoder(struct context_s *ctx)
 
 	sprintf(&val[0], "%d", ctx->enc_params->avc_param.rc.i_bitrate);
 	x265_param_parse(ctx->hevc_params, "bitrate", val);
+	printf(MESSAGE_PREFIX "bitrate %s\n", val);
 
 	sprintf(&val[0], "%d", ctx->enc_params->avc_param.i_nal_hrd == 3 ? 0 : 1);
 	printf(MESSAGE_PREFIX "strict cbr is %s\n", val);
@@ -1018,6 +1054,22 @@ static void *x265_start_encoder( void *ptr )
 			if (rf) {
 				ctx->hevc_picture_in->pts = rf->avfm.audio_pts;
 
+#if DEV_ABR
+				if (g_x265_bitrate_bps_new) {
+					g_x265_bitrate_bps_new = 0;
+
+					//x265_encoder_close(ctx->hevc_encoder);
+					ctx->enc_params->avc_param.rc.i_bitrate = g_x265_bitrate_bps / 1000;
+					ctx->enc_params->avc_param.rc.i_vbv_max_bitrate = ctx->enc_params->avc_param.rc.i_bitrate - 2000;
+
+printf("Restarting codec with new bitrate %dkbps, vbvmax %d\n", ctx->enc_params->avc_param.rc.i_bitrate, ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
+					ret = rapid_reconfigure_encoder(ctx);
+					if (ret < 0) {
+						fprintf(stderr, MESSAGE_PREFIX " failed to reconfigre encoder.\n");
+						exit(1);
+					}
+				}
+#endif
 				if (g_x265_min_qp_new) {
 					g_x265_min_qp_new = 0;
 					x265_encoder_close(ctx->hevc_encoder);

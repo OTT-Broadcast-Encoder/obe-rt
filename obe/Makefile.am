@@ -17,6 +17,7 @@ CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFS
 	-DKL_USERSPACE -D__STDC_FORMAT_MACROS \
 	-DGIT_VERSION=\"$(GIT_VERSION)\" \
 	-DHAVE_DECKLINK \
+	-DDEV_ABR=0 -DDEV_DOWN_UP=0 \
 	-DVERSION_MAJOR=$(VERSION_MAJOR) \
 	-DVERSION_MINOR=$(VERSION_MINOR) \
 	-DVERSION_PATCH=$(VERSION_PATCH)
@@ -103,6 +104,7 @@ obecli_SOURCES += ../common/x86/x86util.asm
 obecli_SOURCES += ../common/common_lavc.c
 obecli_SOURCES += ../common/queue.c
 obecli_SOURCES += ltn_ws.c
+obecli_SOURCES += osd.c
 obecli_SOURCES += x86_sdi.o
 obecli_SOURCES += vfilter.o
 
