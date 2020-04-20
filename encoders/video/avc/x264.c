@@ -26,7 +26,6 @@
 #include <libavutil/mathematics.h>
 
 #define DEBUG_CODEC_TIMING 0
-#define MODULE "[x264]: "
 
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
@@ -292,19 +291,19 @@ static void *x264_start_encoder( void *ptr )
             if ((enc_params->avc_param.i_fps_num > 30000) || ((enc_params->avc_param.i_fps_num < 1000) && (enc_params->avc_param.i_fps_num > 30))) {
                 /* For framerates above p30 assume worst case p60. */
                 if (enc_params->avc_param.i_threads < 8) {
-                    printf(MODULE "configuration threads defined as %d, need a minimum of 8. Adjusting to 8\n",
+                    printf(MESSAGE_PREFIX "configuration threads defined as %d, need a minimum of 8. Adjusting to 8\n",
                         enc_params->avc_param.i_threads);
                     enc_params->avc_param.i_threads = 8;
                 }
 
                 if (enc_params->avc_param.i_keyint_max > 4) {
-                    printf(MODULE "configuration keyint defined as %d, need a maximum of 4. Adjusting to 4\n",
+                    printf(MESSAGE_PREFIX "configuration keyint defined as %d, need a maximum of 4. Adjusting to 4\n",
                         enc_params->avc_param.i_keyint_max);
                     enc_params->avc_param.i_keyint_max = 4;
                 }
 
                 if (enc_params->avc_param.rc.i_lookahead != enc_params->avc_param.i_keyint_max) {
-                    printf(MODULE "configuration lookahead defined as %d, need a maximum of %d. Adjusting to %d\n",
+                    printf(MESSAGE_PREFIX "configuration lookahead defined as %d, need a maximum of %d. Adjusting to %d\n",
                         enc_params->avc_param.rc.i_lookahead,
                         enc_params->avc_param.i_keyint_max,
                         enc_params->avc_param.i_keyint_max);
@@ -319,7 +318,7 @@ static void *x264_start_encoder( void *ptr )
             if ((enc_params->avc_param.i_fps_num > 30000) || ((enc_params->avc_param.i_fps_num < 1000) && (enc_params->avc_param.i_fps_num > 30))) {
                 /* For framerates above p30 assume worst case p60. */
                 if (enc_params->avc_param.i_threads < 8) {
-                    printf(MODULE "configuration threads defined as %d, need a minimum of 8. Adjusting to 8\n",
+                    printf(MESSAGE_PREFIX "configuration threads defined as %d, need a minimum of 8. Adjusting to 8\n",
                         enc_params->avc_param.i_threads);
                     enc_params->avc_param.i_threads = 8;
                 }
