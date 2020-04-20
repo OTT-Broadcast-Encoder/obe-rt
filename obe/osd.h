@@ -1,13 +1,12 @@
 //
-//  OSD.h
-//  DecklinkVideoGenerator
+//  osd.h
 //
 //  Created by Steven Toth on 7/11/12.
 //  Copyright (c) 2012 Kernel Labs Inc. All rights reserved.
 //
 
-#ifndef DecklinkVideoGenerator_OSD_h
-#define DecklinkVideoGenerator_OSD_h
+#ifndef OSD_H
+#define OSD_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,4 +34,4 @@ int vc8x0_display_render_string(struct vc8x0_display_context *ctx, const char *s
 };
 #endif
 
-#endif
+#endif /* OSD_H */

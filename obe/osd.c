@@ -1,6 +1,5 @@
 //
-//  OSD.c
-//  DecklinkVideoGenerator
+//  osd.c
 //
 //  Created by Steven Toth on 7/11/12.
 //  Copyright (c) 2012 Kernel Labs Inc. All rights reserved.
