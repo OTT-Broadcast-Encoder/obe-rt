@@ -225,9 +225,13 @@ static x264_picture_t *x264_picture_copy(x264_picture_t *pic)
 
         }
 
+	/* TODO: We don't clone SEI, yet. */
+	p->extra_sei.num_payloads = 0;
+	p->extra_sei.payloads = NULL;
+	p->extra_sei.sei_free = NULL;
+
 	return p;
 }
-#endif
 
 static void _monitor_bps(obe_vid_enc_params_t *enc_params, int lengthBytes)
 {
