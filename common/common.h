@@ -41,6 +41,11 @@
 #include <sys/time.h>
 #include <time.h>
 #include "obe.h"
+#include "stream_formats.h"
+#include <common/queue.h>
+
+/* Enable some realtime debugging commands */
+#define DO_SET_VARIABLE 1
 
 #define MAX_DEVICES 1
 #define MAX_STREAMS 40
@@ -124,7 +129,7 @@ typedef struct
     int audio_type;
 
     /** Video **/
-    int csp;
+    enum AVPixelFormat csp;
     int width;
     int height;
     int sar_num;
@@ -171,9 +176,7 @@ typedef struct
 
 typedef struct
 {
-    int device_id;
     int device_type;
-    char *location;
 
     obe_input_t user_opts;
 
@@ -187,17 +190,14 @@ typedef struct
     pthread_t device_thread;
 
     int num_input_streams;
-    obe_int_input_stream_t *streams[MAX_STREAMS];
-
-    int num_output_streams;
-    obe_output_stream_t *output_streams;
+    obe_int_input_stream_t *input_streams[MAX_STREAMS];
 
     obe_input_stream_t *probed_streams;
 } obe_device_t;
 
 typedef struct
 {
-    int     csp;       /* colorspace */
+    enum AVPixelFormat csp;       /* colorspace */
     int     width;     /* width of the picture */
     int     height;    /* height of the picture */
     int     planes;    /* number of planes */
@@ -319,23 +319,25 @@ typedef struct
     int drop_frame;
 } obe_timecode_t;
 
-typedef struct
-{
-    char name[128];
-    void **queue;
-    int  size;
-
-    pthread_mutex_t mutex;
-    pthread_cond_t  in_cv;
-    pthread_cond_t  out_cv;
-} obe_queue_t;
-
 enum avfm_frame_type_e { AVFM_AUDIO_A52, AVFM_VIDEO, AVFM_AUDIO_PCM };
 struct avfm_s {
     enum avfm_frame_type_e frame_type; /* This this matching frame belong inside an audio or video frame? */
     int64_t audio_pts; /* 27MHz */
     int64_t audio_pts_corrected; /* 27MHz */
     int64_t video_pts; /* 27MHz */
+    struct timeval hw_received_tv; /* Wall clock time the frame was received from the hardware. */
+    int64_t av_drift; /* 27MHz - Calculation of audio_pts minus video_pts */
+
+    int64_t video_interval_clk; /* 27MHz. Time between two consecutive video frames. Eg 450450 for 60fps */
+
+    /* Bit - desc.
+     * ALL BITS DEFAULT TO ZERO during avfm_init(). Hardware core is expected to set accordingly. 
+     *   0   Blackmagic specific. Is the port operating in Full (0) or Half duplex mode (1).
+     */
+#define AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX (0 << 0)
+#define AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_FULL (0 << AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX)
+#define AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF (1 << AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX)
+    uint64_t hw_status_flags; /* Bitmask flags indicating hardware status, sample status or such. */
 };
 
 __inline__ void avfm_init(struct avfm_s *s, enum avfm_frame_type_e frame_type) {
@@ -343,28 +345,68 @@ __inline__ void avfm_init(struct avfm_s *s, enum avfm_frame_type_e frame_type) {
     s->audio_pts = -1;
     s->audio_pts_corrected = -1;
     s->video_pts = -1;
+    s->hw_received_tv.tv_sec = 0;
+    s->hw_received_tv.tv_usec = 0;
+    s->av_drift = 0;
+    s->hw_status_flags =  0;
 };
 
 __inline__ void avfm_set_pts_video(struct avfm_s *s, int64_t pts) {
     s->video_pts = pts;
+    s->av_drift = s->audio_pts - s->video_pts;
 }
 
 __inline__ void avfm_set_pts_audio(struct avfm_s *s, int64_t pts) {
     s->audio_pts = pts;
+    s->av_drift = s->audio_pts - s->video_pts;
+}
+
+__inline__ void avfm_set_video_interval_clk(struct avfm_s *s, int64_t clk) {
+    s->video_interval_clk = clk;
+}
+
+__inline__ int64_t avfm_get_video_interval_clk(struct avfm_s *s) {
+    return s->video_interval_clk;
 }
 
 __inline__ void avfm_set_pts_audio_corrected(struct avfm_s *s, int64_t pts) {
     s->audio_pts_corrected = pts;
 }
 
+__inline__ void avfm_set_hw_received_time(struct avfm_s *s) {
+    gettimeofday(&s->hw_received_tv, NULL);
+}
+
+__inline__ unsigned int avfm_get_hw_received_tv_sec(struct avfm_s *s) {
+    return (unsigned int)s->hw_received_tv.tv_sec;
+}
+
+__inline__ int64_t avfm_get_av_drift(struct avfm_s *s) {
+    return s->av_drift;
+}
+
+__inline__ unsigned int avfm_get_hw_received_tv_usec(struct avfm_s *s) {
+    return (unsigned int)s->hw_received_tv.tv_usec;
+}
+
+__inline__ uint64_t avfm_get_hw_status_mask(struct avfm_s *s, uint64_t mask) {
+    return s->hw_status_flags & mask;
+}
+
+__inline__ void avfm_set_hw_status_mask(struct avfm_s *s, uint64_t mask) {
+    s->hw_status_flags |= mask;
+}
+
 __inline__ void avfm_dump(struct avfm_s *s) {
-    printf("%s, a:%14" PRIi64 ", v:%14" PRIi64 ", ac:%14" PRIi64 ", diffabs:%" PRIi64 "\n",
+    printf("%s, a:%14" PRIi64 ", v:%14" PRIi64 ", ac:%14" PRIi64 ", diffabs:%" PRIi64 " -- hw_tv: %d.%d\n",
         s->frame_type == AVFM_AUDIO_A52 ? "A52" :
         s->frame_type == AVFM_AUDIO_PCM ? "PCM" :
         s->frame_type == AVFM_VIDEO     ? "  V" : "U",
         s->audio_pts, s->video_pts,
         s->audio_pts_corrected,
-        (int64_t)abs(s->audio_pts - s->video_pts));
+        (int64_t)abs(s->audio_pts - s->video_pts),
+        (unsigned int)s->hw_received_tv.tv_sec,
+        (unsigned int)s->hw_received_tv.tv_usec);
 }
 
 typedef struct
@@ -432,6 +474,8 @@ typedef struct
     int output_stream_id;
     int is_ready;
     int is_video;
+
+    enum stream_formats_e priv_stream_format;
 
     pthread_t encoder_thread;
     obe_queue_t queue;
@@ -525,7 +569,7 @@ struct obe_t
 
     /* Streams */
     int num_output_streams;
-    obe_output_stream_t *output_streams;
+    obe_output_stream_t *priv_output_streams;
 
     /** Individual Threads */
     /* Smoothing (video) */
@@ -567,9 +611,18 @@ struct obe_t
     obe_queue_t mux_smoothing_queue;
 
     /* Statistics and Monitoring */
+    int cea708_missing_count;
 
     /* Misc configurable system parameters */
     unsigned int probe_time_seconds;
+
+    /* Runtime statistics */
+    void *runtime_statistics;
+
+    /* Version information */
+    uint8_t sw_major;
+    uint8_t sw_minor;
+    uint8_t sw_patch;
 };
 
 typedef struct
@@ -592,6 +645,9 @@ void destroy_device( obe_device_t *device );
 obe_raw_frame_t *new_raw_frame( void );
 void destroy_raw_frame( obe_raw_frame_t *raw_frame );
 obe_coded_frame_t *new_coded_frame( int stream_id, int len );
+size_t coded_frame_serializer_write(FILE *fh, obe_coded_frame_t *cf);
+size_t coded_frame_serializer_read(FILE *fh, obe_coded_frame_t **f);
+void coded_frame_print(obe_coded_frame_t *cf);
 void destroy_coded_frame( obe_coded_frame_t *coded_frame );
 void obe_release_video_data( void *ptr );
 void obe_release_audio_data( void *ptr );
@@ -602,11 +658,6 @@ void destroy_muxed_data( obe_muxed_data_t *muxed_data );
 
 void add_device( obe_t *h, obe_device_t *device );
 
-int add_to_queue( obe_queue_t *queue, void *item );
-int remove_from_queue( obe_queue_t *queue );
-int remove_from_queue_without_lock(obe_queue_t *queue);
-int remove_item_from_queue( obe_queue_t *queue, void *item );
-
 int add_to_filter_queue( obe_t *h, obe_raw_frame_t *raw_frame );
 int add_to_encode_queue( obe_t *h, obe_raw_frame_t *raw_frame, int output_stream_id );
 int remove_early_frames( obe_t *h, int64_t pts );
@@ -615,8 +666,28 @@ int remove_from_output_queue( obe_t *h );
 
 obe_int_input_stream_t *get_input_stream( obe_t *h, int input_stream_id );
 obe_encoder_t *get_encoder( obe_t *h, int stream_id );
-obe_output_stream_t *get_output_stream( obe_t *h, int stream_id );
+obe_output_stream_t *get_output_stream_by_id( obe_t *h, int stream_id);
 obe_output_stream_t *get_output_stream_by_format( obe_t *h, int format );
+
+__inline__ static obe_output_stream_t *obe_core_get_output_stream_by_index(struct obe_t *s, int nr)
+{
+	return &s->priv_output_streams[nr];
+}
+void obe_core_dump_output_stream(obe_output_stream_t *s, int index);
+
+__inline__ enum stream_formats_e obe_core_encoder_get_stream_format(obe_encoder_t *e)
+{
+	return e->priv_stream_format;
+}
+
+__inline__ static obe_encoder_t *obe_core_encoder_alloc(enum stream_formats_e stream_format)
+{
+	obe_encoder_t *e = (obe_encoder_t *)calloc(1, sizeof(*e));
+	e->priv_stream_format = stream_format;
+	printf("%s() Created encoder for stream_format id %2d (%s)\n",
+		__func__, stream_format, stream_format_name(stream_format));
+	return e;
+}
 
 int64_t get_wallclock_in_mpeg_ticks( void );
 void sleep_mpeg_ticks( int64_t i_delay );
@@ -625,5 +696,24 @@ int64_t get_input_clock_in_mpeg_ticks( obe_t *h );
 void sleep_input_clock( obe_t *h, int64_t i_delay );
 
 int get_non_display_location( int type );
+void obe_raw_frame_printf(obe_raw_frame_t *rf);
+obe_raw_frame_t *obe_raw_frame_copy(obe_raw_frame_t *frame);
+void obe_image_save(obe_image_t *src);
+
+#if 0
+void obe_image_copy(obe_image_t *dst, obe_image_t *src);
+int obe_image_compare(obe_image_t *dst, obe_image_t *src);
+void obe_raw_frame_free(obe_raw_frame_t *frame);
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int obe_getTimestamp(char *s, time_t *when);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif

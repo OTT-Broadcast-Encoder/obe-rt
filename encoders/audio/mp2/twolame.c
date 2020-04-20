@@ -25,13 +25,34 @@
 #include "encoders/audio/audio.h"
 #include <twolame.h>
 #include <libavutil/fifo.h>
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 
+//
+struct historical_int64_s
+{
+	int64_t current;
+	int64_t last;
+	int64_t diff;
+};
+
+__inline__ void historical_int64_init(struct historical_int64_s *s) { memset(s, 0, sizeof(*s)); }
+__inline__ void historical_int64_set(struct historical_int64_s *s, int64_t value) { s->last = s->current; s->current = value; s->diff = s->current - s->last; }
+__inline__ int64_t historical_int64_get_diff(struct historical_int64_s *s) { return s->diff; }
+__inline__ void historical_int64_printf(struct historical_int64_s *s, char *prefix)
+{
+	printf("%s: curr: %" PRIi64 " last: %" PRIi64 " diff: %" PRIi64 "\n",
+		prefix, s->current, s->last, s->diff);
+}
+//
+
+#define REPORT_AUDIO_DISCONTINUITIES 0
 #define MP2_AUDIO_BUFFER_SIZE 50000
 
 #define LOCAL_DEBUG 0
+
+#define MODULE "[mp2]: "
 
 static void *start_encoder_mp2( void *ptr )
 {
@@ -45,6 +66,32 @@ static void *start_encoder_mp2( void *ptr )
     obe_output_stream_t *stream = enc_params->stream;
     obe_raw_frame_t *raw_frame;
     obe_coded_frame_t *coded_frame;
+    int64_t ptsfixup = 0;
+
+    struct avfm_s avfm;
+    int64_t cur_pts = -1, pts_increment = 0;
+
+
+    /* Interesting 10.8.5 quirk related to the audio clock occasionally being ahead
+     * of the video clock. This translates into 'too much' data in the audio fifo.
+     * Because we previously used to put the same timestamp on multiple packets, or overly
+     * adjust the PTS, things break.
+     * The right approach is to accurately track the timestamp based on the head of the fifo,
+     * so enable this feature by default.
+     * If this is deemed risky, we could always enable it for 480i and 576i only..... but
+     * I think we should go ahead, fully retest and just enable this better time calculation
+     * mechanism.
+     */
+    enc_params->use_fifo_head_timing = 1;
+
+    struct historical_int64_s rf_pts;
+    historical_int64_init(&rf_pts);
+
+    struct historical_int64_s avfm_pts;
+    historical_int64_init(&avfm_pts);
+
+    struct historical_int64_s cf_pts;
+    historical_int64_init(&cf_pts);
 
 #if LOCAL_DEBUG
     printf("%s() output_stream_id = %d\n", __func__, encoder->output_stream_id);
@@ -54,8 +101,14 @@ static void *start_encoder_mp2( void *ptr )
     int output_size, frame_size, linesize; /* Linesize in libavresample terminology is the entire buffer size for packed formats */
     float *audio_buf = NULL;
     uint8_t *output_buf = NULL;
-    AVAudioResampleContext *avr = NULL;
+    struct SwrContext *avr = NULL;
     AVFifoBuffer *fifo = NULL;
+
+#if REPORT_AUDIO_DISCONTINUITIES
+    int64_t lastOutputFramePTS = 0; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
+#endif
+
+    pts_increment = 648000 * enc_params->frames_per_pes; /* 24ms, the codec frame size * number of frames per pes. */
 
     /* Lock the mutex until we verify parameters */
     pthread_mutex_lock( &encoder->queue.mutex );
@@ -95,8 +148,8 @@ static void *start_encoder_mp2( void *ptr )
         goto end;
     }
 
-    avr = avresample_alloc_context();
-    if( !avr )
+    avr = swr_alloc();
+    if (!avr)
     {
         fprintf( stderr, "Malloc failed\n" );
         goto end;
@@ -107,9 +160,10 @@ static void *start_encoder_mp2( void *ptr )
     av_opt_set_int( avr, "in_sample_rate",      enc_params->sample_rate, 0 );
     av_opt_set_int( avr, "out_channel_layout",  stream->channel_layout, 0 );
     av_opt_set_int( avr, "out_sample_fmt",      AV_SAMPLE_FMT_FLT,   0 );
-    av_opt_set_int( avr, "dither_method",       AV_RESAMPLE_DITHER_TRIANGULAR_NS, 0 );
+    av_opt_set_int( avr, "dither_method",       SWR_DITHER_TRIANGULAR, 0 );
+    av_opt_set_int( avr, "out_sample_rate",     enc_params->sample_rate, 0 );
 
-    if( avresample_open( avr ) < 0 )
+    if (swr_init(avr) < 0)
     {
         fprintf( stderr, "Could not open AVResample\n" );
         goto end;
@@ -137,7 +191,36 @@ static void *start_encoder_mp2( void *ptr )
         }
 
         raw_frame = encoder->queue.queue[0];
+        if (raw_frame->avfm.audio_pts - avfm.audio_pts >= (2 * 648000)) {
+            cur_pts = -1; /* Reset the audio timebase from the hardware. */
+        }
+        memcpy(&avfm, &raw_frame->avfm, sizeof(avfm));
+
+        historical_int64_set(&avfm_pts, avfm.audio_pts);
+        //historical_int64_printf(&avfm_pts, "avfm_pts");
+
         pthread_mutex_unlock( &encoder->queue.mutex );
+
+        if (cur_pts == -1) {
+            /* Drain any fifos and zero our processing latency, the clock has been
+             * reset so we're rebasing time from the audio hardward clock.
+             */
+            cur_pts = avfm.audio_pts;
+            ptsfixup = 0;
+
+            printf(MODULE "strm %d audio pts reset to %" PRIi64 "\n",
+                encoder->output_stream_id,
+                cur_pts);
+
+            /* Drain the conversion fifos else we induce drift. */
+            av_fifo_drain(fifo, av_fifo_size(fifo));
+            swr_drop_output(avr, 65535);
+
+            output_size = twolame_encode_flush(tl_opts, output_buf, MP2_AUDIO_BUFFER_SIZE);
+        }
+
+        historical_int64_set(&rf_pts, raw_frame->pts);
+        //historical_int64_printf(&rf_pts, "  rf_pts");
 
 #if LOCAL_DEBUG
         /* Send any audio to the AC3 frame slicer.
@@ -162,14 +245,12 @@ static void *start_encoder_mp2( void *ptr )
             goto end;
         }
 
-        if( avresample_convert( avr, NULL, 0, raw_frame->audio_frame.num_samples, raw_frame->audio_frame.audio_data,
-                                raw_frame->audio_frame.linesize, raw_frame->audio_frame.num_samples ) < 0 )
+        if (swr_convert(avr, (uint8_t **)&audio_buf, raw_frame->audio_frame.num_samples, (const uint8_t **)raw_frame->audio_frame.audio_data,
+                                raw_frame->audio_frame.num_samples) < 0)
         {
             syslog( LOG_ERR, "[twolame] Sample format conversion failed\n" );
             break;
         }
-
-        avresample_read( avr, (uint8_t**)&audio_buf, avresample_available( avr ) );
 
         output_size = twolame_encode_buffer_float32_interleaved( tl_opts, audio_buf, raw_frame->audio_frame.num_samples, output_buf, MP2_AUDIO_BUFFER_SIZE );
 
@@ -182,8 +263,6 @@ static void *start_encoder_mp2( void *ptr )
         free( audio_buf );
         audio_buf = NULL;
 
-        struct avfm_s avfm;
-        memcpy(&avfm, &raw_frame->avfm, sizeof(avfm));
 
         raw_frame->release_data( raw_frame );
         raw_frame->release_frame( raw_frame );
@@ -197,7 +276,6 @@ static void *start_encoder_mp2( void *ptr )
 
         av_fifo_generic_write( fifo, output_buf, output_size, NULL );
 
-        int framesProcessed = 0;
         while( av_fifo_size( fifo ) >= frame_size )
         {
             coded_frame = new_coded_frame( encoder->output_stream_id, frame_size );
@@ -209,43 +287,76 @@ static void *start_encoder_mp2( void *ptr )
             av_fifo_generic_read( fifo, coded_frame->data, frame_size, NULL );
             memcpy(&coded_frame->avfm, &avfm, sizeof(avfm));
 
-            /* In low latency configurations where the framerate (33ms) is larger than the audio interval (24ms),
-             * during audio data wrapping conditions we have to prepare two audio output frames for a single video frame.
-             * We cannot output two audio frames with the same PTS, we MUST adjust the audio output rate for the
-             * second audio frame. So, for low latency, for second frames, bump the audio pts by 24ms.
-             * The most obvious case for this fix is anything with a video framerate of > 24ms. IE. this fix
-             * is necessary for in i59.94 i50 30p, 24p etc.
-             * In no cases should we ever see more than two audio frames per video frame,
-             * for this to be untrue, a video frame would have to be atleast 48ms, which is less and 20.8fps.
-             * OBE does not support frames as low as 20.8fps.
+            /* 648000 27MHz ticks equates to 24ms.
+             * 24ms is the smallest amount of time this audio codec and eject as compressed data.
+             * Hence, lowest latency means we get 24ms PES frames.
+             * Hence, normal latency is N * pes frames.
+             * OBE itself determines what N should be in various latency modes.
              */
-            framesProcessed++;
-            if (h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
-                if (framesProcessed > 1 && enc_params->frames_per_pes == 1) {
-                    coded_frame->avfm.audio_pts += 648000;
+            coded_frame->pts = cur_pts;
+
+            /* This code originated from the aac implementation in lavc.c
+             * The comments related to how and why should be maintained there.
+             * Highly specific to 29.97 for the time being.
+             */
+            if (ptsfixup == 0 &&
+                avfm_get_hw_status_mask(&avfm, AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF) &&
+                avfm_get_video_interval_clk(&avfm) == 900900) {
+
+                /* Fixup the clock for 10.11.2, due to an audio clocking bug. */
+                int64_t drift = avfm_get_av_drift(&avfm);
+                int64_t video_interval_clk = avfm_get_video_interval_clk(&avfm);
+                int64_t drifted_frames = (drift / video_interval_clk);
+
+                ptsfixup = drift % video_interval_clk;
+
+                if (drifted_frames == 0) {
+                    if (ptsfixup < -181000) {
+                        drifted_frames++;
+                    } else
+                    if (ptsfixup > (video_interval_clk - 181000)) {
+                        drifted_frames--;
+                    }
+                } else {
+                    if (drift > 0) {
+                        drifted_frames = 0;
+                        if (ptsfixup > (video_interval_clk - 181000))
+                            drifted_frames--;
+                    } else {
+                        drifted_frames *= -1;
+                    }
+
                 }
+                ptsfixup += (drifted_frames * video_interval_clk);
             }
 
-            /* In  low latency mode, obe configures a single MP2 frame in every pes (enc_params->frames_per_pes), with a PTS interval of 24ms.
-             * In norm latency mode, obe configures        N MP2 frames in every pes, with a PTS interval of N*24ms.
-             * Typically, we see 96MS PTS increments in the transport packets, buts its equally valid to see 24ms.
-             * Depending on what latency mode we're in, we need to round to the nearest '24ms or N*' interval.
-             * Output PTS packets (27MHz) are rounded to nearest 24ms or N*24ms (typically 96ms for norm lat) interval on a 27MHz clock.
-             */
-            /* The outgoing PTS is rounded and based on recent h/w clock, so massive leaps in
-             * the h/w clock are automatically compensated for.
-             * 648000 represents number of ticks in 27Mhz clock for 24ms, the smallest MP2 framesize we can deliver.
-             */
-            int64_t rounded_pts = av_rescale(coded_frame->avfm.audio_pts, OBE_CLOCK, 648000 * enc_params->frames_per_pes);
-            rounded_pts /= OBE_CLOCK;
-            rounded_pts *= (648000 * enc_params->frames_per_pes);
-            coded_frame->pts = rounded_pts;
-            coded_frame->pts += ((int64_t)stream->audio_offset_ms * 27000);
+            coded_frame->pts += (ptsfixup * -1);
 
+            /* Testing shows 720p59.94 is 16ms ahead of where it should be. */
+            if (avfm_get_video_interval_clk(&avfm) == 450450) {
+                coded_frame->pts -=  (16LL * 27000LL);
+                coded_frame->pts -=  (67LL * 270LL);
+            }
+            coded_frame->pts +=  ((int64_t)stream->audio_offset_ms * 27000LL);
             coded_frame->random_access = 1; /* Every frame output is a random access point */
             coded_frame->type = CF_AUDIO;
 
+            historical_int64_set(&cf_pts, coded_frame->pts);
+            //historical_int64_printf(&cf_pts, "  cf_pts");
+
+#if REPORT_AUDIO_DISCONTINUITIES
+            if (lastOutputFramePTS + (648000 * enc_params->frames_per_pes) != coded_frame->pts) {
+                printf(MODULE "Output PTS discontinuity\n\tShould be %" PRIi64 " was %" PRIi64 " diff %9" PRIi64 " frames_per_pes %d\n",
+                    lastOutputFramePTS + (648000 * enc_params->frames_per_pes),
+                    coded_frame->pts,
+                    (lastOutputFramePTS + (648000 * enc_params->frames_per_pes)) - coded_frame->pts,
+                    enc_params->frames_per_pes);
+            }
+            lastOutputFramePTS = coded_frame->pts;
+#endif
             add_to_queue( &h->mux_queue, coded_frame );
+
+            cur_pts += pts_increment;
         }
     }
 
@@ -257,7 +368,7 @@ end:
         free( audio_buf );
 
     if( avr )
-        avresample_free( &avr );
+        swr_free( &avr );
 
     if( fifo )
         av_fifo_free( fifo );

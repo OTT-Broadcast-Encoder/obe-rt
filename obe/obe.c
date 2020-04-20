@@ -106,11 +106,9 @@ obe_device_t *new_device( void )
 void destroy_device( obe_device_t *device )
 {
     for( int i = 0; i < device->num_input_streams; i++ )
-        free( device->streams[i] );
+        free( device->input_streams[i] );
     if( device->probed_streams )
         free( device->probed_streams );
-    if( device->location )
-        free( device->location );
     free( device );
 }
 
@@ -152,6 +150,99 @@ void destroy_coded_frame( obe_coded_frame_t *coded_frame )
 {
     free( coded_frame->data );
     free( coded_frame );
+}
+
+void coded_frame_print(obe_coded_frame_t *cf)
+{
+	double v = (double)cf->len / (cf->cpb_final_arrival_time - cf->cpb_initial_arrival_time);
+	printf("strm %d  type %c  len %7d  rpts %13" PRIi64 "  rdts %13" PRIi64 "  iat %13" PRIi64 "  fat %13" PRIi64 " (%11.09f)  at %13" PRIi64 "  pr %d  ra %d -- ",
+		cf->output_stream_id,
+		cf->type == CF_VIDEO ? 'V' :
+		cf->type == CF_AUDIO ? 'A' : 'U',
+		cf->len,
+		cf->real_pts,
+		cf->real_dts,
+		cf->cpb_initial_arrival_time,
+		cf->cpb_final_arrival_time,
+		v,
+		cf->arrival_time,
+		cf->priority,
+		cf->random_access);
+
+	for (int i = 0; i < 16; i++)
+		printf("%02x ", cf->data[i]);
+
+	printf("\n");
+
+#if 0
+static int64_t iat_last = 0;
+int64_t iat_interval = cf->cpb_initial_arrival_time - iat_last;
+iat_last = cf->cpb_initial_arrival_time;
+
+static int64_t fat_last = 0;
+int64_t fat_interval = cf->cpb_final_arrival_time - fat_last;
+fat_last = cf->cpb_final_arrival_time;
+
+static int64_t pts_last = 0;
+int64_t pts_interval = cf->real_pts - pts_last;
+pts_last = cf->real_pts;
+
+static int64_t dts_last = 0;
+int64_t dts_interval = cf->real_dts - dts_last;
+dts_last = cf->real_dts;
+	if (cf->cpb_final_arrival_time > cf->real_pts) {
+		printf("fat > pts, should never happen\n");
+	}
+	if (cf->cpb_initial_arrival_time > cf->real_pts) {
+		printf("iat > pts, should never happen\n");
+	}
+
+	printf("                                  %13" PRIi64 "       %13" PRIi64 "      %13" PRIi64 "      %13" PRIi64 " --  dts minus iat %13" PRIi64 "\n",
+		pts_interval,
+		dts_interval,
+		iat_interval,
+		fat_interval,
+		cf->real_dts - cf->cpb_initial_arrival_time);
+#endif
+}
+
+size_t coded_frame_serializer_read(FILE *fh, obe_coded_frame_t **f)
+{
+	uint32_t flen = sizeof(*f);
+
+	size_t rlen = 0;
+	rlen += fread(&flen, 1, sizeof(flen), fh);
+	if (flen != sizeof(obe_coded_frame_t))
+		return 0;
+
+	obe_coded_frame_t *cf = malloc(sizeof(*cf));
+	if (!cf)
+		return 0;
+
+	rlen += fread(cf, 1, sizeof(*cf), fh);
+
+	cf->data = malloc(cf->len);
+	if (!cf->data) {
+		free(cf);
+		return 0;
+	}
+
+	rlen += fread(cf->data, 1, cf->len, fh);
+
+	*f = cf;
+
+	return rlen;
+}
+
+size_t coded_frame_serializer_write(FILE *fh, obe_coded_frame_t *cf)
+{
+	uint32_t flen = sizeof(*cf);
+
+	size_t wlen = 0;
+	wlen += fwrite(&flen, 1, sizeof(flen), fh);
+	wlen += fwrite(cf, 1, sizeof(*cf), fh);
+	wlen += fwrite(cf->data, 1, cf->len, fh);
+	return wlen;
 }
 
 void obe_release_video_data( void *ptr )
@@ -209,112 +300,6 @@ void add_device( obe_t *h, obe_device_t *device )
     pthread_mutex_lock( &h->device_list_mutex );
     h->devices[h->num_devices++] = device;
     pthread_mutex_unlock( &h->device_list_mutex );
-}
-
-/** Add/Remove from queues */
-void obe_init_queue(obe_queue_t *queue, char *name)
-{
-    pthread_mutex_init( &queue->mutex, NULL );
-    pthread_cond_init( &queue->in_cv, NULL );
-    pthread_cond_init( &queue->out_cv, NULL );
-    strcpy(&queue->name[0], name);
-}
-
-void obe_destroy_queue( obe_queue_t *queue )
-{
-    free( queue->queue );
-
-    pthread_mutex_unlock( &queue->mutex );
-    pthread_mutex_destroy( &queue->mutex );
-    pthread_cond_destroy( &queue->in_cv );
-    pthread_cond_destroy( &queue->out_cv );
-}
-
-int add_to_queue( obe_queue_t *queue, void *item )
-{
-    void **tmp;
-
-    pthread_mutex_lock( &queue->mutex );
-    tmp = realloc( queue->queue, sizeof(*queue->queue) * (queue->size+1) );
-    if( !tmp )
-    {
-        syslog( LOG_ERR, "Malloc failed\n" );
-        return -1;
-    }
-    queue->queue = tmp;
-    queue->queue[queue->size++] = item;
-
-    pthread_cond_signal( &queue->in_cv );
-    pthread_mutex_unlock( &queue->mutex );
-
-    return 0;
-}
-
-int remove_from_queue_without_lock(obe_queue_t *queue)
-{
-    void **tmp;
-
-    if (queue->size > 1)
-        memmove(&queue->queue[0], &queue->queue[1], sizeof(*queue->queue) * (queue->size-1));
-    tmp = realloc(queue->queue, sizeof(*queue->queue) * (queue->size-1));
-    queue->size--;
-    if (!tmp && queue->size) {
-        syslog(LOG_ERR, "Malloc failed\n");
-        return -1;
-    }
-    queue->queue = tmp;
-
-    return 0;
-}
-
-int remove_from_queue( obe_queue_t *queue )
-{
-    void **tmp;
-
-    pthread_mutex_lock( &queue->mutex );
-    if( queue->size > 1 )
-        memmove( &queue->queue[0], &queue->queue[1], sizeof(*queue->queue) * (queue->size-1) );
-    tmp = realloc( queue->queue, sizeof(*queue->queue) * (queue->size-1) );
-    queue->size--;
-    if( !tmp && queue->size )
-    {
-        syslog( LOG_ERR, "Malloc failed\n" );
-        return -1;
-    }
-    queue->queue = tmp;
-
-    pthread_cond_signal( &queue->out_cv );
-    pthread_mutex_unlock( &queue->mutex );
-
-    return 0;
-}
-
-int remove_item_from_queue( obe_queue_t *queue, void *item )
-{
-    void **tmp;
-
-    pthread_mutex_lock( &queue->mutex );
-    for( int i = 0; i < queue->size; i++ )
-    {
-        if( queue->queue[i] == item )
-        {
-            memmove( &queue->queue[i], &queue->queue[i+1], sizeof(*queue->queue) * (queue->size-1-i) );
-            tmp = realloc( queue->queue, sizeof(*queue->queue) * (queue->size-1) );
-            queue->size--;
-            if( !tmp && queue->size )
-            {
-                syslog( LOG_ERR, "Malloc failed\n" );
-                return -1;
-            }
-            queue->queue = tmp;
-            break;
-        }
-    }
-
-    pthread_cond_signal( &queue->out_cv );
-    pthread_mutex_unlock( &queue->mutex );
-
-    return 0;
 }
 
 /* Filter queue */
@@ -481,8 +466,8 @@ obe_int_input_stream_t *get_input_stream( obe_t *h, int input_stream_id )
 {
     for( int j = 0; j < h->devices[0]->num_input_streams; j++ )
     {
-        if( h->devices[0]->streams[j]->input_stream_id == input_stream_id )
-            return h->devices[0]->streams[j];
+        if( h->devices[0]->input_streams[j]->input_stream_id == input_stream_id )
+            return h->devices[0]->input_streams[j];
     }
     return NULL;
 }
@@ -499,12 +484,13 @@ obe_encoder_t *get_encoder( obe_t *h, int output_stream_id )
 }
 
 /* Output */
-obe_output_stream_t *get_output_stream( obe_t *h, int output_stream_id )
+obe_output_stream_t *get_output_stream_by_id(obe_t *h, int output_stream_id)
 {
     for( int i = 0; i < h->num_output_streams; i++ )
     {
-        if( h->output_streams[i].output_stream_id == output_stream_id )
-            return &h->output_streams[i];
+        obe_output_stream_t *e = obe_core_get_output_stream_by_index(h, i);
+        if (e->output_stream_id == output_stream_id)
+            return e;
     }
     return NULL;
 }
@@ -513,8 +499,9 @@ obe_output_stream_t *get_output_stream_by_format( obe_t *h, int format )
 {
     for( int i = 0; i < h->num_output_streams; i++ )
     {
-        if( h->output_streams[i].stream_format == format )
-            return &h->output_streams[i];
+        obe_output_stream_t *e = obe_core_get_output_stream_by_index(h, i);
+        if (e->stream_format == format)
+            return e;
     }
     return NULL;
 }
@@ -544,14 +531,21 @@ obe_t *obe_setup(const char *syslogSuffix)
     }
     h->probe_time_seconds = MAX_PROBE_TIME;
 
+    /* MMM Convert GIT string into a major, minor, patch */
+    h->sw_major = VERSION_MAJOR;
+    h->sw_minor = VERSION_MINOR;
+    h->sw_patch = VERSION_PATCH;
+
     pthread_mutex_init( &h->device_list_mutex, NULL );
 
+#if 0
     if( av_lockmgr_register( obe_lavc_lockmgr ) < 0 )
     {
         fprintf( stderr, "Could not register lavc lock manager\n" );
         free( h );
         return NULL;
     }
+#endif
 
     return h;
 }
@@ -689,6 +683,16 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if( input_device->input_type == INPUT_DEVICE_DECKLINK )
         input = decklink_input;
 #endif
+#if HAVE_BLUEDRIVER_P_H
+    else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
+        input = bluefish_input;
+#endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (input_device->input_type == INPUT_DEVICE_NDI)
+        input = ndi_input;
+#endif
+    else if (input_device->input_type == INPUT_DEVICE_V210)
+        input = v210_input;
     else if( input_device->input_type == INPUT_DEVICE_LINSYS_SDI )
         input = linsys_sdi_input;
     else if (input_device->input_type == INPUT_DEVICE_V4L2)
@@ -742,6 +746,16 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
         printf( "Probing device: Linsys card %i. ", input_device->card_idx );
     else if (input_device->input_type == INPUT_DEVICE_V4L2)
         printf( "Probing device: V4L2 card %i. ", input_device->card_idx);
+#if HAVE_BLUEDRIVER_P_H
+    else if (input_device->input_type == INPUT_DEVICE_BLUEFISH)
+        printf( "Probing device: BlueFish card %i. ", input_device->card_idx);
+#endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (input_device->input_type == INPUT_DEVICE_NDI)
+        printf( "Probing device: NDI input %i. ", input_device->card_idx);
+#endif
+    else if (input_device->input_type == INPUT_DEVICE_V210)
+        printf( "Probing device: YUV card %i. ", input_device->card_idx);
     else
         printf( "Probing device: Decklink card %i. ", input_device->card_idx );
 
@@ -783,7 +797,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     /* Clone all of the probed input parameters into OBE's source abstraction. */
     for( i = 0; i < program->num_streams; i++ )
     {
-        stream_in = h->devices[h->num_devices-1]->streams[i];
+        stream_in = h->devices[h->num_devices-1]->input_streams[i];
         stream_out = &program->streams[i];
 
         stream_out->input_stream_id = stream_in->input_stream_id;
@@ -894,6 +908,13 @@ int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t
         param->vui.i_transfer  = 6; // BT.601-6
         param->vui.i_colmatrix = 6; // BT.601-6
         param->i_keyint_max = param->i_fps_num / 1000;
+    } else if( ( param->i_fps_num == 30 || param->i_fps_num == 60 ) && param->i_fps_den == 1 )
+    {
+        param->vui.i_vidformat = 2; // NTSC
+        param->vui.i_colorprim = 6; // BT.601-6
+        param->vui.i_transfer  = 6; // BT.601-6
+        param->vui.i_colmatrix = 6; // BT.601-6
+        param->i_keyint_max = param->i_fps_num == 60 ? 59 : 29;
     }
     else
     {
@@ -952,13 +973,16 @@ int obe_setup_streams( obe_t *h, obe_output_stream_t *output_streams, int num_st
     // TODO sanity check the inputs
 
     h->num_output_streams = num_streams;
-    h->output_streams = malloc( num_streams * sizeof(*h->output_streams) );
-    if( !h->output_streams )
+    h->priv_output_streams = malloc(num_streams * sizeof(*h->priv_output_streams));
+    if (!h->priv_output_streams)
     {
         fprintf( stderr, "Malloc failed \n" );
         return -1;
     }
-    memcpy( h->output_streams, output_streams, num_streams * sizeof(*h->output_streams) );
+    memcpy(h->priv_output_streams, output_streams, num_streams * sizeof(*h->priv_output_streams));
+
+    for (int i = 0; i < num_streams; i++)
+        obe_core_dump_output_stream(&output_streams[i], i);
 
     // TODO sort out VBI
 
@@ -1038,6 +1062,9 @@ int obe_setup_output( obe_t *h, obe_output_opts_t *output_opts )
     return 0;
 }
 
+/* LOS frame injection. */
+extern int g_decklink_inject_frame_enable;
+
 int obe_start( obe_t *h )
 {
     obe_int_input_stream_t  *input_stream;
@@ -1074,6 +1101,16 @@ int obe_start( obe_t *h )
     else if( h->devices[0]->device_type == INPUT_DEVICE_DECKLINK )
         input = decklink_input;
 #endif
+#if HAVE_BLUEDRIVER_P_H
+    else if( h->devices[0]->device_type == INPUT_DEVICE_BLUEFISH )
+        input = bluefish_input;
+#endif
+#if HAVE_PROCESSING_NDI_LIB_H
+    else if (h->devices[0]->device_type == INPUT_DEVICE_NDI)
+        input = ndi_input;
+#endif
+    else if( h->devices[0]->device_type == INPUT_DEVICE_V210)
+        input = v210_input;
     else if( h->devices[0]->device_type == INPUT_DEVICE_LINSYS_SDI )
         input = linsys_sdi_input;
     else if (h->devices[0]->device_type == INPUT_DEVICE_V4L2)
@@ -1090,7 +1127,19 @@ int obe_start( obe_t *h )
         char n[64];
         sprintf(n, "outputs #%d", i);
         obe_init_queue( &h->outputs[i]->queue, n );
-        output = ip_output;
+
+        switch (h->outputs[i]->output_dest.type) {
+        case OUTPUT_UDP:
+        case OUTPUT_RTP:
+            output = ip_output;
+            break;
+        case OUTPUT_FILE_TS:
+            output = file_ts_output;
+            break;
+        default:
+            fprintf(stderr, "Invalid output type, undefined.\n");
+            goto fail;
+        }
 
         if( pthread_create( &h->outputs[i]->output_thread, NULL, output.open_output, (void*)h->outputs[i] ) < 0 )
         {
@@ -1103,9 +1152,10 @@ int obe_start( obe_t *h )
     /* Open Encoder Threads */
     for( int i = 0; i < h->num_output_streams; i++ )
     {
-        if( h->output_streams[i].stream_action == STREAM_ENCODE )
+        obe_output_stream_t *os = obe_core_get_output_stream_by_index(h, i);
+        if (os->stream_action == STREAM_ENCODE )
         {
-            h->encoders[h->num_encoders] = calloc( 1, sizeof(obe_encoder_t) );
+            h->encoders[h->num_encoders] = obe_core_encoder_alloc(os->stream_format);
             if( !h->encoders[h->num_encoders] )
             {
                 fprintf( stderr, "Malloc failed \n" );
@@ -1114,11 +1164,13 @@ int obe_start( obe_t *h )
             char n[64];
             sprintf(n, "output stream #%d", i);
             obe_init_queue( &h->encoders[h->num_encoders]->queue, n);
-            h->encoders[h->num_encoders]->output_stream_id = h->output_streams[i].output_stream_id;
+            h->encoders[h->num_encoders]->output_stream_id = os->output_stream_id;
 
-            if( h->output_streams[i].stream_format == VIDEO_AVC )
+            obe_output_stream_t *ostream = obe_core_get_output_stream_by_index(h, i);
+
+            if (ostream->stream_format == VIDEO_AVC )
             {
-                x264_param_t *x264_param = &h->output_streams[i].avc_param;
+                x264_param_t *x264_param = &os->avc_param;
                 if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
                 {
                     /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
@@ -1135,17 +1187,210 @@ int obe_start( obe_t *h )
                 vid_enc_params->encoder = h->encoders[h->num_encoders];
                 h->encoders[h->num_encoders]->is_video = 1;
 
-                memcpy( &vid_enc_params->avc_param, &h->output_streams[i].avc_param, sizeof(x264_param_t) );
-                if( pthread_create( &h->encoders[h->num_encoders]->encoder_thread, NULL, x264_encoder.start_encoder, (void*)vid_enc_params ) < 0 )
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if( pthread_create( &h->encoders[h->num_encoders]->encoder_thread, NULL, x264_obe_encoder.start_encoder, (void*)vid_enc_params ) < 0 )
                 {
-                    fprintf( stderr, "Couldn't create encode thread \n" );
+                    fprintf( stderr, "Couldn't create x264 encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-encoder");
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x264-encoder");
             }
-            else if(h->output_streams[i].stream_format == AUDIO_AC_3_BITSTREAM) {
-                input_stream = get_input_stream(h, h->output_streams[i].input_stream_id);
-                h->output_streams[i].sdi_audio_pair = input_stream->sdi_audio_pair;
+#if HAVE_X265_H
+            else if (ostream->stream_format == VIDEO_HEVC_X265)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, x265_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create x265 encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x265-encoder");
+            }
+#endif
+#if HAVE_VA_VA_H
+            else if (ostream->stream_format == VIDEO_AVC_CPU_AVCODEC)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, avc_gpu_avcodec_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create AVC CPU avcodec encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
+            }
+            else if (ostream->stream_format == VIDEO_AVC_GPU_AVCODEC)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, avc_gpu_avcodec_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create AVC GPU avcodec encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
+            }
+            else if (ostream->stream_format == VIDEO_HEVC_GPU_AVCODEC)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, avc_gpu_avcodec_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create AVC GPU avcodec encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
+            }
+            else if (ostream->stream_format == VIDEO_HEVC_CPU_AVCODEC)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, avc_gpu_avcodec_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create HEVC CPU avcodec encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
+            }
+            else if (ostream->stream_format == VIDEO_AVC_VAAPI)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, avc_vaapi_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create x265 encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcva");
+            }
+            else if (ostream->stream_format == VIDEO_HEVC_VAAPI)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy( &vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t) );
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, hevc_vaapi_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create x265 encode thread\n" );
+                    goto fail;
+                }
+                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hevcva");
+            }
+#endif
+            else if (ostream->stream_format == AUDIO_AC_3_BITSTREAM) {
+                input_stream = get_input_stream(h, ostream->input_stream_id);
+                ostream->sdi_audio_pair = input_stream->sdi_audio_pair;
                 aud_enc_params = calloc(1, sizeof(*aud_enc_params));
                 if(!aud_enc_params) {
                     fprintf(stderr, "Malloc failed\n");
@@ -1153,7 +1398,7 @@ int obe_start( obe_t *h )
                 }
                 aud_enc_params->h = h;
                 aud_enc_params->encoder = h->encoders[h->num_encoders];
-                aud_enc_params->stream = &h->output_streams[i];
+                aud_enc_params->stream = ostream;
 
                 if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, ac3bitstream_encoder.start_encoder, (void*)aud_enc_params ) < 0 )
                 {
@@ -1162,12 +1407,12 @@ int obe_start( obe_t *h )
                 }
                 pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-aud-encoder");
             }
-            else if( h->output_streams[i].stream_format == AUDIO_AC_3 || h->output_streams[i].stream_format == AUDIO_E_AC_3 ||
-                     h->output_streams[i].stream_format == AUDIO_AAC  || h->output_streams[i].stream_format == AUDIO_MP2 )
+            else if (ostream->stream_format == AUDIO_AC_3 || ostream->stream_format == AUDIO_E_AC_3 ||
+                     ostream->stream_format == AUDIO_AAC  || ostream->stream_format == AUDIO_MP2)
             {
-                audio_encoder = h->output_streams[i].stream_format == AUDIO_MP2 ? twolame_encoder : lavc_encoder;
-                num_samples = h->output_streams[i].stream_format == AUDIO_MP2 ? MP2_NUM_SAMPLES :
-                              h->output_streams[i].stream_format == AUDIO_AAC ? AAC_NUM_SAMPLES : AC3_NUM_SAMPLES;
+                audio_encoder = ostream->stream_format == AUDIO_MP2 ? twolame_encoder : lavc_encoder;
+                num_samples = ostream->stream_format == AUDIO_MP2 ? MP2_NUM_SAMPLES :
+                              ostream->stream_format == AUDIO_AAC ? AAC_NUM_SAMPLES : AC3_NUM_SAMPLES;
 
                 aud_enc_params = calloc( 1, sizeof(*aud_enc_params) );
                 if( !aud_enc_params )
@@ -1177,33 +1422,41 @@ int obe_start( obe_t *h )
                 }
                 aud_enc_params->h = h;
                 aud_enc_params->encoder = h->encoders[h->num_encoders];
-                aud_enc_params->stream = &h->output_streams[i];
+                aud_enc_params->stream = ostream;
 
-                input_stream = get_input_stream( h, h->output_streams[i].input_stream_id );
+                input_stream = get_input_stream(h, ostream->input_stream_id);
                 aud_enc_params->input_sample_format = input_stream->sample_format;
                 aud_enc_params->sample_rate = input_stream->sample_rate;
                 /* TODO: check the bitrate is allowed by the format */
 
-                h->output_streams[i].sdi_audio_pair = input_stream->sdi_audio_pair;
+                ostream->sdi_audio_pair = input_stream->sdi_audio_pair;
 
                 /* Choose the optimal number of audio frames per PES
                  * TODO: This should be set after the encoder has told us the frame size */
-                if( !h->output_streams[i].ts_opts.frames_per_pes && h->obe_system == OBE_SYSTEM_TYPE_GENERIC &&
-                    h->output_streams[i].stream_format != AUDIO_E_AC_3 )
+                if( !ostream->ts_opts.frames_per_pes && h->obe_system == OBE_SYSTEM_TYPE_GENERIC &&
+                    ostream->stream_format != AUDIO_E_AC_3 )
                 {
-                    int buf_size = h->output_streams[i].stream_format == AUDIO_MP2 || h->output_streams[i].stream_format == AUDIO_AAC ? MISC_AUDIO_BS : AC3_BS_DVB;
+                    int buf_size = ostream->stream_format == AUDIO_MP2 || ostream->stream_format == AUDIO_AAC ? MISC_AUDIO_BS : AC3_BS_DVB;
                     if( buf_size == AC3_BS_DVB && ( h->mux_opts.ts_type == OBE_TS_TYPE_CABLELABS || h->mux_opts.ts_type == OBE_TS_TYPE_ATSC ) )
                         buf_size = AC3_BS_ATSC;
                     /* AAC does not have exact frame sizes but this should be a good approximation */
-                    int single_frame_size = (double)num_samples * 125 * h->output_streams[i].bitrate / input_stream->sample_rate;
-                    if( h->output_streams[i].aac_opts.aac_profile == AAC_HE_V1 || h->output_streams[i].aac_opts.aac_profile == AAC_HE_V2 )
+                    int single_frame_size = (double)num_samples * 125 * ostream->bitrate / input_stream->sample_rate;
+                    if (ostream->aac_opts.aac_profile == AAC_HE_V1 || ostream->aac_opts.aac_profile == AAC_HE_V2)
                         single_frame_size <<= 1;
                     int frames_per_pes = MAX( buf_size / single_frame_size, 1 );
                     frames_per_pes = MIN( frames_per_pes, 6 );
-                    h->output_streams[i].ts_opts.frames_per_pes = aud_enc_params->frames_per_pes = frames_per_pes;
+                    ostream->ts_opts.frames_per_pes = aud_enc_params->frames_per_pes = frames_per_pes;
                 }
                 else
-                    h->output_streams[i].ts_opts.frames_per_pes = aud_enc_params->frames_per_pes = 1;
+                    ostream->ts_opts.frames_per_pes = aud_enc_params->frames_per_pes = 1;
+
+                /* Determine whether we want the TWOLAME (only) audio encoder to rebase its time from the head of its fifo,
+                 * and reset bases its clock from the h/w every 100ms or so.
+                 */
+                if (g_decklink_inject_frame_enable)
+                    aud_enc_params->use_fifo_head_timing = 1;
+                else
+                    aud_enc_params->use_fifo_head_timing = 0;
 
                 if( pthread_create( &h->encoders[h->num_encoders]->encoder_thread, NULL, audio_encoder.start_encoder, (void*)aud_enc_params ) < 0 )
                 {
@@ -1246,7 +1499,7 @@ int obe_start( obe_t *h )
     mux_params->h = h;
     mux_params->device = h->devices[0];
     mux_params->num_output_streams = h->num_output_streams;
-    mux_params->output_streams = h->output_streams;
+    mux_params->output_streams = obe_core_get_output_stream_by_index(h, 0);
 
     if( pthread_create( &h->mux_thread, NULL, ts_muxer.open_muxer, (void*)mux_params ) < 0 )
     {
@@ -1258,7 +1511,7 @@ int obe_start( obe_t *h )
     /* Open Filter Thread */
     for( int i = 0; i < h->devices[0]->num_input_streams; i++ )
     {
-        input_stream = h->devices[0]->streams[i];
+        input_stream = h->devices[0]->input_streams[i];
         if( input_stream && ( input_stream->stream_type == STREAM_TYPE_VIDEO || input_stream->stream_type == STREAM_TYPE_AUDIO ) )
         {
             h->filters[h->num_filters] = calloc( 1, sizeof(obe_filter_t) );
@@ -1298,7 +1551,8 @@ int obe_start( obe_t *h )
                 vid_filter_params->h = h;
                 vid_filter_params->filter = h->filters[h->num_filters];
                 vid_filter_params->input_stream = input_stream;
-                vid_filter_params->target_csp = h->output_streams[i].avc_param.i_csp & X264_CSP_MASK;
+                obe_output_stream_t *ostream = obe_core_get_output_stream_by_index(h, i);
+                vid_filter_params->target_csp = ostream->avc_param.i_csp & X264_CSP_MASK;
 #if 0
                 vid_filter_params->target_csp = X264_CSP_I422;
 #endif
@@ -1351,8 +1605,6 @@ PRINT_OBE_FILTER(h->filters[h->num_filters], "AUDIO FILTER");
     input_params->device = h->devices[0];
 
     /* TODO: in the future give it only the streams which are necessary */
-    input_params->num_output_streams = h->num_output_streams;
-    input_params->output_streams = h->output_streams;
     input_params->audio_samples = num_samples;
 
     if( pthread_create( &h->devices[0]->device_thread, NULL, input.open_input, (void*)input_params ) < 0 )
@@ -1498,12 +1750,229 @@ void obe_close( obe_t *h )
 
     fprintf( stderr, "output destroyed \n" );
 
-    free( h->output_streams );
+    free(obe_core_get_output_stream_by_index(h, 0));
     /* TODO: free other things */
-
-    /* Destroy lock manager */
-    av_lockmgr_register( NULL );
 
     free( h );
     h = NULL;
 }
+
+void obe_raw_frame_printf(obe_raw_frame_t *rf)
+{
+    printf("raw_frame %p width = %d ", rf, rf->img.width);
+    printf("height = %d ", rf->img.height);
+    printf("csp = %d (%s) ", rf->img.csp, rf->img.csp == AV_PIX_FMT_YUV422P10 ? "AV_PIX_FMT_YUV422P10" : "AV_PIX_FMT_YUV422");
+    printf("planes[%d] = ", rf->img.planes);
+    for (int i = 0; i < rf->img.planes; i++) {
+        printf("%p ", rf->img.plane[i]);
+    }
+    printf("strides = ");
+    for (int i = 0; i < rf->img.planes; i++) {
+        printf("%d ", rf->img.stride[i]);
+    }
+    printf("\n");
+}
+
+#if 0
+/* Return 1 if the images are byte for byte identical, else 0. */
+int obe_image_compare(obe_image_t *a, obe_image_t *b)
+{
+	/* Its OK for the plane addresses not to match, but the
+	 * plane contents (pixels) must match.... and the number
+	 * of planes, strides and CSC must be identical.
+	 */
+	{
+		obe_image_t x = *a;
+		for (int i = 0; i < 4; i++)
+			x.plane[i] = NULL;
+
+		obe_image_t y = *b;
+		for (int i = 0; i < 4; i++)
+			y.plane[i] = NULL;
+
+		if (memcmp(&x, &y, sizeof(y) != 0)) {
+			printf("core object doesn't match\n");
+			return 0;
+		}
+	}
+
+	uint32_t plane_len[2][4] = { { 0 } };
+	for (int j = 0; j < 2; j++) {
+		obe_image_t *p = a;
+		if (j == 1)
+			p = b;
+
+		for (int i = p->planes - 1; i > 0; i--) {
+			plane_len[j][i - 1] = p->plane[i] - p->plane[i - 1];
+		}
+		if (p->planes == 3) {
+			plane_len[j][2] = plane_len[j][1];
+		}
+	}
+
+	for (int i = 0; i < a->planes; i++) {
+		if (plane_len[0][i] != plane_len[1][i]) {
+			printf("plane lengths don't match\n");
+			return 0;
+		}
+	}
+
+	/* Plane sizes match, now compare the planes themselves. */
+
+	uint32_t alloc_size = 0;
+	for (int i = 0; i < a->planes; i++)
+		alloc_size += plane_len[0][i];
+
+	if (memcmp(a->plane[0], b->plane[0], alloc_size) != 0) {
+		printf("plane itself has changed\n");
+		return 0;
+	}
+
+	return 1; /* Perfect image copy. */
+}
+#endif
+
+void obe_image_save(obe_image_t *src)
+{
+	static int g_image_save_idx = 0;
+
+	char fn[256];
+	sprintf(fn, "video-frame-%08d.yuv", g_image_save_idx++);
+	FILE *fh = fopen(fn, "wb");
+	if (!fh)
+		return;
+
+	uint32_t plane_len[4] = { 0 };
+	for (int i = src->planes - 1; i > 0; i--) {
+		plane_len[i - 1] = src->plane[i] - src->plane[i - 1];
+	}
+	if (src->planes == 3) {
+		plane_len[2] = plane_len[1];
+	}
+
+	for (int i = 0; i < src->planes; i++) {
+		fwrite(src->plane[i], 1, plane_len[i], fh);
+	}
+
+	fclose(fh);
+}
+
+void obe_image_copy(obe_image_t *dst, obe_image_t *src)
+{
+	memcpy(dst, src, sizeof(obe_image_t));
+
+	uint32_t plane_len[4] = { 0 };
+	for (int i = src->planes - 1; i > 0; i--) {
+		plane_len[i - 1] = src->plane[i] - src->plane[i - 1];
+	}
+	if (src->planes == 3) {
+		plane_len[2] = plane_len[1];
+	}
+
+	uint32_t alloc_size = 0;
+	for (int i = 0; i < src->planes; i++)
+		alloc_size += plane_len[i];
+
+	for (int i = 0; i < src->planes; i++) {
+
+		if (i == 0 && src->plane[i]) {
+			dst->plane[i] = (uint8_t *)malloc(alloc_size);
+			memcpy(dst->plane[i], src->plane[i], alloc_size);
+		}
+		if (i > 0) {
+			dst->plane[i] = dst->plane[i - 1] + plane_len[i - 1];
+		}
+
+	}
+}
+
+#if 0
+void obe_raw_frame_free(obe_raw_frame_t *frame)
+{
+	free(frame->alloc_img.plane[0]);
+	for (int i = 0; i < frame->num_user_data; i++)
+		free(frame->user_data[i].data);
+	free(frame->user_data);
+	free(frame);
+}
+#endif
+
+obe_raw_frame_t *obe_raw_frame_copy(obe_raw_frame_t *frame)
+{
+    obe_raw_frame_t *f = new_raw_frame();
+
+    memcpy(f, frame, sizeof(*frame));
+
+    obe_image_copy(&f->alloc_img, &frame->alloc_img);
+
+    memcpy(&f->img, &f->alloc_img, sizeof(frame->alloc_img));
+
+    if (f->num_user_data) {
+        f->user_data = (obe_user_data_t *)malloc(sizeof(obe_user_data_t) * f->num_user_data);
+        memcpy(f->user_data, frame->user_data, sizeof(obe_user_data_t) * f->num_user_data);
+
+        for (int i = 0; i < f->num_user_data; i++) {
+            f->user_data[i].data = (uint8_t *)malloc(frame->user_data[i].len);
+            memcpy(f->user_data[i].data, frame->user_data[i].data, f->user_data[i].len);
+        }
+
+    } else {
+        f->user_data = NULL;
+    }
+
+//    obe_raw_frame_printf(f);
+
+    return f;
+}
+
+void obe_core_dump_output_stream(obe_output_stream_t *s, int index)
+{
+	const char *format_name = obe_core_get_format_name_short(s->stream_format);
+
+	printf("%s(index = %d)\n", __func__, index);
+	printf("  input_stream_id = %4d\n", s->input_stream_id);
+	printf(" output_stream_id = %4d\n", s->output_stream_id);
+	printf("    stream_action = %4d [%s]\n", s->stream_action,
+		s->stream_action == STREAM_PASSTHROUGH ? "PASSTHROUGH" : "STREAM_ENCODE");
+	printf("    stream_format = %4d [%s]\n", s->stream_format, format_name);
+}
+
+int obe_getTimestamp(char *s, time_t *when)
+{
+	struct tm tm;
+	time_t now;
+
+	if (when)
+		now = *when;
+	else
+		time(&now);
+
+	localtime_r(&now, &tm);
+
+	sprintf(s, "%04d%02d%02d-%02d%02d%02d",
+		tm.tm_year + 1900,
+		tm.tm_mon  + 1,
+		tm.tm_mday,
+		tm.tm_hour,
+		tm.tm_min,
+		tm.tm_sec);
+
+	return 0;
+}
+
+static time_t g_processStartTime = 0;
+void obe_setProcessStartTime()
+{
+	g_processStartTime = time(NULL);
+}
+
+time_t obe_getProcessStartTime()
+{
+	return g_processStartTime;
+}
+
+uint32_t obe_getProcessRuntimeSeconds()
+{
+	return time(NULL) - obe_getProcessStartTime();
+}
+

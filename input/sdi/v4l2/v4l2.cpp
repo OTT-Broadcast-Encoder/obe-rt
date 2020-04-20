@@ -46,11 +46,10 @@ extern "C"
 #include "input/sdi/ancillary.h"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
-#include <libavresample/avresample.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 #include <libyuv/convert.h>
 #if 0
@@ -273,8 +272,8 @@ static void *audioThreadFunc(void *p)
 		raw_frame->pts = 0;
 
 		for (int i = 0; i < v4l2_ctx->device->num_input_streams; i++) {
-			if (v4l2_ctx->device->streams[i]->stream_format == AUDIO_PCM) {
-				raw_frame->input_stream_id = v4l2_ctx->device->streams[i]->input_stream_id;
+			if (v4l2_ctx->device->input_streams[i]->stream_format == AUDIO_PCM) {
+				raw_frame->input_stream_id = v4l2_ctx->device->input_streams[i]->input_stream_id;
 			}
 		}
 
@@ -350,12 +349,13 @@ static void *videoThreadFunc(void *p)
 //printf("data %p len = %d\n", frame_bytes, frame_len);
 
 		/* TODO: YUYV only. Drivers will non YUYV colorspaces won't work reliably. */
-		raw_frame->alloc_img.csp = (int)PIX_FMT_YUV420P;
+		raw_frame->alloc_img.csp = AV_PIX_FMT_YUV420P;
 		raw_frame->alloc_img.format = v4l2_opts->video_format;
 		raw_frame->alloc_img.width = v4l2_opts->width;
 		raw_frame->alloc_img.height = v4l2_opts->height;
 		raw_frame->alloc_img.first_line = 1;
-		raw_frame->alloc_img.planes = av_pix_fmt_descriptors[raw_frame->alloc_img.csp].nb_components;
+                const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+		raw_frame->alloc_img.planes = d->nb_components;
 
 		raw_frame->alloc_img.stride[0] = v4l2_opts->width;
 		raw_frame->alloc_img.stride[1] = v4l2_opts->width / 2;
@@ -547,8 +547,6 @@ static int open_device(v4l2_opts_t *v4l2_opts)
         v4l2_ctx->buffers[i].length = vidbuf->length;
     }
 
-    avcodec_register_all();
-
     syslog( LOG_INFO, "Opened V4L2 PCI card /dev/video%d", v4l2_opts->card_idx);
 
     v4l2_opts->timebase_num = video_format_tab[0].timebase_num;
@@ -647,7 +645,7 @@ static void *probe_stream(void *ptr)
             streams[i]->height = v4l2_opts->height;
             streams[i]->timebase_num = v4l2_opts->timebase_num;
             streams[i]->timebase_den = v4l2_opts->timebase_den;
-            streams[i]->csp    = PIX_FMT_YUV420P;
+            streams[i]->csp    = AV_PIX_FMT_YUV420P;
             streams[i]->interlaced = v4l2_opts->interlaced;
             streams[i]->tff = 1; /* NTSC is bff in baseband but coded as tff */
             streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
@@ -670,7 +668,7 @@ static void *probe_stream(void *ptr)
         goto finish;
 
     device->num_input_streams = num_streams;
-    memcpy(device->streams, streams, device->num_input_streams * sizeof(obe_int_input_stream_t**));
+    memcpy(device->input_streams, streams, device->num_input_streams * sizeof(obe_int_input_stream_t**));
     device->device_type = INPUT_DEVICE_V4L2;
     memcpy(&device->user_opts, user_opts, sizeof(*user_opts) );
 

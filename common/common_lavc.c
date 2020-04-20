@@ -2,8 +2,10 @@
  * lavc.c: libavcodec common functions
  *****************************************************************************
  * Copyright (C) 2010 Open Broadcast Systems Ltd.
+ * Copyright (C) 2019 LTN
  *
  * Authors: Kieran Kunhya <kieran@kunhya.com>
+ * Authors: Steven Toth <stoth@ltnglobal.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,63 +26,36 @@
 #include "common/common.h"
 #include <libavcodec/avcodec.h>
 
-int obe_get_buffer( AVCodecContext *codec, AVFrame *pic )
+static void _buffer_default_free(void *opaque, uint8_t *data)
 {
-    int w = codec->width;
-    int h = codec->height;
-    int stride[4];
-
-    avcodec_align_dimensions2( codec, &w, &h, stride );
-
-    /* Only EDGE_EMU codecs are used
-     * Allocate an extra line so that SIMD can modify the entire stride for every active line */
-    if( av_image_alloc( pic->data, pic->linesize, w, h + 1, codec->pix_fmt, 32 ) < 0 )
-        return -1;
-
-    pic->reordered_opaque = codec->reordered_opaque;
-    pic->pkt_pts = codec->pkt ? codec->pkt->pts : AV_NOPTS_VALUE;
-
-    return 0;
+//	printf("%s() %p\n", __func__, opaque);
 }
 
-void obe_release_buffer( AVCodecContext *codec, AVFrame *pic )
+int obe_get_buffer2(AVCodecContext *codec, AVFrame *pic, int flags)
 {
-     /* FIXME: need to release frame when both decoder and encoder are done */
-     //av_freep( &pic->data[0] );
-     memset( pic->data, 0, sizeof(pic->data) );
+	int w = codec->width;
+	int h = codec->height;
+	int stride[4];
+
+	avcodec_align_dimensions2(codec, &w, &h, stride);
+
+	pic->linesize[0] = w * 2;
+	pic->linesize[1] = pic->linesize[0] / 4;
+	pic->linesize[2] = pic->linesize[0] / 4;
+
+	/* Only EDGE_EMU codecs are used
+	 * Allocate an extra line so that SIMD can modify the entire stride for every active line */
+	if (av_image_alloc(pic->data, pic->linesize, w, h, codec->pix_fmt, 32) < 0) {
+		return -1;
+	}
+
+	pic->buf[0] = av_buffer_create(pic->data[0], pic->linesize[0] * h, _buffer_default_free, NULL, 0);
+	pic->buf[1] = av_buffer_create(pic->data[1], pic->linesize[1] * h / 4, _buffer_default_free, NULL, 0);
+	pic->buf[2] = av_buffer_create(pic->data[2], pic->linesize[2] * h / 4, _buffer_default_free, NULL, 0);
+
+	pic->reordered_opaque = codec->reordered_opaque;
+	pic->pts = AV_NOPTS_VALUE;
+
+	return 0;
 }
 
-/* FFmpeg shouldn't call this at the moment */
-int obe_reget_buffer( AVCodecContext *codec, AVFrame *pic )
-{
-    if( pic->data[0] == NULL )
-        return codec->get_buffer( codec, pic );
-
-    pic->reordered_opaque = codec->reordered_opaque;
-    pic->pkt_pts = codec->pkt ? codec->pkt->pts : AV_NOPTS_VALUE;
-
-    return 0;
-}
-
-int obe_lavc_lockmgr( void **mutex, enum AVLockOp op )
-{
-    if( op == AV_LOCK_CREATE )
-    {
-        *mutex = malloc( sizeof(pthread_mutex_t) );
-        if( !*mutex )
-            return -1;
-
-        pthread_mutex_init( *mutex, NULL );
-    }
-    else if( op == AV_LOCK_OBTAIN )
-        pthread_mutex_lock( *mutex );
-    else if( op == AV_LOCK_RELEASE )
-        pthread_mutex_unlock( *mutex );
-    else /* AV_LOCK_DESTROY */
-    {
-        pthread_mutex_destroy( *mutex );
-        free( *mutex );
-    }
-
-    return 0;
-}

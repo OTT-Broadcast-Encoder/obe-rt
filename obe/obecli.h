@@ -24,7 +24,7 @@
 #ifndef OBECLI_H
 #define OBECLI_H
 
-#define DO_SET_VARIABLE 0
+#include <common/common.h>
 
 void obe_cli_printf( const char *name, const char *fmt, ... );
 
@@ -179,8 +179,16 @@ static const obecli_input_name_t input_names[] =
 {
     { INPUT_URL,             "URL",      "URL (includes UDP and RTP)",             "libavformat" },
     { INPUT_DEVICE_DECKLINK, "Decklink", "Blackmagic Design Decklink input",       "internal" },
+// TODO: Is this dup define correct?
     { INPUT_DEVICE_DECKLINK, "Linsys SDI", "Linear Systems (DVEO) SDI card input", "internal" },
     { INPUT_DEVICE_V4L2    , "V4L2", "Video4Linux2 Raw Frame Device", "internal" },
+#if HAVE_BLUEDRIVER_P_H
+    { INPUT_DEVICE_BLUEFISH, "BlueFish", "BlueFish Epoch Raw Frame Device", "internal" },
+#endif
+    { INPUT_DEVICE_V210    , "V210", "V210 Raw Frame Device", "internal" },
+#if HAVE_PROCESSING_NDI_LIB_H
+    { INPUT_DEVICE_NDI,      "NDI",  "NDI Raw Frame Device", "internal" },
+#endif
     { 0, 0, 0 },
 };
 
@@ -189,6 +197,12 @@ static const obecli_format_name_t format_names[] =
 {
     { VIDEO_UNCOMPRESSED, "RAW", "Uncompressed Video",    "N/A",                       "N/A" },
     { VIDEO_AVC,    "AVC",       "Advanced Video Coding", "FFmpeg AVC decoder",        "x264 encoder" },
+    { VIDEO_HEVC_X265, "HEVC",      "High Efficiency Video Coding", "FFmpeg HEVC decoder","x265 encoder" },
+    { VIDEO_AVC_VAAPI, "AVC",      "Advanced Video Coding", "VAAPI AVC decoder","vaapi encoder" },
+    { VIDEO_AVC_CPU_AVCODEC, "AVC",      "Advanced Video Coding", "AVC decoder","avcodec CPU encoder" },
+    { VIDEO_AVC_GPU_AVCODEC, "AVC",      "Advanced Video Coding", "VAAPI AVC decoder","avcodec GPU encoder" },
+    { VIDEO_HEVC_CPU_AVCODEC, "HEVC",      "High Efficiency Video Coding", "HEVC decoder","avcodec CPU encoder" },
+    { VIDEO_HEVC_VAAPI, "HEVC",     "High Efficiency Video Coding", "VAAPI HEVC decoder","vaapi encoder" },
     { VIDEO_MPEG2,  "MPEG-2",    "MPEG-2 Video",          "FFmpeg MPEG-2 decoder",     "N/A" },
     { AUDIO_PCM,    "PCM",       "PCM (raw audio)",       "N/A",                       "N/A" },
     { AUDIO_MP2,    "MP2",       "MPEG-1 Layer II Audio", "FFmpeg MP2 audio decoder",  "twolame encoder" },
@@ -222,6 +236,7 @@ static const obecli_output_name_t output_names[] =
 {
     { OUTPUT_UDP, "UDP",  "MPEG-TS in UDP",        "internal" },
     { OUTPUT_RTP, "RTP",  "MPEG-TS in RTP in UDP", "internal" },
+    { OUTPUT_FILE_TS, "FILETS",  "MPEG-TS in file", "internal" },
     { 0, 0, 0, 0 },
 };
 #endif

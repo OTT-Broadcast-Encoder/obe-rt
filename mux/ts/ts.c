@@ -279,14 +279,24 @@
 #include "common/common.h"
 #include "mux/mux.h"
 #include <libmpegts.h>
+#include <libswresample/swresample.h>
+#include <libltntstools/ltntstools.h>
 
 #define MIN_PID 0x30
-#define MAX_PID 0x1fff
+
+#define PREFIX "[Mux]: "
 
 static const int mpegts_stream_info[][3] =
 {
     { VIDEO_AVC,   LIBMPEGTS_VIDEO_AVC,      LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_MPEG2, LIBMPEGTS_VIDEO_MPEG2,    LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_X265,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_AVC_VAAPI,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_AVC_CPU_AVCODEC,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_AVC_GPU_AVCODEC,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_CPU_AVCODEC,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_GPU_AVCODEC,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_VAAPI,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     /* TODO 302M */
     { AUDIO_MP2,   LIBMPEGTS_AUDIO_MPEG2,    LIBMPEGTS_STREAM_ID_MPEGAUDIO },
     { AUDIO_AC_3,  LIBMPEGTS_AUDIO_AC3,      LIBMPEGTS_STREAM_ID_PRIVATE_1 },
@@ -341,7 +351,94 @@ static void encoder_wait( obe_t *h, int output_stream_id )
     pthread_mutex_unlock( &encoder->queue.mutex );
 }
 
+struct queue_size_s {
+    int entries;
+    int totalSizeBytes;
+};
+__inline__ static void queue_size_init(struct queue_size_s *q)
+{
+    q->entries = 0;
+    q->totalSizeBytes = 0;
+}
+
+/* Must be called with the mutex already held. */
+static void mux_get_queue_counts(obe_t *h,
+	struct queue_size_s *vq,
+	struct queue_size_s *aq,
+	struct queue_size_s *oq)
+{
+    queue_size_init(vq); /* Video q */
+    queue_size_init(aq); /* Audio q */
+    queue_size_init(oq); /* Other q */
+
+    for (int i = 0; i < h->mux_queue.size; i++) {
+        obe_coded_frame_t *cf = h->mux_queue.queue[i];
+        if (cf->type == CF_VIDEO) {
+            vq->entries++;
+            vq->totalSizeBytes += cf->len;
+        } else
+        if (cf->type == CF_AUDIO) {
+            aq->entries++;
+            aq->totalSizeBytes += cf->len;
+        } else {
+            oq->entries++;
+            oq->totalSizeBytes += cf->len;
+        }
+    }
+}
+
+#define MAX_QUEUED_AUDIO_WARNING 100
+void mux_dump_queue(obe_t *h)
+{
+    struct queue_size_s vq;
+    struct queue_size_s aq;
+    struct queue_size_s oq;
+
+    pthread_mutex_lock(&h->mux_queue.mutex);
+    mux_get_queue_counts(h, &vq, &aq, &oq);
+    pthread_mutex_unlock(&h->mux_queue.mutex);
+
+    printf("\tmux.video frames = %d totalsize %d [%s]\n",
+        vq.entries, vq.totalSizeBytes,
+        vq.entries >= 60 ? "Too many frames - unusual" : "OK");
+
+    printf("\tmux.audio frames = %d totalsize %d [%s]\n",
+        aq.entries, aq.totalSizeBytes,
+        aq.entries >= MAX_QUEUED_AUDIO_WARNING ? "Too many frames - video compressor too slow" : "OK");
+
+    printf("\tmux.other frames = %d totalsize %d\n",
+        oq.entries, oq.totalSizeBytes);
+}
+
+/* Must be called with the queue already locked. */
+static void mux_monitor_queue(obe_t *h)
+{
+    struct queue_size_s vq;
+    struct queue_size_s aq;
+    struct queue_size_s oq;
+
+    mux_get_queue_counts(h, &vq, &aq, &oq);
+
+    if (aq.entries > MAX_QUEUED_AUDIO_WARNING) {
+        static time_t lastReport = 0;
+        time_t now;
+        time(&now);
+        /* Rate limit warning to every 15 seconds. */
+        if (now >= lastReport + 15) {
+            char msg[256];
+            sprintf(msg, "Warning: Encoder video codec is probably running less than realtime, usually bad.");
+            syslog(LOG_ERR, msg);
+            fprintf(stderr, "%s\n", msg);
+            lastReport = now;
+        }
+    }
+}
+
 int64_t initial_audio_latency = -1; /* ticks of 27MHz clock. Amount of audio (in time) we have buffered before the first video frame appeared. */
+
+ts_writer_t *g_mux_ts_writer_handle = NULL;
+int g_mux_ts_monitor_bps = 0;
+int64_t g_mux_dtstotal = 0;
 
 void *open_muxer( void *ptr )
 {
@@ -369,6 +466,9 @@ void *open_muxer( void *ptr )
     char *service_name = "OBE Service";
     char *provider_name = "Open Broadcast Encoder";
 
+    struct ltntstools_stream_statistics_s streamstats;
+    ltntstools_pid_stats_reset(&streamstats);
+
     struct sched_param param = {0};
     param.sched_priority = 99;
     pthread_setschedparam( pthread_self(), SCHED_RR, &param );
@@ -383,11 +483,21 @@ void *open_muxer( void *ptr )
     params.pat_period = mux_opts->pat_period;
 
     w = ts_create_writer();
-
+    g_mux_ts_writer_handle = w;
     if( !w )
     {
         fprintf( stderr, "[ts] could not create writer\n" );
         return NULL;
+    }
+
+    const char *tswriter_filename = getenv("OBE_LIBMPEGTS_WRITER_FILENAME");
+    if (tswriter_filename) {
+        printf(PREFIX "Warning -- Dumping all TSWRITER payload to '%s'\n", tswriter_filename);
+        if (libmpegts_frame_serializer_open_write(w, tswriter_filename) < 0) {
+            fprintf(stderr, PREFIX "Unable to create file %s, aborting.\n", tswriter_filename);
+            ts_close_writer(w);
+            return NULL;
+        }
     }
 
     params.num_programs = 1;
@@ -467,7 +577,8 @@ void *open_muxer( void *ptr )
             stream->stream_identifier = output_stream->ts_opts.stream_identifier;
         }
 
-        if( stream_format == VIDEO_AVC )
+        if (stream_format == VIDEO_AVC || stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_AVC_VAAPI || stream_format == VIDEO_HEVC_VAAPI || stream_format == VIDEO_AVC_GPU_AVCODEC || stream_format == VIDEO_HEVC_GPU_AVCODEC ||
+            stream_format == VIDEO_AVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_CPU_AVCODEC)
         {
             encoder_wait( h, output_stream->output_stream_id );
 
@@ -485,6 +596,15 @@ void *open_muxer( void *ptr )
             encoder = get_encoder( h, output_stream->output_stream_id );
             stream->audio_frame_size = (double)encoder->num_samples * 90000LL * output_stream->ts_opts.frames_per_pes / input_stream->sample_rate;
         }
+        else if (stream_format == AUDIO_AC_3_BITSTREAM) {
+            output_stream->ts_opts.frames_per_pes = 1;
+            stream->audio_frame_size = 2880; /* In 90KHz ticks - 32ms */
+        } else {
+            printf("stream_format = %d\n", stream_format);
+            printf("frames_per_pes = %d\n", output_stream->ts_opts.frames_per_pes);
+            printf("sample_rate = %d\n", input_stream->sample_rate);
+            printf("WARNING: audio frame size is unknown -- Poorly defined new audio codec?\n");
+	}
     }
 
     /* Video stream isn't guaranteed to be first so populate program parameters here */
@@ -500,6 +620,8 @@ void *open_muxer( void *ptr )
         fprintf( stderr, "[ts] Transport stream setup failed\n" );
         goto end;
     }
+
+    ts_set_ve_version(w, h->sw_major, h->sw_minor, h->sw_patch);
 
     if( mux_opts->ts_type == OBE_TS_TYPE_GENERIC || mux_opts->ts_type == OBE_TS_TYPE_DVB )
     {
@@ -523,7 +645,7 @@ void *open_muxer( void *ptr )
         else
             stream_format = input_stream->stream_format;
 
-        if( stream_format == VIDEO_AVC )
+        if (stream_format == VIDEO_AVC)
         {
             x264_param_t *p_param = encoder->encoder_params;
             int j = 0;
@@ -532,7 +654,36 @@ void *open_muxer( void *ptr )
 
             if( ts_setup_mpegvideo_stream( w, stream->pid, p_param->i_level_idc, avc_profiles[j][1], 0, 0, 0 ) < 0 )
             {
-                fprintf( stderr, "[ts] Could not setup video stream\n" );
+                fprintf( stderr, "[ts] Could not setup AVC video stream\n" );
+                goto end;
+            }
+        }
+        else if ((stream_format == VIDEO_AVC_GPU_AVCODEC) || (stream_format == VIDEO_AVC_CPU_AVCODEC))
+        {
+            if (ts_setup_mpegvideo_stream(w, stream->pid, 40, AVC_HIGH, 0, 0, 0) < 0) {
+                fprintf(stderr, "[ts] Could not setup AVC GPU video stream\n");
+                goto end;
+            }
+        }
+        else if (stream_format == VIDEO_AVC_VAAPI)
+        {
+            if (ts_setup_mpegvideo_stream(w, stream->pid, 40, AVC_HIGH, 0, 0, 0) < 0) {
+                fprintf(stderr, "[ts] Could not setup HEVC video stream\n");
+                goto end;
+            }
+        }
+        else if (stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_HEVC_GPU_AVCODEC ||
+            stream_format == VIDEO_HEVC_CPU_AVCODEC)
+        {
+            if (ts_setup_mpegvideo_stream(w, stream->pid, 51, HEVC_PROFILE_MAIN, 0, 0, 0) < 0) {
+                fprintf(stderr, "[ts] Could not setup HEVC video stream\n");
+                goto end;
+            }
+        }
+        else if (stream_format == VIDEO_HEVC_VAAPI)
+        {
+            if (ts_setup_mpegvideo_stream(w, stream->pid, 40, HEVC_PROFILE_MAIN, 0, 0, 0) < 0) {
+                fprintf(stderr, "[ts] Could not setup HEVC VAAPI video stream\n");
                 goto end;
             }
         }
@@ -655,6 +806,8 @@ void *open_muxer( void *ptr )
             pthread_mutex_unlock( &h->mux_queue.mutex );
             goto end;
         }
+
+        mux_monitor_queue(h);
 
         /* We need to find the audio frame immediately prior to the first video frame,
          * if such a thing exists..... We'll use this in calculating how much queue audio
@@ -788,10 +941,47 @@ void *open_muxer( void *ptr )
         pthread_mutex_unlock( &h->mux_queue.mutex );
 
         // TODO figure out last frame
-        ts_write_frames( w, frames, num_frames, &output, &len, &pcr_list );
+        if (ts_write_frames( w, frames, num_frames, &output, &len, &pcr_list, &g_mux_dtstotal) != 0) {
+            fprintf(stderr, "ts_write_frames failed\n");
+        }        
+
+        if (g_mux_ts_monitor_bps) {
+            static int lenbps_old = 0;
+            static int len_current = 0;
+            static time_t lentv, now;
+            now = time(0);
+            if (now != lentv) {
+                lenbps_old = len_current * 8;
+                printf(PREFIX "dequeued bps %d\n", lenbps_old);
+                len_current = 0;
+                lentv = now;
+            }
+            len_current += len;
+        }
+#if 0
+//printf("bb = %d len = %d\n", bb, len);
+static FILE *fh = NULL;
+
+if (fh == NULL)
+  fh = fopen("/tmp/hevc.ts", "wb");
+
+if (fh)
+  fwrite(output, 1, len, fh);
+#endif
 
         if( len )
         {
+            ltntstools_pid_stats_update(&streamstats, output, len / 188);
+
+            uint32_t null_pct = ltntstools_pid_stats_stream_padding_pct(&streamstats);
+            uint32_t null_pct_val = 3;
+            /* Report null padding issues after the few first seconds of startup. */
+            if (null_pct <= null_pct_val && obe_getProcessRuntimeSeconds() > 3) {
+                char ts[64];
+                obe_getTimestamp(ts, NULL);
+                printf(PREFIX "%s : Warning: null padding %d%% or less (%d%%), codec exceeding the muxer capability.\n", ts, null_pct_val, null_pct);
+            }
+
             muxed_data = new_muxed_data( len );
             if( !muxed_data )
             {

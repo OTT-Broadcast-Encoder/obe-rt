@@ -34,10 +34,13 @@
 
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <libswresample/swresample.h>
+#include <libmpegts.h>
 
 #include "obe.h"
 #include "obecli.h"
 #include "common/common.h"
+#include "ltn_ws.h"
 
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
 #define RETURN_IF_ERROR( cond, ... ) RETURN_IF_ERR( cond, "options", NULL, __VA_ARGS__ )
@@ -47,6 +50,11 @@ typedef struct
     obe_t *h;
     obe_input_t input;
     obe_input_program_t program;
+
+    /* Configuration params from the command line configure these output streams.
+     * before they're finally cloned into the obe_t struct as 'output_streams'.
+     * See obe_setup_streams() for the cloning action.
+     */
     int num_output_streams;
     obe_output_stream_t *output_streams;
     obe_mux_opts_t mux_opts;
@@ -56,14 +64,29 @@ typedef struct
 
 obecli_ctx_t cli;
 
+#if LTN_WS_ENABLE
+void *g_ltn_ws_handle = NULL;
+#endif
+
+int  runtime_statistics_start(void **ctx, obecli_ctx_t *cli);
+void runtime_statistics_stop(void *ctx);
+
 /* Ctrl-C handler */
 static volatile int b_ctrl_c = 0;
 
-static int running = 0;
+static int g_running = 0;
 static int system_type_value = OBE_SYSTEM_TYPE_GENERIC;
 
 static const char * const system_types[]             = { "generic", "lowestlatency", "lowlatency", 0 };
-static const char * const input_types[]              = { "url", "decklink", "linsys-sdi", "v4l2", 0 };
+static const char * const input_types[]              = { "url", "decklink", "linsys-sdi", "v4l2",
+//#if HAVE_BLUEDRIVER_P_H
+								"bluefish",
+//#endif
+								"v210",
+#if HAVE_PROCESSING_NDI_LIB_H
+								"ndi",
+#endif
+								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
                                                          "1080p23.98", "1080p24", "1080p25", "1080p29.97", "1080p30", "1080p50", "1080p59.94",
                                                          "1080p60", 0 };
@@ -80,14 +103,18 @@ static const char * const aac_encapsulations[]       = { "adts", "latm", 0 };
 static const char * const mp2_modes[]                = { "auto", "stereo", "joint-stereo", "dual-channel", 0 };
 static const char * const channel_maps[]             = { "", "mono", "stereo", "5.0", "5.1", 0 };
 static const char * const mono_channels[]            = { "left", "right", 0 };
-static const char * const output_modules[]           = { "udp", "rtp", "linsys-asi", 0 };
+static const char * const output_modules[]           = { "udp", "rtp", "linsys-asi", "filets", 0 };
 static const char * const addable_streams[]          = { "audio", "ttx" };
 static const char * const preset_names[]        = { "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow", "placebo", NULL };
+static const char * const tuning_names[]        = { "animation", "zerolatency", "fastdecode", "grain", "ssim", "psnr", NULL };
 static const char * entropy_modes[] = { "cabac", "cavlc", NULL };
 
 static const char * system_opts[] = { "system-type", "max-probe-time", NULL };
 static const char * input_opts[]  = { "location", "card-idx", "video-format", "video-connection", "audio-connection",
-                                      "smpte2038", "scte35", "vanc-cache", "bitstream-audio", "patch1", "los-exit-ms", NULL };
+                                      "smpte2038", "scte35", "vanc-cache", "bitstream-audio", "patch1", "los-exit-ms",
+                                      "frame-injection", /* 11 */
+                                      "allow-1080p60", /* 12 */
+                                      NULL };
 static const char * add_opts[] =    { "type" };
 /* TODO: split the stream options into general options, video options, ts options */
 static const char * stream_opts[] = { "action", "format",
@@ -112,6 +139,8 @@ static const char * stream_opts[] = { "action", "format",
                                       "preset-name", /* 41 */
                                       "entropy", /* 42 */
                                       "audio-offset", /* 43 */
+                                      "video-codec", /* 44 */
+                                      "tuning-name", /* 45 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
@@ -151,6 +180,17 @@ const static uint64_t channel_layouts[] =
     AV_CH_LAYOUT_5POINT0_BACK,
     AV_CH_LAYOUT_5POINT1_BACK,
  };
+
+static char *getSoftwareVersion()
+{
+    char *msg = malloc(128);
+    sprintf(msg, "Version %d.%d.%d (" GIT_VERSION ")",
+	VERSION_MAJOR,
+	VERSION_MINOR,
+	VERSION_PATCH);
+
+    return msg;
+}
 
 void obe_cli_printf( const char *name, const char *fmt, ... )
 {
@@ -358,7 +398,7 @@ static int parse_enum_value( const char *arg, const char * const *names, int *ds
     return -1;
 }
 
-static char *get_format_name( int stream_format, const obecli_format_name_t *names, int long_name )
+static char *get_format_name(int stream_format, const obecli_format_name_t *names, int long_name)
 {
     int i = 0;
 
@@ -366,6 +406,11 @@ static char *get_format_name( int stream_format, const obecli_format_name_t *nam
         i++;
 
     return  long_name ? names[i].long_name : names[i].format_name;
+}
+
+const char *obe_core_get_format_name_short(enum stream_formats_e stream_format)
+{
+	return (const char *)get_format_name(stream_format, format_names, 0);
 }
 
 /* add/remove functions */
@@ -544,6 +589,8 @@ static int set_input( char *command, obecli_command_t *child )
         char *bitstream_audio = obe_get_option( input_opts[8], opts );
         char *patch1 = obe_get_option( input_opts[9], opts );
         char *los_exit_ms = obe_get_option( input_opts[10], opts );
+        char *frame_injection = obe_get_option(input_opts[11], opts);
+        char *allow_1080p60 = obe_get_option(input_opts[12], opts);
 
         FAIL_IF_ERROR( video_format && ( check_enum_value( video_format, input_video_formats ) < 0 ),
                        "Invalid video format\n" );
@@ -564,6 +611,8 @@ static int set_input( char *command, obecli_command_t *child )
              strcpy( cli.input.location, location );
         }
 
+        cli.input.enable_allow_1080p60 = obe_otoi(allow_1080p60, cli.input.enable_allow_1080p60);
+        cli.input.enable_frame_injection = obe_otoi(frame_injection, cli.input.enable_frame_injection);
         cli.input.enable_patch1 = obe_otoi( patch1, cli.input.enable_patch1 );
         cli.input.enable_bitstream_audio = obe_otoi( bitstream_audio, cli.input.enable_bitstream_audio );
         cli.input.enable_smpte2038 = obe_otoi( smpte2038, cli.input.enable_smpte2038 );
@@ -669,6 +718,43 @@ static int set_stream( char *command, obecli_command_t *child )
             const char *preset_name  = obe_get_option( stream_opts[41], opts );
             const char *entropy_mode = obe_get_option( stream_opts[42], opts );
             const char *audio_offset = obe_get_option( stream_opts[43], opts );
+            const char *video_codec = obe_get_option( stream_opts[44], opts );
+            const char *tuning_name  = obe_get_option( stream_opts[45], opts );
+
+            int video_codec_id = 0; /* AVC */
+            if (video_codec) {
+                if (strcasecmp(video_codec, "AVC") == 0)
+                    video_codec_id = 0; /* AVC */
+#if HAVE_X265_H
+                else
+                if (strcasecmp(video_codec, "HEVC") == 0)
+                    video_codec_id = 1; /* HEVC */
+#endif
+#if HAVE_VA_VA_H
+                else
+                if (strcasecmp(video_codec, "AVC_VAAPI") == 0)
+                    video_codec_id = 2; /* AVC via VAAPI */
+                else
+                if (strcasecmp(video_codec, "HEVC_VAAPI") == 0)
+                    video_codec_id = 3; /* HEVC via VAAPI */
+                else
+                if (strcasecmp(video_codec, "AVC_GPU_AVCODEC") == 0)
+                    video_codec_id = 4; /* AVC via AVCODEC (GPU encode) */
+                else
+                if (strcasecmp(video_codec, "HEVC_GPU_AVCODEC") == 0)
+                    video_codec_id = 5; /* HEVC via AVCODEC (GPU encode) */
+                else
+                if (strcasecmp(video_codec, "AVC_CPU_AVCODEC") == 0)
+                    video_codec_id = 6; /* AVC via AVCODEC (CPU encode) */
+                else
+                if (strcasecmp(video_codec, "HEVC_CPU_AVCODEC") == 0)
+                    video_codec_id = 7; /* HEVC via AVCODEC (CPU encode) */
+#endif
+                else {
+                    fprintf(stderr, "video codec selection is invalid\n" );
+                    return -1;
+                }
+            }
 
             if( input_stream->stream_type == STREAM_TYPE_VIDEO )
             {
@@ -681,15 +767,28 @@ static int set_stream( char *command, obecli_command_t *child )
 
                 FAIL_IF_ERROR(preset_name && (check_enum_value( preset_name, preset_names) < 0),
                               "Invalid preset-name\n" );
+                FAIL_IF_ERROR(tuning_name && (check_enum_value( tuning_name, tuning_names) < 0),
+                              "Invalid tuning-name\n" );
                 FAIL_IF_ERROR(entropy_mode && (check_enum_value(entropy_mode, entropy_modes) < 0),
                               "Invalid entropy coding mode\n" );
 
+extern char g_video_encoder_preset_name[64];
+
                 if (preset_name) {
+                    strcpy(g_video_encoder_preset_name, preset_name);
                     obe_populate_avc_encoder_params(cli.h,  input_stream->input_stream_id
 			/* cli.program.streams[i].input_stream_id */, avc_param, preset_name);
                 } else {
+                    sprintf(g_video_encoder_preset_name, "very-fast");
                     obe_populate_avc_encoder_params(cli.h, input_stream->input_stream_id
 			/* cli.program.streams[i].input_stream_id */, avc_param, "veryfast");
+                }
+
+extern char g_video_encoder_tuning_name[64];
+                if (tuning_name) {
+                    strcpy(g_video_encoder_tuning_name, tuning_name);
+                } else {
+                    g_video_encoder_tuning_name[0] = 0;
                 }
 
                 /* We default to CABAC if the user has not specified an entropy mode. */
@@ -736,10 +835,38 @@ static int set_stream( char *command, obecli_command_t *child )
 
                 /* Set it to encode by default */
                 cli.output_streams[output_stream_id].stream_action = STREAM_ENCODE;
-                cli.output_streams[output_stream_id].stream_format = VIDEO_AVC;
+
+                if (video_codec_id == 0) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC;
+                } else
+                if (video_codec_id == 1) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_X265;
+                } else
+                if (video_codec_id == 2) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_VAAPI;
+                } else
+                if (video_codec_id == 3) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_VAAPI;
+                } else
+                if (video_codec_id == 4) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_GPU_AVCODEC;
+                } else
+                if (video_codec_id == 5) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_AVCODEC;
+                } else
+                if (video_codec_id == 6) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_CPU_AVCODEC;
+                } else
+                if (video_codec_id == 7) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_CPU_AVCODEC;
+                }
+
                 avc_param->rc.i_vbv_max_bitrate = obe_otoi( vbv_maxrate, 0 );
+                FAIL_IF_ERROR(avc_param->rc.i_vbv_max_bitrate < 0, "Invalid vbv_maxrate.\n" );
                 avc_param->rc.i_vbv_buffer_size = obe_otoi( vbv_bufsize, 0 );
+                FAIL_IF_ERROR(avc_param->rc.i_vbv_buffer_size < 0, "Invalid vbv_buffer_size.\n" );
                 avc_param->rc.i_bitrate         = obe_otoi( bitrate, 0 );
+                FAIL_IF_ERROR(avc_param->rc.i_bitrate < 0, "Invalid bitrate.\n" );
                 avc_param->i_keyint_max        = obe_otoi( keyint, avc_param->i_keyint_max );
                 avc_param->rc.i_lookahead      = obe_otoi( lookahead, avc_param->rc.i_lookahead );
                 avc_param->i_threads           = obe_otoi( threads, avc_param->i_threads );
@@ -754,6 +881,10 @@ static int set_stream( char *command, obecli_command_t *child )
                 if( profile )
                     parse_enum_value( profile, x264_profile_names, &cli.avc_profile );
 
+#if 0
+// VAAPI
+                avc_param->i_level_idc = 13;
+#endif
                 if( level )
                 {
                     if( !strcasecmp( level, "1b" ) )
@@ -839,7 +970,7 @@ static int set_stream( char *command, obecli_command_t *child )
                 if( action )
                     parse_enum_value( action, stream_actions, &cli.output_streams[output_stream_id].stream_action );
                 if( format )
-                    parse_enum_value( format, encode_formats, &cli.output_streams[output_stream_id].stream_format );
+                    parse_enum_value( format, encode_formats, (int *)&cli.output_streams[output_stream_id].stream_format );
                 if( audio_type )
                     parse_enum_value( audio_type, audio_types, &cli.output_streams[output_stream_id].ts_opts.audio_type );
                 if( channel_map )
@@ -1042,13 +1173,28 @@ static int set_outputs( char *command, obecli_command_t *child )
 }
 
 #if DO_SET_VARIABLE
+extern int g_decklink_monitor_hw_clocks;
+extern int g_decklink_histogram_reset;
+extern int g_decklink_histogram_print_secs;
+
 /* Case 1 */
 extern int g_decklink_fake_lost_payload;
 extern time_t g_decklink_fake_lost_payload_time;
+extern int      g_decklink_burnwriter_enable;
+extern uint32_t g_decklink_burnwriter_count;
+extern uint32_t g_decklink_burnwriter_linenr;
 
 /* Case 2 */
 extern int g_decklink_fake_every_other_frame_lose_audio_payload;
 extern time_t g_decklink_fake_every_other_frame_lose_audio_payload_time;
+
+extern int    g_decklink_missing_audio_count;
+extern time_t g_decklink_missing_audio_last_time;
+extern int    g_decklink_missing_video_count;
+extern time_t g_decklink_missing_video_last_time;
+
+extern int g_decklink_record_audio_buffers;
+extern unsigned int g_sdi_max_delay;
 
 /* Case 4 audio/video clocks */
 extern int64_t cur_pts; /* audio clock */
@@ -1059,21 +1205,144 @@ extern int64_t ac3_offset_ms;
 /* Mux */
 extern int64_t initial_audio_latency;
 
+/* x265 */
+extern int g_x265_monitor_bps;
+extern int g_x265_nal_debug;
+extern int g_x265_min_qp;
+extern int g_x265_min_qp_new;
+#if DEV_ABR
+extern int g_x265_bitrate_bps;
+extern int g_x265_bitrate_bps_new;
+#endif
+
+/* x264 */
+extern int g_x264_monitor_bps;
+extern int g_x264_nal_debug;
+#if DEV_ABR
+extern int g_x264_encode_alternate;
+extern int g_x264_encode_alternate_new;
+extern int g_x264_bitrate_bps;
+extern int g_x264_bitrate_bps_new;
+extern int g_x264_keyint_min;
+extern int g_x264_keyint_min_new;
+extern int g_x264_keyint_max;
+extern int g_x264_keyint_max_new;
+extern int g_x264_lookahead;
+extern int g_x264_lookahead_new;
+#endif
+
+/* LAVC */
+extern int g_audio_cf_debug;
+
+/* SEI Timestamping. */
+extern int g_sei_timestamping;
+
+/* TS Mux */
+extern int g_mux_ts_monitor_bps;
+extern int64_t g_mux_dtstotal;
+
 /* Mux Smoother */
 extern int64_t g_mux_smoother_last_item_count;
 extern int64_t g_mux_smoother_last_total_item_size;
 extern int64_t g_mux_smoother_fifo_pcr_size;
 extern int64_t g_mux_smoother_fifo_data_size;
 
+/* UDP Packet output */
+extern int g_udp_output_drop_next_video_packet;
+extern int g_udp_output_drop_next_audio_packet;
+extern int g_udp_output_drop_next_packet;
+extern int g_udp_output_stall_packet_ms;
+extern int g_udp_output_latency_alert_ms;
+extern int g_udp_output_bps;
+
+/* LOS frame injection. */
+extern int g_decklink_inject_frame_enable;
+extern int g_decklink_injected_frame_count_max;
+extern int g_decklink_injected_frame_count;
+
+/* Core */
+extern int g_core_runtime_statistics_to_file;
+
+/* Filters */
+extern int g_filter_audio_effect_pcm;
+
 void display_variables()
 {
+extern int    g_decklink_missing_audio_count;
+extern time_t g_decklink_missing_audio_last_time;
+extern int    g_decklink_missing_video_count;
+extern time_t g_decklink_missing_video_last_time;
+    printf("sdi_input.burnwriter_enable = %d [%s]\n",
+        g_decklink_burnwriter_enable,
+        g_decklink_burnwriter_enable == 0 ? "disabled" : "enabled");
+    printf("sdi_input.burnwriter_linenr = %d\n", g_decklink_burnwriter_linenr);
+    printf("sdi_input.inject_frame_enable = %d [%s]\n",
+        g_decklink_inject_frame_enable,
+        g_decklink_inject_frame_enable == 0 ? "disabled" : "enabled");
+    printf("sdi_input.inject_frame_count_max = %d\n", g_decklink_injected_frame_count_max);
     printf("sdi_input.fake_60sec_lost_payload = %d [%s]\n", g_decklink_fake_lost_payload,
         g_decklink_fake_lost_payload == 0 ? "disabled" : "enabled");
+    printf("sdi_input.monitor_hw_clocks = %d [%s]\n",
+        g_decklink_monitor_hw_clocks,
+        g_decklink_monitor_hw_clocks == 0 ? "disabled" : "enabled");
     printf("sdi_input.fake_every_other_frame_lose_audio_payload = %d [%s]\n", g_decklink_fake_every_other_frame_lose_audio_payload,
         g_decklink_fake_every_other_frame_lose_audio_payload == 0 ? "disabled" : "enabled");
+    printf("sdi_input.missing_audio_frame_count = %d -- last: %s",
+        g_decklink_missing_audio_count,
+        ctime(&g_decklink_missing_audio_last_time));
+    printf("sdi_input.missing_video_frame_count = %d -- last: %s",
+        g_decklink_missing_video_count,
+        ctime(&g_decklink_missing_video_last_time));
+    printf("sdi_input.record_audio_buffers = %d [%s]\n",
+        g_decklink_record_audio_buffers,
+        g_decklink_record_audio_buffers ? "enabled": "disabled");
+    printf("sdi_input.max_frame_delay_before_error_us = %d\n",
+        g_sdi_max_delay);
+    printf("sdi_input.histogram_reset = %d\n",
+        g_decklink_histogram_reset);
+    printf("sdi_input.histogram_print_secs = %d\n",
+        g_decklink_histogram_print_secs);
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
     printf("audio_encoder.last_pts = %" PRIi64 "\n", cur_pts);
+
+    printf("video_encoder.sei_timestamping = %d [%s]\n",
+        g_sei_timestamping,
+        g_sei_timestamping == 0 ? "disabled" : "enabled");
+
+    printf("codec.x265.monitor_bps = %d [%s]\n",
+        g_x265_monitor_bps,
+        g_x265_monitor_bps == 0 ? "disabled" : "enabled");
+
+    printf("codec.x265.nal_debug = %d [%s]\n",
+        g_x265_nal_debug,
+        g_x265_nal_debug == 0 ? "disabled" : "enabled");
+
+    printf("codec.x264.monitor_bps = %d [%s]\n",
+        g_x264_monitor_bps,
+        g_x264_monitor_bps == 0 ? "disabled" : "enabled");
+
+    printf("codec.x264.nal_debug = %d [%s]\n",
+        g_x264_nal_debug,
+        g_x264_nal_debug == 0 ? "disabled" : "enabled");
+
+#if DEV_ABR
+    printf("codec.x264.bitrate = %d (bps)\n", g_x264_bitrate_bps);
+    printf("codec.x264.keyint_min = %d\n", g_x264_keyint_min);
+    printf("codec.x264.keyint_max = %d\n", g_x264_keyint_max);
+    printf("codec.x264.lookahead = %d\n", g_x264_lookahead);
+    printf("codec.x264.encode_alternate = %d\n", g_x264_encode_alternate);
+#endif
+
+    printf("codec.audio.debug = %d [%s]\n",
+        g_audio_cf_debug,
+        g_audio_cf_debug == 0 ? "disabled" : "enabled");
+
+    printf("codec.x265.qpmin = %d\n", g_x265_min_qp);
+#if DEV_ABR
+    printf("codec.x265.bitrate = %d (bps)\n", g_x265_bitrate_bps);
+#endif
+
     printf("video_encoder.last_pts = %" PRIi64 "\n", cpb_removal_time);
     printf("v - a                  = %" PRIi64 "  %" PRIi64 "(ms)\n", cpb_removal_time - cur_pts,
         (cpb_removal_time - cur_pts) / 27000);
@@ -1081,6 +1350,10 @@ void display_variables()
         (cur_pts - cpb_removal_time) / 27000);
 
     printf("ts_mux.initial_audio_latency  = %" PRIi64 "\n", initial_audio_latency);
+    printf("ts_mux.monitor_bps = %d [%s]\n",
+        g_mux_ts_monitor_bps,
+        g_mux_ts_monitor_bps == 0 ? "disabled" : "enabled");
+
     printf("mux_smoother.last_item_count  = %" PRIi64 "\n",
         g_mux_smoother_last_item_count);
     printf("mux_smoother.last_total_item_size  = %" PRIi64 " (bytes)\n",
@@ -1089,7 +1362,43 @@ void display_variables()
         g_mux_smoother_fifo_pcr_size);
     printf("mux_smoother.fifo_data_size        = %" PRIi64 " (bytes)\n",
         g_mux_smoother_fifo_data_size);
-
+    printf("udp_output.drop_next_video_packet  = %d\n",
+        g_udp_output_drop_next_video_packet);
+    printf("udp_output.drop_next_audio_packet  = %d\n",
+        g_udp_output_drop_next_audio_packet);
+    printf("udp_output.drop_next_packet        = %d\n",
+        g_udp_output_drop_next_packet);
+    printf("udp_output.stall_packet_ms         = %d\n",
+        g_udp_output_stall_packet_ms);
+    printf("udp_output.latency_alert_ms        = %d\n",
+        g_udp_output_latency_alert_ms);
+    printf("udp_output.bps                     = %d\n",
+        g_udp_output_bps);
+    printf("core.runtime_statistics_to_file    = %d\n",
+        g_core_runtime_statistics_to_file);
+    printf("filter.audio.pcm.adjustment        = 0x%08x (bitmask)",
+        g_filter_audio_effect_pcm);
+    if (g_filter_audio_effect_pcm & (1 << 0))
+        printf(" MUTE_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 1))
+        printf(" MUTE_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 2))
+        printf(" STATIC_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 3))
+        printf(" STATIC_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 4))
+        printf(" BUZZ_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 5))
+        printf(" BUZZ_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 6))
+        printf(" ATTENUATE_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 7))
+        printf(" ATTENUATE_LEFT");
+    if (g_filter_audio_effect_pcm & (1 << 8))
+        printf(" CLIP_RIGHT");
+    if (g_filter_audio_effect_pcm & (1 << 9))
+        printf(" CLIP_LEFT");
+    printf("\n");
 }
 
 static int set_variable(char *command, obecli_command_t *child)
@@ -1114,12 +1423,115 @@ static int set_variable(char *command, obecli_command_t *child)
         if (val == 0)
             g_decklink_fake_lost_payload_time = 0;
     } else
+    if (strcasecmp(var, "sdi_input.burnwriter_enable") == 0) {
+        g_decklink_burnwriter_count = 0;
+        g_decklink_burnwriter_enable = val;
+    } else
+    if (strcasecmp(var, "sdi_input.burnwriter_linenr") == 0) {
+        g_decklink_burnwriter_linenr = val;
+    } else
     if (strcasecmp(var, "sdi_input.fake_every_other_frame_lose_audio_payload") == 0) {
         g_decklink_fake_every_other_frame_lose_audio_payload = val;
         g_decklink_fake_every_other_frame_lose_audio_payload_time = 0;
     } else
+    if (strcasecmp(var, "sdi_input.inject_frame_enable") == 0) {
+        g_decklink_injected_frame_count = 0;
+        g_decklink_inject_frame_enable = val;
+    } else
+    if (strcasecmp(var, "sdi_input.inject_frame_count_max") == 0) {
+        g_decklink_injected_frame_count_max = val;
+    } else
+    if (strcasecmp(var, "sdi_input.monitor_hw_clocks") == 0) {
+        g_decklink_monitor_hw_clocks = val;
+    } else
+    if (strcasecmp(var, "sdi_input.record_audio_buffers") == 0) {
+        g_decklink_record_audio_buffers = val;
+    } else
+    if (strcasecmp(var, "sdi_input.max_frame_delay_before_error_us") == 0) {
+        g_sdi_max_delay = val;
+    } else
+    if (strcasecmp(var, "sdi_input.histogram_reset") == 0) {
+        g_decklink_histogram_reset = val;
+    } else
+    if (strcasecmp(var, "sdi_input.histogram_print_secs") == 0) {
+        g_decklink_histogram_print_secs = val;
+    } else
     if (strcasecmp(var, "audio_encoder.ac3_offset_ms") == 0) {
         ac3_offset_ms = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_video_packet") == 0) {
+        g_udp_output_drop_next_video_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_audio_packet") == 0) {
+        g_udp_output_drop_next_audio_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_packet") == 0) {
+        g_udp_output_drop_next_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.stall_packet_ms") == 0) {
+        g_udp_output_stall_packet_ms = val;
+    } else
+    if (strcasecmp(var, "udp_output.latency_alert_ms") == 0) {
+        g_udp_output_latency_alert_ms = val;
+    } else
+    if (strcasecmp(var, "codec.x265.monitor_bps") == 0) {
+        g_x265_monitor_bps = val;
+    } else
+    if (strcasecmp(var, "codec.x264.monitor_bps") == 0) {
+        g_x264_monitor_bps = val;
+    } else
+    if (strcasecmp(var, "codec.x264.nal_debug") == 0) {
+        g_x264_nal_debug = val;
+    } else
+#if DEV_ABR
+    if (strcasecmp(var, "codec.x264.bitrate") == 0) {
+        g_x264_bitrate_bps = val;
+        g_x264_bitrate_bps_new = 1;
+    } else
+    if (strcasecmp(var, "codec.x264.keyint_min") == 0) {
+        g_x264_keyint_min = val;
+        g_x264_keyint_min_new = 1;
+    } else
+    if (strcasecmp(var, "codec.x264.keyint_max") == 0) {
+        g_x264_keyint_max = val;
+        g_x264_keyint_max_new = 1;
+    } else
+    if (strcasecmp(var, "codec.x264.lookahead") == 0) {
+        g_x264_lookahead = val;
+        g_x264_lookahead_new = 1;
+    } else
+    if (strcasecmp(var, "codec.x264.encode_alternate") == 0) {
+        g_x264_encode_alternate = val;
+        g_x264_encode_alternate_new = 1;
+    } else
+#endif
+    if (strcasecmp(var, "codec.audio.debug") == 0) {
+        g_audio_cf_debug = val;
+    } else
+    if (strcasecmp(var, "codec.x265.nal_debug") == 0) {
+        g_x265_nal_debug = val;
+    } else
+    if (strcasecmp(var, "codec.x265.qpmin") == 0) {
+        g_x265_min_qp = val;
+        g_x265_min_qp_new = 1;
+    } else
+#if DEV_ABR
+    if (strcasecmp(var, "codec.x265.bitrate") == 0) {
+        g_x265_bitrate_bps = val;
+        g_x265_bitrate_bps_new = 1;
+    } else
+#endif
+    if (strcasecmp(var, "core.runtime_statistics_to_file") == 0) {
+        g_core_runtime_statistics_to_file = val;
+    } else
+    if (strcasecmp(var, "ts_mux.monitor_bps") == 0) {
+        g_mux_ts_monitor_bps = val;
+    } else
+    if (strcasecmp(var, "video_encoder.sei_timestamping") == 0) {
+        g_sei_timestamping = val;
+    } else
+    if (strcasecmp(var, "filter.audio.pcm.adjustment") == 0) {
+        g_filter_audio_effect_pcm = val;
     } else {
         printf("illegal variable name.\n");
         return -1;
@@ -1242,10 +1654,19 @@ static int show_queues(char *command, obecli_command_t *child)
     obe_filter_t *f = NULL;
     obe_queue_t *q = NULL;
 
-    q = &cli.h->enc_smoothing_queue;
-    printf("name: %s depth: %d item(s)\n", q->name, q->size);
-    q = &cli.h->mux_queue;
-    printf("name: %s depth: %d item(s)\n", q->name, q->size);
+    {
+        q = &cli.h->enc_smoothing_queue;
+        printf("name: %s depth: %d item(s)\n", q->name, q->size);
+extern void encoder_smoothing_dump(obe_t *h);
+        encoder_smoothing_dump(cli.h);
+    }
+    {
+        q = &cli.h->mux_queue;
+        printf("name: %s depth: %d item(s)\n", q->name, q->size);
+extern void mux_dump_queue(obe_t *h);
+        mux_dump_queue(cli.h);
+    }
+
     q = &cli.h->mux_smoothing_queue;
     printf("name: %s depth: %d item(s)\n", q->name, q->size);
 
@@ -1263,11 +1684,18 @@ static int show_queues(char *command, obecli_command_t *child)
 
     printf( "Encoder queues:\n" );
     for( int i = 0; i < cli.h->num_output_streams; i++ ) {
-        if (cli.h->output_streams[i].stream_action == STREAM_ENCODE ) {
+        obe_output_stream_t *e = obe_core_get_output_stream_by_index(cli.h, i);
+        if (e && e->stream_action == STREAM_ENCODE ) {
             q = &cli.h->encoders[i]->queue;
             printf("name: %s depth: %d item(s)\n", q->name, q->size);
         }
     }
+
+extern ts_writer_t *g_mux_ts_writer_handle;
+    ts_show_queues(g_mux_ts_writer_handle);
+
+extern void hevc_show_stats();
+    hevc_show_stats();
 
     return 0;
 }
@@ -1501,9 +1929,26 @@ static int show_output_streams( char *command, obecli_command_t *child )
             printf( "DVB-Teletext\n" );
         else if( output_stream->stream_format == VBI_RAW )
             printf( "DVB-VBI\n" );
-        else if( input_stream->stream_type == STREAM_TYPE_VIDEO )
+        else if (input_stream->stream_type == STREAM_TYPE_VIDEO)
         {
-            printf( "Video: AVC \n" );
+            if (output_stream->stream_format == VIDEO_AVC)
+                printf( "Video: AVC\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_X265)
+                printf( "Video: HEVC (X265)\n" );
+            else if (output_stream->stream_format == VIDEO_AVC_VAAPI)
+                printf( "Video: AVC (VAAPI)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_VAAPI)
+                printf( "Video: HEVC (VAAPI)\n" );
+            else if (output_stream->stream_format == VIDEO_AVC_CPU_AVCODEC)
+                printf( "Video: AVC (AVCODEC CPU)\n" );
+            else if (output_stream->stream_format == VIDEO_AVC_GPU_AVCODEC)
+                printf( "Video: AVC (AVCODEC GPU)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_GPU_AVCODEC)
+                printf( "Video: HEVC (AVCODEC GPU)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_CPU_AVCODEC)
+                printf( "Video: HEVC (AVCODEC CPU)\n" );
+            else 
+                printf( "Video: AVC OR HEVC\n");
         }
         else if( input_stream->stream_type == STREAM_TYPE_AUDIO )
         {
@@ -1530,7 +1975,7 @@ static int start_encode( char *command, obecli_command_t *child )
 {
     obe_input_stream_t *input_stream;
     obe_output_stream_t *output_stream;
-    FAIL_IF_ERROR( running, "Encoder already running\n" );
+    FAIL_IF_ERROR( g_running, "Encoder already running\n" );
     FAIL_IF_ERROR( !cli.program.num_streams, "No active devices\n" );
 
     for( int i = 0; i < cli.num_output_streams; i++ )
@@ -1561,8 +2006,6 @@ static int start_encode( char *command, obecli_command_t *child )
             if( !cli.output_streams[i].avc_param.rc.i_vbv_max_bitrate && cli.output_streams[i].avc_param.rc.i_bitrate )
                 cli.output_streams[i].avc_param.rc.i_vbv_max_bitrate = cli.output_streams[i].avc_param.rc.i_bitrate;
 
-            cli.output_streams[i].stream_action = STREAM_ENCODE;
-            cli.output_streams[i].stream_format = VIDEO_AVC;
             if( cli.avc_profile >= 0 )
                 x264_param_apply_profile( &cli.output_streams[i].avc_param, x264_profile_names[cli.avc_profile] );
         }
@@ -1611,7 +2054,7 @@ static int start_encode( char *command, obecli_command_t *child )
     FAIL_IF_ERROR( !cli.output.num_outputs, "No outputs selected\n" );
     for( int i = 0; i < cli.output.num_outputs; i++ )
     {
-        if( ( cli.output.outputs[i].type == OUTPUT_UDP || cli.output.outputs[i].type == OUTPUT_RTP ) &&
+        if( ( cli.output.outputs[i].type == OUTPUT_UDP || cli.output.outputs[i].type == OUTPUT_RTP || cli.output.outputs[i].type == OUTPUT_FILE_TS ) &&
              !cli.output.outputs[i].target )
         {
             fprintf( stderr, "No output target chosen. Output-ID %d\n", i );
@@ -1625,14 +2068,32 @@ static int start_encode( char *command, obecli_command_t *child )
     if( obe_start( cli.h ) < 0 )
         return -1;
 
-    running = 1;
+    g_running = 1;
     printf( "Encoding started\n" );
+
+    if (g_core_runtime_statistics_to_file)
+        runtime_statistics_start(&cli.h->runtime_statistics, &cli);
+
+#if LTN_WS_ENABLE
+    ltn_ws_alloc(&g_ltn_ws_handle, &cli, 8443);
+    char *version = getSoftwareVersion();
+    ltn_ws_set_property_software_version(g_ltn_ws_handle, version);
+    ltn_ws_set_property_hardware_version(g_ltn_ws_handle, "571");
+    free(version);
+#endif
 
     return 0;
 }
 
 static int stop_encode( char *command, obecli_command_t *child )
 {
+#if LTN_WS_ENABLE
+    ltn_ws_free(g_ltn_ws_handle);
+#endif
+
+    if (cli.h->runtime_statistics)
+        runtime_statistics_stop(cli.h->runtime_statistics);
+
     obe_close( cli.h );
     cli.h = NULL;
 
@@ -1668,7 +2129,7 @@ static int stop_encode( char *command, obecli_command_t *child )
     free( cli.output.outputs );
 
     memset( &cli, 0, sizeof(cli) );
-    running = 0;
+    g_running = 0;
 
     return 0;
 }
@@ -1775,12 +2236,46 @@ static void _usage(const char *prog, int exitcode)
     printf("\nOpen Broadcast Encoder command line interface.\n");
     printf("Including Kernel Labs enhancements.\n");
 
-    char msg[128];
-    sprintf(msg, "Version 1.11 (" GIT_VERSION ")");
-    printf("%s\n", msg);
-    syslog(LOG_INFO, msg);
+    char *version = getSoftwareVersion();
+    printf("%s\n", version);
+    syslog(LOG_INFO, version);
+    free(version);
 
+    printf("Built %s @ %s\n", __DATE__, __TIME__);
     printf("x264 build#%d (%dbit support)\n", X264_BUILD, X264_BIT_DEPTH);
+    printf("Supports HEVC via  X265: %s\n",
+#if HAVE_X265_H
+        "true"
+#else
+        "false"
+#endif
+    );
+
+    printf("Supports HEVC via VAAPI: %s\n",
+#if HAVE_VA_VA_H
+        "true"
+#else
+        "false"
+#endif
+    );
+    printf("Supports  YUV via  FILE: true\n");
+    printf("Supports  AVC via VAAPI: %s\n",
+#if HAVE_VA_VA_H
+        "true"
+#else
+        "false"
+#endif
+    );
+    printf("Supports RAW VIA NDISDK: %s\n",
+#if HAVE_PROCESSING_NDI_LIB_H
+        "true"
+#else
+        "false"
+#endif
+    );
+#if HAVE_BLUEDRIVER_P_H
+    printf("BlueFish444 Epoch SDK\n");
+#endif
     printf("Decklink SDK %s\n", BLACKMAGIC_DECKLINK_API_VERSION_STRING);
     printf("\n");
 
@@ -1789,6 +2284,7 @@ static void _usage(const char *prog, int exitcode)
         printf("\t-h              - Display command line helps.\n");
         printf("\t-c <script.txt> - Start OBE and begin executing a list of commands.\n");
         printf("\t-L <string>     - When writing to syslog, use the 'obe-<string>' name/tag. [def: unset]\n");
+        printf("\t-C <file.cf>    - Read and consoledump a codec.cf file.\n");
         printf("\n");
         exit(exitcode);
     }
@@ -1805,8 +2301,35 @@ int main( int argc, char **argv )
     int opt;
     const char *syslogSuffix = NULL;
 
-    while ((opt = getopt(argc, argv, "c:hL:")) != -1) {
+    obe_setProcessStartTime();
+
+    while ((opt = getopt(argc, argv, "c:C:hL:")) != -1) {
         switch (opt) {
+        case 'C':
+        {
+            FILE *fh = fopen(optarg, "rb");
+            if (!fh) {
+                    fprintf(stderr, "Unable to open cf input file '%s'.\n", optarg);
+                    return 0;
+            }
+
+            unsigned int count = 0;
+            while (!feof(fh)) {
+                    obe_coded_frame_t *f;
+                    size_t rlen = coded_frame_serializer_read(fh, &f);
+                    if (rlen <= 0)
+                            break;
+
+                    printf("[%8d]  ", count++);
+                    coded_frame_print(f);
+
+                    destroy_coded_frame(f);
+            }
+
+            fclose(fh);
+            exit(0);
+         }
+            break;
         case 'c':
             script = optarg;
             {
@@ -1926,4 +2449,147 @@ int main( int argc, char **argv )
     stop_encode( NULL, NULL );
 
     return 0;
+}
+
+/* RUNTIME STATISTICS */
+#define LOCAL_DEBUG 0
+int g_core_runtime_statistics_to_file = 0;
+extern int pthread_setname_np(pthread_t thread, const char *name);
+
+struct runtime_statistics_ctx
+{
+	obecli_ctx_t *cli;
+
+	/* Thermal bitmasks */
+	uint64_t thermal_bm;
+	int therm_max;
+
+	pthread_t threadId;
+	int running, terminate, terminated;
+};
+
+#define APPEND(s) ((s) + strlen(s))
+static void *runtime_statistics_thread(void *p)
+{
+#if LOCAL_DEBUG
+	printf("%s()\n", __func__);
+#endif
+	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
+
+	pthread_setname_np(ctx->threadId, "obe-rt-stats");
+
+	ctx->running = 1;
+	char ts[64];
+	char line[256] = { 0 };
+	while (!ctx->terminate) {
+		sleep(1);
+		obe_getTimestamp(ts, NULL);
+		line[0] = 0;
+
+		/* 1. Timestamp,
+		 * 2. bps output
+		 * 3. pid
+		 * 4. encoder 0 (video codec) raw frame queue depth
+		 * 5..... cpu thermals in degC.
+		 */
+		sprintf(APPEND(line), ",pid=%d", getpid());
+		sprintf(APPEND(line), ",bps=%d", g_udp_output_bps);
+
+		// /sys/devices/platform/coretemp.0/hwmon/hwmon1
+
+		obe_t *h = ctx->cli->h;
+		for (int i = 0; i < ctx->cli->h->num_output_streams; i++) {
+			obe_output_stream_t *e = obe_core_get_output_stream_by_index(h, i);
+			if (e->stream_action == STREAM_ENCODE && i == 0) {
+				obe_queue_t *q = &h->encoders[i]->queue;
+				sprintf(APPEND(line), ",ve_q=%d", q->size);
+				break;
+			}
+		}
+
+		/* Mux */
+		sprintf(APPEND(line), ",mux_dtstotal=%" PRIi64, g_mux_dtstotal);
+
+		/* Thermals */
+		if (ctx->thermal_bm == 0) {
+			char tmp[256];
+			for (int i = 0; i < 63; i++) {
+				char fn[256];
+				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_label", i);
+				FILE *fh = fopen(fn, "rb");
+				if (!fh)
+					continue;
+
+				tmp[0] = 0;
+				fread(tmp, 1, sizeof(tmp), fh);
+				if (strncmp(tmp, "Core ", 5) == 0) {
+					ctx->thermal_bm |= (1 << i);
+					ctx->therm_max = i + 1;
+				}
+				fclose(fh);
+			}
+		}
+
+		if (ctx->thermal_bm) {
+			int t = 0;
+			for (int i = 0; i < ctx->therm_max; i++) {
+				if ((ctx->thermal_bm & ((uint64_t)(1 << i))) == 0)
+					continue;
+
+				char fn[256];
+				char val[16];
+				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_input", i);
+				FILE *fh = fopen(fn, "rb");
+				if (!fh)
+					continue;
+
+				fread(val, 1, sizeof(val), fh);
+				fclose(fh);
+				sprintf(APPEND(line),",cpu%d_temp=%d", t++, atoi(val) / 1000);
+			}
+		}
+
+		char msg[256];
+		sprintf(msg, "ts=%s%s\n", ts, line);
+
+		if (g_core_runtime_statistics_to_file > 1)
+			printf(msg);
+
+		char statsfile[256];
+		sprintf(statsfile, "/tmp/%d-obe-runtime-statistics.log", getpid());
+		FILE *fh = fopen(statsfile, "a+");
+		if (fh) {
+			fwrite(msg, 1, strlen(msg), fh);
+			fclose(fh);
+		}
+	}
+	ctx->terminated = 1;
+	ctx->running = 0;
+	pthread_exit(0);
+
+	return NULL;
+}
+
+int runtime_statistics_start(void **p, obecli_ctx_t *cli)
+{
+	struct runtime_statistics_ctx *ctx = calloc(1, sizeof(*ctx));
+	*p = ctx;
+	ctx->cli = cli;
+
+	printf("%s()\n", __func__);
+
+	pthread_create(&ctx->threadId, NULL, runtime_statistics_thread, ctx);
+	return 0;
+}
+
+void runtime_statistics_stop(void *p)
+{
+	printf("%s()\n", __func__);
+
+	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
+	ctx->terminate = 1;
+	while (!ctx->terminated)
+		usleep(100 * 1000);
+
+	pthread_cancel(ctx->threadId);
 }

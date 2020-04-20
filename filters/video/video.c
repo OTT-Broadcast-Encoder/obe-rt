@@ -23,6 +23,7 @@
 
 #include <libavutil/cpu.h>
 #include <libswscale/swscale.h>
+#include <libavutil/frame.h>
 #include "common/common.h"
 #include "common/bitstream.h"
 #include "video.h"
@@ -30,6 +31,17 @@
 #include "dither.h"
 #include "x86/vfilter.h"
 #include "input/sdi/sdi.h"
+
+#define DO_JPG 0
+#if DO_JPG
+#include "convert.h"
+#endif
+
+#define DO_CRYSTAL_FP 0
+#if DO_CRYSTAL_FP
+/* Crystall CC */
+#include "analyze_fp.h"
+#endif
 
 #if X264_BIT_DEPTH > 8
 typedef uint16_t pixel;
@@ -48,7 +60,7 @@ typedef struct
     /* resize */
     struct SwsContext *sws_ctx;
     int sws_ctx_flags;
-    enum PixelFormat dst_pix_fmt;
+    enum AVPixelFormat dst_pix_fmt;
 
     /* downsample */
     void (*downsample_chroma_row_top)( uint16_t *src, uint16_t *dst, int width, int stride );
@@ -85,11 +97,11 @@ typedef struct
 
 const static obe_cli_csp_t obe_cli_csps[] =
 {
-    [PIX_FMT_YUV420P] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 8 },
-    [PIX_FMT_NV12] =    { 2, { 1,  1 },     { 1, .5 },     2, 2, 8 },
-    [PIX_FMT_YUV420P10] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 10 },
-    [PIX_FMT_YUV422P10] = { 3, { 1, .5, .5 }, { 1, 1, 1 }, 2, 2, 10 },
-    [PIX_FMT_YUV420P16] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 16 },
+    [AV_PIX_FMT_YUV420P] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 8 },
+    [AV_PIX_FMT_NV12] =    { 2, { 1,  1 },     { 1, .5 },     2, 2, 8 },
+    [AV_PIX_FMT_YUV420P10] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 10 },
+    [AV_PIX_FMT_YUV422P10] = { 3, { 1, .5, .5 }, { 1, 1, 1 }, 2, 2, 10 },
+    [AV_PIX_FMT_YUV420P16] = { 3, { 1, .5, .5 }, { 1, .5, .5 }, 2, 2, 16 },
 };
 
 /* These SARs are often based on historical convention so often cannot be calculated */
@@ -278,7 +290,7 @@ static int resize_frame( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame
         if( IS_INTERLACED( raw_frame->img.format ) )
             vfilt->dst_pix_fmt = raw_frame->img.csp;
         else
-            vfilt->dst_pix_fmt = raw_frame->img.csp == PIX_FMT_YUV422P10 ? PIX_FMT_YUV420P10 : PIX_FMT_YUV420P;
+            vfilt->dst_pix_fmt = raw_frame->img.csp == AV_PIX_FMT_YUV422P10 ? AV_PIX_FMT_YUV420P10 : AV_PIX_FMT_YUV420P;
 
         vfilt->sws_ctx_flags |= SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND | SWS_LANCZOS;
 
@@ -294,7 +306,8 @@ static int resize_frame( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame
 
     tmp_image.width = width;
     tmp_image.height = raw_frame->img.height;
-    tmp_image.planes = av_pix_fmt_descriptors[vfilt->dst_pix_fmt].nb_components;
+    const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+    tmp_image.planes = d->nb_components;
     tmp_image.csp = vfilt->dst_pix_fmt;
 //printf("filter new csp is %d\n", vfilt->dst_pix_fmt);
     tmp_image.format = raw_frame->img.format;
@@ -318,7 +331,7 @@ static int resize_frame( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame
 
 static int csp_num_interleaved( int csp, int plane )
 {
-    return ( csp == PIX_FMT_NV12 && plane == 1 ) ? 2 : 1;
+    return ( csp == AV_PIX_FMT_NV12 && plane == 1 ) ? 2 : 1;
 }
 
 #if 0
@@ -398,6 +411,10 @@ static int dither_image( obe_raw_frame_t *raw_frame, int16_t *error_buf )
 
 #endif
 
+/* For a traditional interlaced frame, downsample the chroma
+ * converting a frame of PIX_FMT_YUV422P10 to PIX_FMT_YUV420P10
+ * Limited to 10bit pixels only.
+ */
 static int downconvert_image_interlaced( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame )
 {
     obe_image_t *img = &raw_frame->img;
@@ -405,10 +422,11 @@ static int downconvert_image_interlaced( obe_vid_filter_ctx_t *vfilt, obe_raw_fr
     obe_image_t *out = &tmp_image;
 
     /* FIXME: support 8-bit. Note hardcoded width*2 below. */
-    tmp_image.csp = PIX_FMT_YUV420P10;
+    tmp_image.csp = AV_PIX_FMT_YUV420P10;
     tmp_image.width = raw_frame->img.width;
     tmp_image.height = raw_frame->img.height;
-    tmp_image.planes = av_pix_fmt_descriptors[tmp_image.csp].nb_components;
+    const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+    tmp_image.planes = d->nb_components;
     tmp_image.format = raw_frame->img.format;
 
     if( av_image_alloc( tmp_image.plane, tmp_image.stride, tmp_image.width, tmp_image.height+1,
@@ -449,13 +467,14 @@ static int downconvert_image_interlaced( obe_vid_filter_ctx_t *vfilt, obe_raw_fr
     return 0;
 }
 
+/* Convert from 10bit to 8bit and apply a video dither. */
 static int dither_image( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame )
 {
     obe_image_t *img = &raw_frame->img;
     obe_image_t tmp_image = {0};
     obe_image_t *out = &tmp_image;
 
-    tmp_image.csp = img->csp == PIX_FMT_YUV422P10 ? PIX_FMT_YUV422P : PIX_FMT_YUV420P;
+    tmp_image.csp = img->csp == AV_PIX_FMT_YUV422P10 ? AV_PIX_FMT_YUV422P : AV_PIX_FMT_YUV420P;
 #if 0
 printf("%s() inputcsp = %d csp = %d   PIX_FMT_YUV422P = %d PIX_FMT_YUV420P = %d\n", __func__, img->csp, tmp_image.csp, PIX_FMT_YUV422P, PIX_FMT_YUV420P);
 if (tmp_image.csp == PIX_FMT_YUV420P)
@@ -463,7 +482,8 @@ if (tmp_image.csp == PIX_FMT_YUV420P)
 #endif
     tmp_image.width = raw_frame->img.width;
     tmp_image.height = raw_frame->img.height;
-    tmp_image.planes = av_pix_fmt_descriptors[tmp_image.csp].nb_components;
+    const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(raw_frame->alloc_img.csp);
+    tmp_image.planes = d->nb_components;
     tmp_image.format = raw_frame->img.format;
 #if 0
 printf("%s(2) inputcsp = %d csp = %d   PIX_FMT_YUV422P = %d PIX_FMT_YUV420P = %d\n", __func__, img->csp, tmp_image.csp, PIX_FMT_YUV422P, PIX_FMT_YUV420P);
@@ -686,9 +706,19 @@ static void *start_filter_video( void *ptr )
     obe_filter_t *filter = filter_params->filter;
     obe_int_input_stream_t *input_stream = filter_params->input_stream;
     obe_raw_frame_t *raw_frame;
-    obe_output_stream_t *output_stream = get_output_stream( h, 0 ); /* FIXME when output_stream_id for video is not zero */
+    obe_output_stream_t *output_stream = get_output_stream_by_id(h, 0); /* FIXME when output_stream_id for video is not zero */
     int h_shift, v_shift;
     const AVPixFmtDescriptor *pfd;
+
+#if DO_JPG
+    struct filter_compress_ctx *fc_ctx = NULL;
+    filter_compress_alloc(&fc_ctx);
+#endif
+
+#if DO_CRYSTAL_FP
+    struct filter_analyze_fp_ctx *fp_ctx = NULL;
+    filter_analyze_fp_alloc(&fp_ctx);
+#endif
 
     obe_vid_filter_ctx_t *vfilt = calloc( 1, sizeof(*vfilt) );
     if( !vfilt )
@@ -740,13 +770,16 @@ static void *start_filter_video( void *ptr )
         /* Downconvert using interlaced scaling if input is 4:2:2 and target is 4:2:0 */
         if( h_shift == 1 && v_shift == 0 && filter_params->target_csp == X264_CSP_I420 )
         {
+            /* Convert from YUV422P10 to YUV420P10, chroma subsample, specific to interlaced. */
             if( downconvert_image_interlaced( vfilt, raw_frame ) < 0 )
                 goto end;
+//PRINT_OBE_IMAGE(&raw_frame->img, "DownCo POST      ");
         }
 
         pfd = av_pix_fmt_desc_get( raw_frame->img.csp );
-        if( pfd->comp[0].depth_minus1+1 == 10 && X264_BIT_DEPTH == 8 )
+        if( pfd->comp[0].depth == 10 && X264_BIT_DEPTH == 8 )
         {
+            /* Convert from 10bit to 8bit and apply a video dither. */
             if( dither_image( vfilt, raw_frame ) < 0 )
                 goto end;
         }
@@ -765,6 +798,14 @@ static void *start_filter_video( void *ptr )
 
         remove_from_queue( &filter->queue );
 //PRINT_OBE_IMAGE(&raw_frame->img, "VIDEO FILTER POST");
+
+#if DO_JPG
+	filter_compress_jpg(fc_ctx, raw_frame);
+#endif
+#if DO_CRYSTAL_FP
+	filter_analyze_fp_process(fp_ctx, raw_frame);
+#endif
+
         add_to_encode_queue( h, raw_frame, 0 );
     }
 
@@ -778,6 +819,12 @@ end:
     }
 
     free( filter_params );
+#if DO_JPG
+    filter_compress_free(fc_ctx);
+#endif
+#if DO_CRYSTAL_FP
+    filter_analyze_fp_free(fp_ctx);
+#endif
 
     return NULL;
 }

@@ -26,7 +26,7 @@ AX_PROG_YASM()
 # being linked into a consumer's shared library
 AC_MSG_CHECKING(whether fPIC compiler option is accepted)
 SAVED_CFLAGS="$CFLAGS -DKL_USERSPACE"
-CFLAGS="$CFLAGS -fPIC -Werror"
+CFLAGS="$CFLAGS -fPIC -Werror "
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [return 0;])],
     [AC_MSG_RESULT(yes)
      CFLAGS="$SAVED_CFLAGS -fPIC"],
@@ -72,15 +72,35 @@ AC_CHECK_HEADERS([twolame.h],
                  [break],
                  [AC_MSG_ERROR([libtwolame headers not found or not usable])])
 
+AC_CHECK_HEADERS([Processing.NDI.Lib.h], HEADER_NDILIB="yes")
+#if test "x$HEADER_NDILIB" == "xyes" ; then
+#    LDFLAGS+=" -lx265 "
+#fi
+AM_CONDITIONAL(NDILIB, test x"$HEADER_NDILIB" == x"yes")
+
+AC_CHECK_HEADERS([BlueDriver_p.h], HEADER_BLUEFISH444="yes")
+#if test "x$HEADER_LIBX265" == "xyes" ; then
+#    LDFLAGS+=" -lx265 "
+#fi
+AM_CONDITIONAL(BLUEFISH444, test x"$HEADER_BLUEFISH444" == x"yes")
+
+## Check for x265 (optional)
+AC_CHECK_HEADERS([x265.h], HEADER_LIBX265="yes")
+#if test "x$HEADER_LIBX265" == "xyes" ; then
+#    LDFLAGS+=" -lx265 "
+#fi
+AM_CONDITIONAL(LIBX265, test x"$HEADER_LIBX265" == x"yes")
+
+## Check for VAAPI (optional)
+AC_CHECK_HEADERS([va/va.h], HEADER_LIBVA="yes")
+AM_CONDITIONAL(LIBVA, test x"$HEADER_LIBVA" == x"yes")
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_UINT16_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_CHECK_FUNCS([memset strrchr])
-
-AC_CONFIG_FILES([Makefile obe/Makefile])
-AC_OUTPUT
 
 # Add debug support
 AC_ARG_ENABLE(debug,
@@ -97,3 +117,19 @@ AM_CONDITIONAL(DEBUG, test x"$debug" = x"true")
 AM_COND_IF(DEBUG,
     AC_DEFINE(DEBUG, 1, [Define to 0 if this is a release build]),
     AC_DEFINE(DEBUG, 0, [Define to 1 or higher if this is a debug build]))
+
+AC_ARG_ENABLE(websockets,
+  AS_HELP_STRING(
+    [--enable-websockets],
+    [enable websockets, default: no]),
+    [case "${enableval}" in
+      yes) websockets=true ;;
+      no)  websockets=false ;;
+      *)   AC_MSG_ERROR([bad value ${enableval} for --enable-websockets]) ;;
+    esac],
+    [websockets=false])
+AM_CONDITIONAL(WEBSOCKETS, test x"$websockets" = x"true")
+
+AC_CONFIG_FILES([Makefile obe/Makefile])
+AC_OUTPUT
+

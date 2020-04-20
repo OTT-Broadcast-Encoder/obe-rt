@@ -25,8 +25,8 @@
 #define OBE_H
 
 #include <inttypes.h>
-#include <libavutil/audioconvert.h>
 #include <x264.h>
+#include "stream_formats.h"
 
 #define OBE_VERSION_MAJOR 0
 #define OBE_VERSION_MINOR 1
@@ -67,6 +67,8 @@ enum input_audio_connection_e
 enum input_video_format_e
 {
     /* SD */
+    INPUT_VIDEO_FORMAT_UNDEFINED,
+
     INPUT_VIDEO_FORMAT_PAL,
     INPUT_VIDEO_FORMAT_NTSC,
 
@@ -88,14 +90,19 @@ enum input_video_format_e
     INPUT_VIDEO_FORMAT_1080P_50,
     INPUT_VIDEO_FORMAT_1080P_5994,
     INPUT_VIDEO_FORMAT_1080P_60, /* NB: actually 60.00Hz */
+
+    INPUT_VIDEO_FORMAT_2160P_50, /* NB: 4kp50 */
 };
 
 enum input_type_e
 {
-    INPUT_URL,
+    INPUT_URL = 0,
     INPUT_DEVICE_DECKLINK,
     INPUT_DEVICE_LINSYS_SDI,
     INPUT_DEVICE_V4L2,
+    INPUT_DEVICE_BLUEFISH,
+    INPUT_DEVICE_V210,
+    INPUT_DEVICE_NDI,
 //    INPUT_DEVICE_ASI,
 };
 
@@ -116,6 +123,8 @@ typedef struct
     int enable_bitstream_audio;
     int enable_patch1;
     int enable_los_exit_ms;
+    int enable_frame_injection;
+    int enable_allow_1080p60;
 } obe_input_t;
 
 /**** Stream Formats ****/
@@ -125,60 +134,6 @@ enum stream_type_e
     STREAM_TYPE_AUDIO,
     STREAM_TYPE_SUBTITLE,
     STREAM_TYPE_MISC,
-};
-
-enum stream_formats_e
-{
-    /* Separate Streams */
-    VIDEO_UNCOMPRESSED,
-    VIDEO_AVC,
-    VIDEO_MPEG2,
-
-    AUDIO_PCM,
-    AUDIO_MP2,    /* MPEG-1 Layer II */
-    AUDIO_AC_3,   /* ATSC A/52B / AC-3 */
-    AUDIO_E_AC_3, /* ATSC A/52B Annex E / Enhanced AC-3 */
-//    AUDIO_E_DIST, /* E Distribution Audio */
-    AUDIO_AAC,
-    AUDIO_AC_3_BITSTREAM,   /* ATSC A/52B / AC-3 Bitstream passthorugh */
-
-    SUBTITLES_DVB,
-    MISC_TELETEXT,
-    MISC_TELETEXT_INVERTED,
-    MISC_WSS,
-    MISC_VPS,
-
-    /* Per-frame Streams/Data */
-    CAPTIONS_CEA_608,
-    CAPTIONS_CEA_708,
-    MISC_AFD,
-    MISC_BAR_DATA,
-    MISC_PAN_SCAN,
-
-    /* VBI data services */
-    VBI_RAW,         /* location flag */
-    VBI_AMOL_48,
-    VBI_AMOL_96,
-    VBI_NABTS,
-    VBI_TVG2X,
-    VBI_CP,
-    VBI_VITC,
-    VBI_VIDEO_INDEX, /* location flag */
-
-    /* Vertical Ancillary (location flags) */
-    VANC_GENERIC,
-    VANC_DVB_SCTE_VBI,
-    VANC_OP47_SDP,
-    VANC_OP47_MULTI_PACKET,
-    VANC_ATC,
-    VANC_DTV_PROGRAM_DESCRIPTION,
-    VANC_DTV_DATA_BROADCAST,
-    VANC_SMPTE_VBI,
-    VANC_SCTE_104,
-
-    /* Kernel Labs, a generic handler */
-    DVB_TABLE_SECTION,
-    SMPTE2038,
 };
 
 enum mp2_mode_e
@@ -207,7 +162,7 @@ typedef struct
 {
     int input_stream_id;
     int stream_type;
-    int stream_format;
+    enum stream_formats_e stream_format;
 
     char lang_code[4];
 
@@ -419,7 +374,7 @@ typedef struct
     int stream_action;
 
     /** Encode options **/
-    int stream_format;
+    enum stream_formats_e stream_format;
 
     /* Video */
     int is_wide;
@@ -506,11 +461,15 @@ typedef struct
 int obe_setup_muxer( obe_t *h, obe_mux_opts_t *mux_opts );
 
 /**** Output *****/
+/* These indexes need to match the indexes in array output_modules[].
+ * Make sure these stay fully syncronized.
+ */
 enum output_e
 {
     OUTPUT_UDP, /* MPEG-TS in UDP */
     OUTPUT_RTP, /* MPEG-TS in RTP in UDP */
-//    OUTPUT_LINSYS_ASI,
+    OUTPUT_LINSYS_ASI,
+    OUTPUT_FILE_TS, /* MPEG-TS in file */
 //    OUTPUT_LINSYS_SMPTE_310M,
 };
 
@@ -538,5 +497,11 @@ int obe_start( obe_t *h );
 int obe_stop( obe_t *h );
 
 void obe_close( obe_t *h );
+
+const char *obe_core_get_format_name_short(enum stream_formats_e stream_format);
+
+void obe_setProcessStartTime();
+time_t obe_getProcessStartTime();
+uint32_t obe_getProcessRuntimeSeconds();
 
 #endif

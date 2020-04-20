@@ -42,7 +42,13 @@ typedef struct
     int local_port;
     struct sockaddr_storage dest_addr;
     int dest_addr_len;
+
+    int bps;
+    int bps_current;
+    time_t bps_last;
 } obe_udp_ctx;
+
+int g_udp_output_bps = 0;
 
 static int udp_set_multicast_opts( int sockfd, obe_udp_ctx *s )
 {
@@ -310,15 +316,55 @@ int udp_open( hnd_t *p_handle, obe_udp_opts_t *udp_opts )
     return -1;
 }
 
+#include <encoders/video/sei-timestamp.h>
+
 int udp_write( hnd_t handle, uint8_t *buf, int size )
 {
     obe_udp_ctx *s = handle;
     int ret;
 
-    if( !s->is_connected )
+    time_t now;
+    time(&now);
+
+    if (now != s->bps_last) {
+        s->bps_last = now;
+        s->bps = s->bps_current;
+        s->bps_current = 0;
+        g_udp_output_bps = s->bps;
+    }
+    s->bps_current += (size * 8);
+
+    if (!s->is_connected) {
+        if (g_sei_timestamping > 1) {
+            while (size == 1316) {
+                //printf("%s() %d bytes\n", __func__, size);
+                int offset = ltn_uuid_find(buf, 1316);
+                if (offset < 0)
+                    break;
+
+                struct timeval now;
+                gettimeofday(&now, NULL);
+
+                /* FIXME/TODO:
+                 * Highly experimental, can lead to packet corruption if the offset PLUS
+                 * the position of variables 8 and 9 overwrite a following transport header.
+                 * field_set() will catch this and return error, resulting in zero values in the final SEI output.
+                 */
+                if (set_timestamp_field_set(buf + offset, size - offset, 8, now.tv_sec) >= 0) {
+                    set_timestamp_field_set(buf +  offset, size - offset, 9, now.tv_usec);
+                }
+
+                if (g_sei_timestamping > 2) {
+                    sei_timestamp_hexdump(buf + offset, size - offset);
+                }
+                break;
+            }
+        } /* (g_sei_timestamping) */
         ret = sendto( s->udp_fd, buf, size, 0, (struct sockaddr *)&s->dest_addr, s->dest_addr_len );
-    else
+    } else {
+        /* !s->is_connected */
         ret = send( s->udp_fd, buf, size, 0 );
+    }
 
     if( ret < 0 )
     {

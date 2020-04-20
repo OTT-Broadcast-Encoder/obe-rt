@@ -33,6 +33,8 @@
         *c++ = (val >> 20) & 0x3ff;  \
     } while (0)
 
+unsigned int g_sdi_max_delay = (100 * 1000); /* acceptible level of signal delay, after which we assume the cable was pulled. */
+
 void obe_v210_planar_unpack_c( const uint32_t *src, uint16_t *y, uint16_t *u, uint16_t *v, int width )
 {
     uint32_t val;
@@ -215,7 +217,7 @@ int check_user_selected_non_display_data( obe_t *h, int type, int location )
 
     if( location == USER_DATA_LOCATION_DVB_STREAM )
     {
-        output_stream = get_output_stream( h, VBI_RAW );
+        output_stream = get_output_stream_by_id(h, VBI_RAW);
         if( !output_stream )
             return 0;
 
@@ -234,7 +236,7 @@ int check_user_selected_non_display_data( obe_t *h, int type, int location )
     else if( location == USER_DATA_LOCATION_FRAME )
     {
         /* Assumes video frame has stream_id=0 */
-        output_stream = get_output_stream( h, 0 );
+        output_stream = get_output_stream_by_id(h, 0);
         /* Should never happen */
         if( !output_stream )
             return 0;

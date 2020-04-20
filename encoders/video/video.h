@@ -24,6 +24,8 @@
 #ifndef OBE_ENCODERS_VIDEO_H
 #define OBE_ENCODERS_VIDEO_H
 
+#include <encoders/video/sei-timestamp.h>
+
 typedef struct
 {
     void* (*start_encoder)( void *ptr );
@@ -36,6 +38,10 @@ typedef struct
     x264_param_t avc_param;
 } obe_vid_enc_params_t;
 
-extern const obe_vid_enc_func_t x264_encoder;
+extern const obe_vid_enc_func_t x264_obe_encoder;
+extern const obe_vid_enc_func_t x265_obe_encoder;
+extern const obe_vid_enc_func_t avc_vaapi_obe_encoder;
+extern const obe_vid_enc_func_t hevc_vaapi_obe_encoder;
+extern const obe_vid_enc_func_t avc_gpu_avcodec_obe_encoder;
 
 #endif
