@@ -25,13 +25,13 @@
 #include "encoders/video/video.h"
 #include <libavutil/mathematics.h>
 
+#define MESSAGE_PREFIX "[x264]: "
 #define DEBUG_CODEC_TIMING 0
 
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
 int g_x264_nal_debug = 0;
 
-#define MESSAGE_PREFIX "[x264]: "
 #define SERIALIZE_CODED_FRAMES 0
 #if SERIALIZE_CODED_FRAMES
 static void serialize_coded_frame(obe_coded_frame_t *cf)
