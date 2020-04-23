@@ -269,6 +269,7 @@ static void *aac_start_encoder(void *ptr)
     codec->bit_rate = ctx->stream->bitrate * 1000;
     codec->sample_fmt = enc->sample_fmts[0];
     printf(MODULE "codec->sample_fmt = %d\n", codec->sample_fmt);
+    printf(MODULE "codec->bit_rate   = %" PRIi64 "\n", codec->bit_rate);
     printf(MODULE "long_name         = %s\n", enc->long_name);
     codec->channels = av_get_channel_layout_nb_channels(ctx->stream->channel_layout);
     codec->channel_layout = ctx->stream->channel_layout;
