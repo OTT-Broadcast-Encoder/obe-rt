@@ -1757,7 +1757,7 @@ void obe_close( obe_t *h )
     h = NULL;
 }
 
-void obe_raw_frame_printf(obe_raw_frame_t *rf)
+static void obe_raw_frame_video_printf(obe_raw_frame_t *rf)
 {
     printf("raw_frame %p width = %d ", rf, rf->img.width);
     printf("height = %d ", rf->img.height);
@@ -1771,6 +1771,33 @@ void obe_raw_frame_printf(obe_raw_frame_t *rf)
         printf("%d ", rf->img.stride[i]);
     }
     printf("\n");
+}
+
+static void obe_raw_frame_audio_printf(obe_raw_frame_t *rf)
+{
+    printf("rf.input_stream_id            = %d\n", rf->input_stream_id);
+    printf("rf.pts                        = %" PRIi64 "\n", rf->pts);
+    printf("rf.audio_frame.line_size      = %d\n", rf->audio_frame.linesize);
+    printf("rf.audio_frame.channel_layout = 0x%"PRIx64 " (%" PRIi64 ")\n", rf->audio_frame.channel_layout, rf->audio_frame.channel_layout);
+    printf("rf.audio_frame.num_channels   = %d\n", rf->audio_frame.num_channels);
+    printf("rf.audio_frame.num_samples    = %d\n", rf->audio_frame.num_samples);
+    printf("rf.audio_frame.sample_fmt     = %d\n", rf->audio_frame.sample_fmt);
+
+    for (int i = 0; i < rf->audio_frame.num_channels; i++) {
+        printf("rf.audio_frame.audio_data[%2d] = %p : ", i, rf->audio_frame.audio_data[i]);
+        uint32_t *p = (uint32_t *)rf->audio_frame.audio_data[i];
+        for (int j = 0; j < 8; j++)
+            printf("%08x ", *(p++)); 
+        printf("\n");
+    }
+}
+
+void obe_raw_frame_printf(obe_raw_frame_t *rf)
+{
+    if (rf->audio_frame.linesize)
+        obe_raw_frame_audio_printf(rf);
+    else
+        obe_raw_frame_video_printf(rf);
 }
 
 #if 0
