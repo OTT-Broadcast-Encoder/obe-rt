@@ -45,6 +45,8 @@
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
 #define RETURN_IF_ERROR( cond, ... ) RETURN_IF_ERR( cond, "options", NULL, __VA_ARGS__ )
 
+#define MODULE_PREFIX "[core]: "
+
 typedef struct
 {
     obe_t *h;
@@ -70,6 +72,8 @@ void *g_ltn_ws_handle = NULL;
 
 int  runtime_statistics_start(void **ctx, obecli_ctx_t *cli);
 void runtime_statistics_stop(void *ctx);
+int  terminate_after_start(void **ctx, obecli_ctx_t *cli, int afterNSeconds);
+void terminate_after_stop(void *ctx);
 
 /* Ctrl-C handler */
 static volatile int b_ctrl_c = 0;
@@ -1262,6 +1266,7 @@ extern int g_decklink_injected_frame_count;
 
 /* Core */
 extern int g_core_runtime_statistics_to_file;
+extern int g_core_runtime_terminate_after_seconds;
 
 /* Filters */
 extern int g_filter_audio_effect_pcm;
@@ -1376,6 +1381,8 @@ extern time_t g_decklink_missing_video_last_time;
         g_udp_output_bps);
     printf("core.runtime_statistics_to_file    = %d\n",
         g_core_runtime_statistics_to_file);
+    printf("core.runtime_terminate_after_seconds = %d\n",
+        g_core_runtime_terminate_after_seconds);
     printf("filter.audio.pcm.adjustment        = 0x%08x (bitmask)",
         g_filter_audio_effect_pcm);
     if (g_filter_audio_effect_pcm & (1 << 0))
@@ -1523,6 +1530,9 @@ static int set_variable(char *command, obecli_command_t *child)
 #endif
     if (strcasecmp(var, "core.runtime_statistics_to_file") == 0) {
         g_core_runtime_statistics_to_file = val;
+    } else
+    if (strcasecmp(var, "core.runtime_terminate_after_seconds") == 0) {
+        g_core_runtime_terminate_after_seconds = val;
     } else
     if (strcasecmp(var, "ts_mux.monitor_bps") == 0) {
         g_mux_ts_monitor_bps = val;
@@ -2074,6 +2084,9 @@ static int start_encode( char *command, obecli_command_t *child )
     if (g_core_runtime_statistics_to_file)
         runtime_statistics_start(&cli.h->runtime_statistics, &cli);
 
+    if (g_core_runtime_terminate_after_seconds)
+        terminate_after_start(&cli.h->terminate_after, &cli, g_core_runtime_terminate_after_seconds);
+
 #if LTN_WS_ENABLE
     ltn_ws_alloc(&g_ltn_ws_handle, &cli, 8443);
     char *version = getSoftwareVersion();
@@ -2093,6 +2106,8 @@ static int stop_encode( char *command, obecli_command_t *child )
 
     if (cli.h->runtime_statistics)
         runtime_statistics_stop(cli.h->runtime_statistics);
+    if (cli.h->terminate_after)
+        terminate_after_stop(cli.h->terminate_after);
 
     obe_close( cli.h );
     cli.h = NULL;
@@ -2584,12 +2599,92 @@ int runtime_statistics_start(void **p, obecli_ctx_t *cli)
 
 void runtime_statistics_stop(void *p)
 {
-	printf("%s()\n", __func__);
+	printf("%s() ctx %p\n", __func__, p);
 
 	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
 	ctx->terminate = 1;
 	while (!ctx->terminated)
 		usleep(100 * 1000);
 
+printf("terminated pre-cancel\n");
+	pthread_cancel(ctx->threadId);
+printf("terminated clean\n");
+}
+
+/* "Process teminate after N seconds capability" */
+int g_core_runtime_terminate_after_seconds = 0;
+struct terminate_after_ctx
+{
+	obecli_ctx_t *cli;
+
+	pthread_t threadId;
+	int running, terminate, terminated;
+
+	time_t terminateWhen;
+};
+
+static void *terminate_after_thread(void *p)
+{
+#if LOCAL_DEBUG
+	printf(MODULE_PREFIX "%s()\n", __func__);
+#endif
+	struct terminate_after_ctx *ctx = (struct terminate_after_ctx *)p;
+
+	pthread_setname_np(ctx->threadId, "obe-ta-after");
+
+	char ts[64];
+	char line[256] = { 0 };
+
+	sprintf(line, MODULE_PREFIX "WARNING: process configured to self terminate in %lu seconds.\n", ctx->terminateWhen - time(NULL));
+	fprintf(stderr, line);
+	syslog(LOG_INFO | LOG_LOCAL4, "%s", line);
+
+	ctx->running = 1;
+	while (!ctx->terminate) {
+		usleep(100 * 1000);
+		time_t now = time(NULL);
+		if (now >= ctx->terminateWhen) {
+			obe_getTimestamp(ts, NULL);
+			sprintf(line, MODULE_PREFIX "FATAL: Self terminating on command.\n");
+			fprintf(stderr, line);
+			syslog(LOG_INFO | LOG_LOCAL4, "%s", line);
+			exit(0);
+		}
+	}
+	printf(MODULE_PREFIX "Self terminate feature was prematurely cancelled\n");
+	ctx->terminated = 1;
+	ctx->running = 0;
+	pthread_exit(0);
+//	pthread_cancel(ctx->threadId);
+	return NULL;
+}
+
+int terminate_after_start(void **p, obecli_ctx_t *cli, int afterNSeconds)
+{
+#if LOCAL_DEBUG
+	printf(MODULE_PREFIX "%s(%d)\n", __func__, afterNSeconds);
+#endif
+	struct terminate_after_ctx *ctx = calloc(1, sizeof(*ctx));
+	*p = ctx;
+	ctx->cli = cli;
+
+	if (afterNSeconds < 5)
+		afterNSeconds = 5;
+	ctx->terminateWhen = time(NULL) + afterNSeconds;
+
+	printf(MODULE_PREFIX "%s() aborting after %d seconds\n", __func__, afterNSeconds);
+
+	pthread_create(&ctx->threadId, NULL, terminate_after_thread, ctx);
+	return 0;
+}
+
+void terminate_after_stop(void *p)
+{
+	struct terminate_after_ctx *ctx = (struct terminate_after_ctx *)p;
+	ctx->terminate = 1;
+	while (!ctx->terminated)
+		usleep(100 * 1000);
+
 	pthread_cancel(ctx->threadId);
 }
+

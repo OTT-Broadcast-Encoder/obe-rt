@@ -619,6 +619,9 @@ struct obe_t
     /* Runtime statistics */
     void *runtime_statistics;
 
+    /* Terminate After capability */
+    void *terminate_after;
+
     /* Version information */
     uint8_t sw_major;
     uint8_t sw_minor;
