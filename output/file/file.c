@@ -28,6 +28,7 @@
 #include "common/network/udp/udp.h"
 #include "output/output.h"
 #include "common/bitstream.h"
+#include <libltntstools/ltntstools.h>
 
 #define LOCAL_DEBUG 1
 
@@ -36,7 +37,7 @@
 struct file_ts_status
 {
     obe_output_t *output;
-    FILE *fh;
+    void *segmentWriter;
 };
 
 static void close_output(void *handle)
@@ -44,8 +45,8 @@ static void close_output(void *handle)
 	struct file_ts_status *status = handle;
 
 	if (status->output->output_dest.type == OUTPUT_FILE_TS) {
-		fclose(status->fh);
-		status->fh = NULL;
+		ltntstools_segmentwriter_free(status->segmentWriter);
+		status->segmentWriter = NULL;
 	}
 
 	if (status->output->output_dest.target)
@@ -75,8 +76,13 @@ static void *file_ts_start(void *ptr)
             return NULL;
 	}
 
-	status->fh = fopen(output_dest->target, "wb");
-	if (!status->fh) {
+	printf("output_dest->target %s\n", output_dest->target);
+	int writeMode = 0;
+	if (output_dest->target[ strlen(output_dest->target) - 1 ] == '@')
+		writeMode = 1;
+
+	int ret = ltntstools_segmentwriter_alloc(&status->segmentWriter, output_dest->target, writeMode);
+	if (ret < 0) {
             fprintf(stderr, PREFIX "Could not create file output [%s]\n", output_dest->target);
             return NULL;
 	}
@@ -112,7 +118,8 @@ static void *file_ts_start(void *ptr)
 #endif
 		for (int i = 0; i < num_muxed_data; i++) {
 			int len = 188 * 7;
-			size_t wlen = fwrite(&muxed_data[i]->data[7 * sizeof(int64_t)], 1, len, status->fh);
+			size_t wlen = ltntstools_segmentwriter_write(status->segmentWriter,
+				&muxed_data[i]->data[7 * sizeof(int64_t)], len);
 			if (wlen <= 0) {
 				fprintf(stderr, PREFIX "Failed to write packet\n");
 				syslog(LOG_ERR, PREFIX "Failed to write packet\n");
