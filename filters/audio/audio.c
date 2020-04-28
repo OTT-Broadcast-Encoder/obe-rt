@@ -178,6 +178,7 @@ static void *start_filter_audio( void *ptr )
             memset(split_raw_frame->audio_frame.audio_data, 0, sizeof(split_raw_frame->audio_frame.audio_data));
             split_raw_frame->audio_frame.linesize = split_raw_frame->audio_frame.num_channels = 0;
             split_raw_frame->audio_frame.channel_layout = output_stream->channel_layout;
+            split_raw_frame->audio_frame.num_channels = num_channels;
 
             if (av_samples_alloc(split_raw_frame->audio_frame.audio_data, &split_raw_frame->audio_frame.linesize, num_channels,
                               split_raw_frame->audio_frame.num_samples, split_raw_frame->audio_frame.sample_fmt, 0) < 0)
