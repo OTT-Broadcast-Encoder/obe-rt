@@ -200,6 +200,9 @@ static void *start_filter_audio( void *ptr )
 
             applyEffects(split_raw_frame);
 
+#if LOCAL_DEBUG
+            obe_raw_frame_printf(split_raw_frame);
+#endif
             add_to_encode_queue(h, split_raw_frame, h->encoders[i]->output_stream_id);
         } /* For all PCM encoders */
 
