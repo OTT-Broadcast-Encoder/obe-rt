@@ -915,6 +915,16 @@ static int reconfigure_encoder(struct context_s *ctx)
 	sprintf(&val[0], "%d", ctx->enc_params->avc_param.i_nal_hrd == 3 ? 0 : 1);
 	printf(MESSAGE_PREFIX "strict cbr is %s\n", val);
 	x265_param_parse(ctx->hevc_params, "strict-cbr", val);
+
+#if 0
+	sprintf(&val[0], "%d", 1);
+	printf(MESSAGE_PREFIX "hrd is %s\n", val);
+	x265_param_parse(ctx->hevc_params, "hrd", val);
+
+	sprintf(&val[0], "%d", 1);
+	printf(MESSAGE_PREFIX "frame duplication is %s\n", val);
+	x265_param_parse(ctx->hevc_params, "frame-dup", val);
+#endif
 	return 0;
 }
 
