@@ -2,6 +2,11 @@
 #define SEI_TIMESTAMP_H
 
 #include <stdint.h>
+#include <sys/time.h>
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 /* Marker to prevent 21 consequtive zeros, its illegal. */
 #define SEI_BIT_DELIMITER 0x81
@@ -27,7 +32,7 @@ extern int g_sei_timestamping;
 #define SEI_TIMESTAMP_FIELD_COUNT (9)
 #define SEI_TIMESTAMP_PAYLOAD_LENGTH (sizeof(ltn_uuid_sei_timestamp) + (SEI_TIMESTAMP_FIELD_COUNT * 6))
 
-unsigned char *set_timestamp_alloc();
+unsigned char *set_timestamp_alloc(void);
 int            set_timestamp_init(unsigned char *buffer, int lengthBytes);
 int            set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value);
 int            set_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value);
@@ -38,4 +43,19 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes);
 int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int lengthBytes);
 void sei_timestamp_hexdump(const unsigned char *buffer, int lengthBytes);
 
+int sei_timestamp_value_timeval_query(const unsigned char *buffer, int lengthBytes, int nr, struct timeval *t);
+
+/* Value 2, time of hardware when frame arrived.
+ * Value 4, time of frame codec entry point.
+ * Value 6, time of frame codec exit point.
+ */
+int sei_timestamp_value_timeval_set(const unsigned char *buffer, int lengthBytes, int nr, struct timeval *t);
+
+int sei_timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y);
+int64_t sei_timediff_to_msecs(struct timeval *tv);
+int64_t sei_timediff_to_usecs(struct timeval *tv);
+
+#if defined(__cplusplus)
+};
+#endif
 #endif /* SEI_TIMESTAMP_H */
