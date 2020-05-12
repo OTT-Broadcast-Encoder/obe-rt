@@ -56,6 +56,7 @@ vfilter.o:
 obecli_SOURCES  = obe.c
 obecli_SOURCES += obecli.c
 obecli_SOURCES += stream_formats.c
+obecli_SOURCES += statistics.c
 obecli_SOURCES += ../mux/smoothing.c
 obecli_SOURCES += ../mux/ts/ts.c
 obecli_SOURCES += ../output/ip/ip.c
