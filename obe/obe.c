@@ -2012,3 +2012,26 @@ uint32_t obe_getProcessRuntimeSeconds()
 	return time(NULL) - obe_getProcessStartTime();
 }
 
+static int g_platform_model = -1;
+int obe_core_get_platform_model()
+{
+	if (g_platform_model != -1)
+		return g_platform_model;
+
+	char line[256];
+	FILE *fh = fopen("/proc/cpuinfo", "rb");
+	while (!feof(fh)) {
+		memset(line, 0, sizeof(line));
+		fgets(&line[0], sizeof(line), fh);
+		if (feof(fh))
+			break;
+
+		if (strstr(line, "i7-4790S")) {
+			g_platform_model = 573;
+			break;
+		}
+	}
+
+	return g_platform_model;
+}
+

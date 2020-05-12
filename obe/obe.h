@@ -505,4 +505,6 @@ void obe_setProcessStartTime();
 time_t obe_getProcessStartTime();
 uint32_t obe_getProcessRuntimeSeconds();
 
+int obe_core_get_platform_model();
+
 #endif
