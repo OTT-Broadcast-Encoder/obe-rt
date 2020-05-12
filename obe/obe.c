@@ -484,6 +484,15 @@ obe_encoder_t *get_encoder( obe_t *h, int output_stream_id )
 }
 
 /* Output */
+int obe_core_get_output_stream_queue_depth(obe_t *h, int output_stream_id)
+{
+    obe_queue_t *q = &h->encoders[output_stream_id]->queue;
+    if (!q)
+        return -1;
+
+    return q->size;
+}
+
 obe_output_stream_t *get_output_stream_by_id(obe_t *h, int output_stream_id)
 {
     for( int i = 0; i < h->num_output_streams; i++ )

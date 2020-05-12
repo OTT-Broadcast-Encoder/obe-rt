@@ -499,6 +499,7 @@ int obe_stop( obe_t *h );
 void obe_close( obe_t *h );
 
 const char *obe_core_get_format_name_short(enum stream_formats_e stream_format);
+int obe_core_get_output_stream_queue_depth(obe_t *h, int output_stream_id);
 
 void obe_setProcessStartTime();
 time_t obe_getProcessStartTime();
