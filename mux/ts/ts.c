@@ -979,7 +979,11 @@ if (fh)
             if (null_pct <= null_pct_val && obe_getProcessRuntimeSeconds() > 3) {
                 char ts[64];
                 obe_getTimestamp(ts, NULL);
-                printf(PREFIX "%s : Warning: null padding %d%% or less (%d%%), codec exceeding the muxer capability.\n", ts, null_pct_val, null_pct);
+                static time_t lastPrint = 0;
+                if (lastPrint + 1 < time(NULL)) {
+                    lastPrint = time(NULL);
+                    printf(PREFIX "%s : Warning: null padding %d%% or less (%d%%), codec exceeding the muxer capability.\n", ts, null_pct_val, null_pct);
+                }
             }
 
             muxed_data = new_muxed_data( len );
