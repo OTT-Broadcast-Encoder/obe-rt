@@ -218,20 +218,20 @@ printf("pic->img.i_csp = %d [%s] bits = %d\n",
         p = &pic->extra_sei.payloads[count - 1];
         p->payload_type = USER_DATA_AVC_UNREGISTERED;
         p->payload_size = SEI_TIMESTAMP_PAYLOAD_LENGTH;
-        p->payload = set_timestamp_alloc();
+        p->payload = sei_timestamp_alloc();
 
         struct timeval tv;
         gettimeofday(&tv, NULL);
 
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&raw_frame->avfm));
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&raw_frame->avfm));
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
-        set_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&raw_frame->avfm));
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&raw_frame->avfm));
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
+        sei_timestamp_field_set(p->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
 
         /* The remaining 8 bytes (time exit from compressor fields)
          * will be filled when the frame exists the compressor. */
@@ -765,8 +765,8 @@ printf("Malloc failed\n");
                     gettimeofday(&tv, NULL);
 
                     /* Add the time exit from compressor seconds/useconds. */
-                    set_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 6, tv.tv_sec);
-                    set_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 7, tv.tv_usec);
+                    sei_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 6, tv.tv_sec);
+                    sei_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 7, tv.tv_usec);
                 }
             }
         }

@@ -445,6 +445,14 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 	x265_picture_free_userSEI(p);
 	x265_picture_init(ctx->hevc_params, p);
 
+	if (obe_core_get_platform_model() == 573) {
+		int ve_q = obe_core_get_output_stream_queue_depth(ctx->h, 0);
+		if (ve_q > 1) {
+			/* Lower the QP drastically to try and quickly catchup with the backlog */
+			p->forceqp = 40;
+		}
+	}
+
 	p->sliceType = X265_TYPE_AUTO;
 	p->bitDepth = 8;
 	p->stride[0] = img->stride[0];
@@ -512,20 +520,20 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		x = &p->userSEI.payloads[count - 1];
 		x->payloadType = USER_DATA_AVC_UNREGISTERED;
 		x->payloadSize = SEI_TIMESTAMP_PAYLOAD_LENGTH;
-		x->payload = set_timestamp_alloc(); /* Freed when we enter the function prior to pic re-init. */
+		x->payload = sei_timestamp_alloc(); /* Freed when we enter the function prior to pic re-init. */
 
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0);
-		set_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0);
+		sei_timestamp_field_set(x->payload, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0);
 
 		/* The remaining 8 bytes (time exit from compressor fields)
 		 * will be filled when the frame exists the compressor. */
@@ -717,8 +725,8 @@ static void _process_nals(struct context_s *ctx, int64_t arrival_time)
 				gettimeofday(&tv, NULL);
 
 				/* Add the time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 6, tv.tv_sec);
-				set_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 7, tv.tv_usec);
+				sei_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 6, tv.tv_sec);
+				sei_timestamp_field_set(&ctx->hevc_nals[m].payload[offset], ctx->hevc_nals[m].sizeBytes - offset, 7, tv.tv_usec);
 			}
 		}
 	}
@@ -865,6 +873,12 @@ static int reconfigure_encoder(struct context_s *ctx)
 
 	sprintf(&val[0], "%d",ctx->enc_params->avc_param.i_keyint_max);
 	x265_param_parse(ctx->hevc_params, "keyint", val);
+	printf(MESSAGE_PREFIX "keyint = %s\n", val);
+
+	if (obe_core_get_platform_model() == 573) {
+		x265_param_parse(ctx->hevc_params, "min-keyint", val);
+		printf(MESSAGE_PREFIX "min-keyint = %s\n", val);
+	}
 
 	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY) {
 		/* Found that in lowest mode, obe doesn't accept the param, but the codec reports underruns. */
@@ -898,12 +912,6 @@ static int reconfigure_encoder(struct context_s *ctx)
 	printf(MESSAGE_PREFIX "Setting QPmin to %s\n", val);
 	x265_param_parse(ctx->hevc_params, "qpmin", val);
 
-	if (ctx->enc_params->avc_param.i_threads < 8) {
-		printf(MESSAGE_PREFIX "configuration threads defined as %d, need a minimum of 8. Adjusting to 8\n",
-			ctx->enc_params->avc_param.i_threads);
- 
-		ctx->enc_params->avc_param.i_threads = 8;
-	}
 	/* 0 Is preferred, which is 'autodetect' */
 	sprintf(&val[0], "%d", ctx->enc_params->avc_param.i_threads);
 	x265_param_parse(ctx->hevc_params, "frame-threads", val);
@@ -916,6 +924,18 @@ static int reconfigure_encoder(struct context_s *ctx)
 	printf(MESSAGE_PREFIX "strict cbr is %s\n", val);
 	x265_param_parse(ctx->hevc_params, "strict-cbr", val);
 
+	if (obe_core_get_platform_model() == 573) {
+		sprintf(val, "64");
+		printf(MESSAGE_PREFIX "ctu %s\n", val);
+		x265_param_parse(ctx->hevc_params, "ctu", val);
+
+		printf(MESSAGE_PREFIX "no-open-gop\n");
+		printf(MESSAGE_PREFIX "intra-refresh\n");
+		printf(MESSAGE_PREFIX "me is hex\n");
+		x265_param_parse(ctx->hevc_params, "no-open-gop", "1");
+		x265_param_parse(ctx->hevc_params, "intra-refresh", "1");
+		x265_param_parse(ctx->hevc_params, "me", "hex");
+	}
 #if 0
 	sprintf(&val[0], "%d", 1);
 	printf(MESSAGE_PREFIX "hrd is %s\n", val);

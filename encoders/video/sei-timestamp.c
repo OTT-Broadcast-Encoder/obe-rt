@@ -18,7 +18,7 @@ const unsigned char ltn_uuid_sei_timestamp[] =
     0x59, 0x96, 0xFF, 0x28, 0x17, 0xCA, 0x41, 0x96, 0x8D, 0xE3, 0xE5, 0x3F, 0xE2, 0xF9, 0x92, 0xAE
 };
 
-unsigned char *set_timestamp_alloc(void)
+unsigned char *sei_timestamp_alloc(void)
 {
 	unsigned char *p = (unsigned char *)calloc(1, SEI_TIMESTAMP_PAYLOAD_LENGTH);
 	if (!p)
@@ -28,7 +28,7 @@ unsigned char *set_timestamp_alloc(void)
 	return p;
 }
 
-int set_timestamp_init(unsigned char *buf, int lengthBytes)
+int sei_timestamp_init(unsigned char *buf, int lengthBytes)
 {
 	if (lengthBytes < (int)SEI_TIMESTAMP_PAYLOAD_LENGTH)
 		return -1;
@@ -39,7 +39,7 @@ int set_timestamp_init(unsigned char *buf, int lengthBytes)
 	return 0;
 }
 
-int set_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value)
+int sei_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t value)
 {
 	unsigned char *p = buffer;
 
@@ -76,7 +76,7 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 	return -1;
 }
 
-int set_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value)
+int sei_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value)
 {
 	uint32_t v;
 	const unsigned char *p = buffer;
@@ -103,7 +103,7 @@ int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int le
 	struct timeval diff;
 	uint32_t v[8];
 	for (int i = 0; i < 8; i++)
-		set_timestamp_field_get(buffer, lengthBytes, i, &v[i]);
+		sei_timestamp_field_get(buffer, lengthBytes, i, &v[i]);
 
 	begin.tv_sec = v[4];
 	begin.tv_usec = v[5];
@@ -146,8 +146,8 @@ void sei_timestamp_hexdump(const unsigned char *buffer, int lengthBytes)
 
 int sei_timestamp_value_timeval_query(const unsigned char *buffer, int lengthBytes, int nr, struct timeval *t)
 {
-	set_timestamp_field_get(buffer, lengthBytes, nr, (uint32_t *)&t->tv_sec);
-	set_timestamp_field_get(buffer, lengthBytes, nr + 1, (uint32_t *)&t->tv_usec);
+	sei_timestamp_field_get(buffer, lengthBytes, nr, (uint32_t *)&t->tv_sec);
+	sei_timestamp_field_get(buffer, lengthBytes, nr + 1, (uint32_t *)&t->tv_usec);
 	return 0;
 }
 
@@ -159,8 +159,8 @@ int sei_timestamp_value_timeval_set(const unsigned char *buffer, int lengthBytes
         } else {
 		gettimeofday(&ts, NULL);
 	}
-	set_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr, (uint32_t)ts.tv_sec);
-	set_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr + 1, (uint32_t)ts.tv_usec);
+	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr, (uint32_t)ts.tv_sec);
+	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr + 1, (uint32_t)ts.tv_usec);
 	return 0;
 }
 

@@ -350,8 +350,8 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
                  * the position of variables 8 and 9 overwrite a following transport header.
                  * field_set() will catch this and return error, resulting in zero values in the final SEI output.
                  */
-                if (set_timestamp_field_set(buf + offset, size - offset, 8, now.tv_sec) >= 0) {
-                    set_timestamp_field_set(buf +  offset, size - offset, 9, now.tv_usec);
+                if (sei_timestamp_field_set(buf + offset, size - offset, 8, now.tv_sec) >= 0) {
+                    sei_timestamp_field_set(buf +  offset, size - offset, 9, now.tv_usec);
                 }
 
                 if (g_sei_timestamping > 2) {
