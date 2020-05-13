@@ -2,8 +2,8 @@ AUTOMAKE_OPTIONS = foreign
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 
 VERSION_MAJOR = 3
-VERSION_MINOR = 1
-VERSION_PATCH = 0
+VERSION_MINOR = 2
+VERSION_PATCH = 1
 
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 
