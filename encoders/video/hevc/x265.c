@@ -943,6 +943,7 @@ static int reconfigure_encoder(struct context_s *ctx)
 		x265_param_parse(ctx->hevc_params, "no-open-gop", "1");
 		x265_param_parse(ctx->hevc_params, "intra-refresh", "1");
 		x265_param_parse(ctx->hevc_params, "me", "hex");
+		x265_param_parse(ctx->hevc_params, "qpstep", "12");
 	}
 #if 0
 	sprintf(&val[0], "%d", 1);
