@@ -871,6 +871,7 @@ static int reconfigure_encoder(struct context_s *ctx)
 	}
 	x265_param_parse(ctx->hevc_params, "fps", val);
 
+//ctx->enc_params->avc_param.i_keyint_max = 60;
 	sprintf(&val[0], "%d",ctx->enc_params->avc_param.i_keyint_max);
 	x265_param_parse(ctx->hevc_params, "keyint", val);
 	printf(MESSAGE_PREFIX "keyint = %s\n", val);
