@@ -908,6 +908,11 @@ static int reconfigure_encoder(struct context_s *ctx)
 	}
 #endif
 
+	if (obe_core_get_platform_model() == 573 && ctx->enc_params->avc_param.b_interlaced) {
+		g_x265_min_qp = 25;
+		printf(MESSAGE_PREFIX "pushing min-qp to %d for 573 with interlaced\n", g_x265_min_qp); 
+	}
+
 	sprintf(&val[0], "%d", g_x265_min_qp);
 	printf(MESSAGE_PREFIX "Setting QPmin to %s\n", val);
 	x265_param_parse(ctx->hevc_params, "qpmin", val);
