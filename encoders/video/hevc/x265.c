@@ -449,7 +449,7 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		int ve_q = obe_core_get_output_stream_queue_depth(ctx->h, 0);
 		if (ve_q > 1) {
 			/* Lower the QP drastically to try and quickly catchup with the backlog */
-			p->forceqp = 40;
+			//p->forceqp = 40;
 		}
 	}
 
