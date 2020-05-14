@@ -930,7 +930,10 @@ static int reconfigure_encoder(struct context_s *ctx)
 	x265_param_parse(ctx->hevc_params, "strict-cbr", val);
 
 	if (obe_core_get_platform_model() == 573) {
-		sprintf(val, "64");
+		if (ctx->enc_params->avc_param.b_interlaced)
+			sprintf(val, "16");
+		else
+			sprintf(val, "64");
 		printf(MESSAGE_PREFIX "ctu %s\n", val);
 		x265_param_parse(ctx->hevc_params, "ctu", val);
 
