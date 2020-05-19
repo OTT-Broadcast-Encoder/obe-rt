@@ -1971,6 +1971,7 @@ void obe_core_dump_output_stream(obe_output_stream_t *s, int index)
 	printf("    stream_action = %4d [%s]\n", s->stream_action,
 		s->stream_action == STREAM_PASSTHROUGH ? "PASSTHROUGH" : "STREAM_ENCODE");
 	printf("    stream_format = %4d [%s]\n", s->stream_format, format_name);
+	printf("   sdi_audio_pair = %4d\n", s->sdi_audio_pair);
 }
 
 int obe_getTimestamp(char *s, time_t *when)
