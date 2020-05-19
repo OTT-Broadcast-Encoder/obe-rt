@@ -1438,8 +1438,6 @@ int obe_start( obe_t *h )
                 aud_enc_params->sample_rate = input_stream->sample_rate;
                 /* TODO: check the bitrate is allowed by the format */
 
-                ostream->sdi_audio_pair = input_stream->sdi_audio_pair;
-
                 /* Choose the optimal number of audio frames per PES
                  * TODO: This should be set after the encoder has told us the frame size */
                 if( !ostream->ts_opts.frames_per_pes && h->obe_system == OBE_SYSTEM_TYPE_GENERIC &&
