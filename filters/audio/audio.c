@@ -168,6 +168,10 @@ static void *start_filter_audio( void *ptr )
 //printf("output_stream->stream_format = %d other\n", output_stream->stream_format);
             num_channels = av_get_channel_layout_nb_channels( output_stream->channel_layout );
 
+#if LOCAL_DEBUG
+            printf("%s() encoder#%d: output_stream->sdi_audio_pair %d, num_channels %d\n", __func__, i,
+                output_stream->sdi_audio_pair, num_channels);
+#endif
             split_raw_frame = new_raw_frame();
             if (!split_raw_frame)
             {
