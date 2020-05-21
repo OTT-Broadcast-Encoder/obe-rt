@@ -947,7 +947,6 @@ static int reconfigure_encoder(struct context_s *ctx)
 		x265_param_parse(ctx->hevc_params, "qpstep", "12");
 	}
 	x265_param_parse(ctx->hevc_params, "aud", "1");
-	x265_param_parse(ctx->hevc_params, "idr-recovery-sei", "1");
 #if 0
 	sprintf(&val[0], "%d", 1);
 	printf(MESSAGE_PREFIX "hrd is %s\n", val);
