@@ -340,8 +340,12 @@ static void convert_colorspace_and_parse_vanc(decklink_ctx_t *decklink_ctx, stru
 
 	memset(&decoded_words[0], 0, sizeof(decoded_words));
 	uint16_t *p_anc = decoded_words;
-	if (klvanc_v210_line_to_nv20_c(src, p_anc, sizeof(decoded_words), (uiWidth / 6) * 6) < 0)
-		return;
+	if (uiWidth == 720) {
+		klvanc_v210_line_to_uyvy_c(src, p_anc, uiWidth);
+	} else {
+		if (klvanc_v210_line_to_nv20_c(src, p_anc, sizeof(decoded_words), (uiWidth / 6) * 6) < 0)
+			return;
+	}
 
     if (decklink_ctx->smpte2038_ctx)
         klvanc_smpte2038_packetizer_begin(decklink_ctx->smpte2038_ctx);
