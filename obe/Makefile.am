@@ -3,7 +3,7 @@ GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 
 VERSION_MAJOR = 3
 VERSION_MINOR = 2
-VERSION_PATCH = 6
+VERSION_PATCH = 7
 
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 
