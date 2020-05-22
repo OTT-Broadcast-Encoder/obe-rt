@@ -131,8 +131,11 @@ const static struct obe_to_decklink_video video_format_tab[] =
     { INPUT_VIDEO_FORMAT_1080P_5994,      bmdModeHD1080p5994,   1001, 60000, 1, 1920, 1080, 1920, 1080, 5120, "1920x1080p59.94", },
     { INPUT_VIDEO_FORMAT_1080P_60,        bmdModeHD1080p6000,   1,    60,    1, 1920, 1080, 1920, 1080, 5120, "1920x1080p60", },
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a0b0000 /* 10.11.0 */
+/* These are also usable in 10.8.5 */
     /* 4K */
-    { INPUT_VIDEO_FORMAT_2160P_50,          bmdMode4K2160p50,   1,    50,    1, 3840, 2160, 3840, 2160, 5120, "3840x2160p50", },
+    { INPUT_VIDEO_FORMAT_2160P_2997,      bmdMode4K2160p2997,   1001, 30000, 1, 3840, 2160, 3840, 2160, 5120, "3840x2160p29.97", },
+    { INPUT_VIDEO_FORMAT_2160P_50,        bmdMode4K2160p50,     1,    50,    1, 3840, 2160, 3840, 2160, 5120, "3840x2160p50", },
+    { INPUT_VIDEO_FORMAT_2160P_5994,      bmdMode4K2160p5994,   1001, 60000, 1, 3840, 2160, 3840, 2160, 5120, "3840x2160p59.94", },
 #endif
     { -1, 0, -1, -1 },
 };
