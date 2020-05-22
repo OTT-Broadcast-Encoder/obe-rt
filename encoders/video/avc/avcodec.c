@@ -188,8 +188,8 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 			gettimeofday(&tv, NULL);
 
 			/* Add the time exit from compressor seconds/useconds. */
-			set_timestamp_field_set(&cf->data[offset], pkt->size - offset, 6, tv.tv_sec);
-			set_timestamp_field_set(&cf->data[offset], pkt->size - offset, 7, tv.tv_usec);
+			sei_timestamp_field_set(&cf->data[offset], pkt->size - offset, 6, tv.tv_sec);
+			sei_timestamp_field_set(&cf->data[offset], pkt->size - offset, 7, tv.tv_usec);
 		}
 	}
 
@@ -397,19 +397,19 @@ static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *fr
 	if (g_sei_timestamping) {
 		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
 		if (sd) {
-			if (set_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
+			if (sei_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
 				struct timeval tv;
 				gettimeofday(&tv, NULL);
 
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
-				set_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->raw_frame_count);
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, avfm_get_hw_received_tv_sec(&rf->avfm));
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, avfm_get_hw_received_tv_usec(&rf->avfm));
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
+				sei_timestamp_field_set(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
 			
 				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
 			}
