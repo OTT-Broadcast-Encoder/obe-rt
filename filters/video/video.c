@@ -32,6 +32,8 @@
 #include "x86/vfilter.h"
 #include "input/sdi/sdi.h"
 
+#define PREFIX "[video filter]: "
+
 #define DO_JPG 0
 #if DO_JPG
 #include "convert.h"
@@ -47,6 +49,25 @@
 typedef uint16_t pixel;
 #else
 typedef uint8_t pixel;
+#endif
+
+#define PERFORMANCE_PROFILE 0
+#if PERFORMANCE_PROFILE
+struct timeval tsframeBegin;
+struct timeval tsframeEnd;
+struct timeval tsframeDiff;
+
+struct timeval tsditherBegin;
+struct timeval tsditherEnd;
+struct timeval tsditherDiff;
+
+struct timeval tsintBegin;
+struct timeval tsintEnd;
+struct timeval tsintDiff;
+
+struct timeval tsresizeBegin;
+struct timeval tsresizeEnd;
+struct timeval tsresizeDiff;
 #endif
 
 typedef struct
@@ -281,6 +302,8 @@ static void blank_lines( obe_raw_frame_t *raw_frame )
     blank_line( y, u, v, raw_frame->img.width / 2 );
 }
 
+#define WORKAROUND_4K 0
+
 static int resize_frame( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame, int width )
 {
     obe_image_t tmp_image = {0};
@@ -290,9 +313,13 @@ static int resize_frame( obe_vid_filter_ctx_t *vfilt, obe_raw_frame_t *raw_frame
         if( IS_INTERLACED( raw_frame->img.format ) )
             vfilt->dst_pix_fmt = raw_frame->img.csp;
         else
+#if WORKAROUND_4K
+            vfilt->dst_pix_fmt = AV_PIX_FMT_YUV420P;
+#else
             vfilt->dst_pix_fmt = raw_frame->img.csp == AV_PIX_FMT_YUV422P10 ? AV_PIX_FMT_YUV420P10 : AV_PIX_FMT_YUV420P;
 
         vfilt->sws_ctx_flags |= SWS_FULL_CHR_H_INP | SWS_ACCURATE_RND | SWS_LANCZOS;
+#endif
 
         vfilt->sws_ctx = sws_getContext( raw_frame->img.width, raw_frame->img.height, raw_frame->img.csp,
                                          width, raw_frame->img.height, vfilt->dst_pix_fmt,
@@ -749,6 +776,9 @@ static void *start_filter_video( void *ptr )
 //PRINT_OBE_IMAGE(&raw_frame->img, "VIDEO FILTER  PRE");
         pthread_mutex_unlock( &filter->queue.mutex );
 
+#if PERFORMANCE_PROFILE
+        gettimeofday(&tsframeBegin, NULL);
+#endif
         /* TODO: scale 8-bit to 10-bit
          * TODO: convert from 4:2:0 to 4:2:2 */
 
@@ -759,8 +789,17 @@ static void *start_filter_video( void *ptr )
         if( raw_frame->img.width != output_stream->avc_param.i_width || (!IS_INTERLACED( raw_frame->img.format ) &&
                                                                           filter_params->target_csp == X264_CSP_I420 ) )
         {
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsresizeBegin, NULL);
+#endif
             if( resize_frame( vfilt, raw_frame, output_stream->avc_param.i_width ) < 0 )
                 goto end;
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsresizeEnd, NULL);
+            obe_timeval_subtract(&tsresizeDiff, &tsresizeEnd, &tsresizeBegin);
+            int64_t t = obe_timediff_to_usecs(&tsresizeDiff);
+            printf(PREFIX "\tper frame    resize processing %" PRIi64" usecs\n", t);
+#endif
         }
 //PRINT_OBE_IMAGE(&raw_frame->img, "RESIZE POST      ");
 
@@ -770,20 +809,41 @@ static void *start_filter_video( void *ptr )
         /* Downconvert using interlaced scaling if input is 4:2:2 and target is 4:2:0 */
         if( h_shift == 1 && v_shift == 0 && filter_params->target_csp == X264_CSP_I420 )
         {
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsintBegin, NULL);
+#endif
             /* Convert from YUV422P10 to YUV420P10, chroma subsample, specific to interlaced. */
             if( downconvert_image_interlaced( vfilt, raw_frame ) < 0 )
                 goto end;
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsintEnd, NULL);
+            obe_timeval_subtract(&tsintDiff, &tsintEnd, &tsintBegin);
+            int64_t t = obe_timediff_to_usecs(&tsintDiff);
+            printf(PREFIX "\tper frame interlace processing %" PRIi64" usecs\n", t);
+#endif
 //PRINT_OBE_IMAGE(&raw_frame->img, "DownCo POST      ");
         }
 
+#if WORKAROUND_4K
+#else
         pfd = av_pix_fmt_desc_get( raw_frame->img.csp );
         if( pfd->comp[0].depth == 10 && X264_BIT_DEPTH == 8 )
         {
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsditherBegin, NULL);
+#endif
             /* Convert from 10bit to 8bit and apply a video dither. */
             if( dither_image( vfilt, raw_frame ) < 0 )
                 goto end;
+#if PERFORMANCE_PROFILE
+            gettimeofday(&tsditherEnd, NULL);
+            obe_timeval_subtract(&tsditherDiff, &tsditherEnd, &tsditherBegin);
+            int64_t t = obe_timediff_to_usecs(&tsditherDiff);
+            printf(PREFIX "\tper frame    dither processing %" PRIi64" usecs\n", t);
+#endif
         }
 //PRINT_OBE_IMAGE(&raw_frame->img, "DITHER POST      ");
+#endif
 
         if( encapsulate_user_data( raw_frame, input_stream ) < 0 )
             goto end;
@@ -807,6 +867,12 @@ static void *start_filter_video( void *ptr )
 #endif
 
         add_to_encode_queue( h, raw_frame, 0 );
+#if PERFORMANCE_PROFILE
+        gettimeofday(&tsframeEnd, NULL);
+        obe_timeval_subtract(&tsframeDiff, &tsframeEnd, &tsframeBegin);
+        int64_t t = obe_timediff_to_usecs(&tsframeDiff);
+        printf(PREFIX " per frame total processing %" PRIi64" usecs\n", t);
+#endif
     }
 
 end:
