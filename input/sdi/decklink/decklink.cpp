@@ -1463,6 +1463,9 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             goto end;
         }
 
+	/* TODO: When using 4k formats, we crash in the blank_line func. fixme.
+	 *       When testing 4k, I completely remove this block.
+	 */
         while( 1 )
         {
             /* Some cards have restrictions on what lines can be accessed so try them all
