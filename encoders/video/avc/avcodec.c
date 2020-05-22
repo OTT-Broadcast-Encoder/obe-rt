@@ -28,11 +28,14 @@
 #include <assert.h>
 #include <sys/mman.h>
 #include <libyuv.h>
+#include <libltntstools/ltntstools.h>
 
 #define LOCAL_DEBUG 0
 #define DEBUG_CODEC_TIMING 0
 
 #define MESSAGE_PREFIX "[avcodec]: "
+
+int g_avcodec_nal_debug = 0;
 
 struct context_s
 {
@@ -109,21 +112,36 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 		return 0;
 	}
 
-#if 0
-	static int pktcount = 0;
-	static int64_t lastDTS = 0;
-	int64_t deltaDTS = pkt->dts - lastDTS;
-	lastDTS = pkt->dts;
-	printf("%08d AVPacket->pts %13" PRIi64"  dts %13" PRIi64 " (%" PRIi64 ")  duration %" PRIi64 "  flags 0x%x %spos %" PRIi64 " side_data_elems %d\n",
-		pktcount++,
-		pkt->pts,
-		pkt->dts,
-		deltaDTS,
-		pkt->duration, pkt->flags,
-		pkt->flags & AV_PKT_FLAG_KEY ? "k " : "  ",
-		pkt->pos,
-		pkt->side_data_elems);
-#endif
+	char *foundNals;
+
+	if (g_avcodec_nal_debug) {
+		/* For each nal, lookup and prepare a list of found NAL types. */
+		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+		case VIDEO_HEVC_GPU_AVCODEC:
+			foundNals = ltn_nal_hevc_findNalTypes(pkt->data, pkt->size);
+			break;
+		default:
+			/* No requirement to support */
+			foundNals = strdup("");
+		}
+
+		static int pktcount = 0;
+		static int64_t lastDTS = 0;
+		int64_t deltaDTS = pkt->dts - lastDTS;
+		lastDTS = pkt->dts;
+		printf("%08d AVPacket->pts %13" PRIi64"  dts %13" PRIi64 " (%6" PRIi64 ") -- duration %" PRIi64 "  flags 0x%x %spos %" PRIi64 " side_data_elems %d -- nals [ %s ]\n",
+			pktcount++,
+			pkt->pts,
+			pkt->dts,
+			deltaDTS,
+			pkt->duration, pkt->flags,
+			pkt->flags & AV_PKT_FLAG_KEY ? "k " : "  ",
+			pkt->pos,
+			pkt->side_data_elems,
+			foundNals);
+	
+		free(foundNals);
+	}
 
 	//struct avfm_s *avfm = &rf->avfm;
 	memcpy(&cf->avfm, &rf->avfm, sizeof(struct avfm_s));
