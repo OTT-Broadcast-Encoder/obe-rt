@@ -160,20 +160,25 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 	memcpy(cf->data, pkt->data, pkt->size);
 	cf->len          = pkt->size;
 	cf->type         = CF_VIDEO;
-	cf->arrival_time = rf->arrival_time;
 
-	cf->real_pts                 = pkt->pts;
-	cf->real_dts                 = pkt->dts;
-	cf->pts                      = cf->real_pts;
+	//cf->arrival_time = rf->arrival_time;
 
-	static int64_t iat = 0;
-	cf->cpb_initial_arrival_time = iat;
+	cf->pts          = pkt->pts + (2 * 0);
+	cf->real_pts     = pkt->pts + (2 * 0);
+	cf->real_dts     = pkt->dts + (2 * 0);
+
+	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
+		cf->cpb_initial_arrival_time = cf->real_dts - 1351350; /* 3x frame interval */
+	} else {
+		cf->cpb_initial_arrival_time = cf->real_pts - 1351350; /* 3x frame interval */
+	}
 
 	AVCodecContext *c = ctx->c;
-	double fraction = ((double)c->bit_rate / 1000.0) / 216000.0;
-	double estimated_final = ((double)cf->len / fraction) + (double)cf->cpb_initial_arrival_time;
-	cf->cpb_final_arrival_time  = estimated_final;
-	iat = cf->cpb_final_arrival_time;
+	double bit_rate = (double)c->bit_rate;
+	double fraction = bit_rate / 216000.0;
+        double estimated = ((double)cf->len / fraction);
+        double estimated_final = estimated + (double)cf->cpb_initial_arrival_time;
+        cf->cpb_final_arrival_time  = estimated_final;
 
 	cf->priority = pkt->flags & AV_PKT_FLAG_KEY;
 	cf->random_access = pkt->flags & AV_PKT_FLAG_KEY;
