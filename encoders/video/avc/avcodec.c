@@ -418,6 +418,7 @@ static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *fr
 	}
 
 	if (g_sei_timestamping) {
+#if 0
 		sd = av_frame_new_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED, SEI_TIMESTAMP_PAYLOAD_LENGTH);
 		if (sd) {
 			if (sei_timestamp_init(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH) == 0) {
@@ -437,6 +438,7 @@ static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *fr
 				//sei_timestamp_hexdump(sd->data, SEI_TIMESTAMP_PAYLOAD_LENGTH);
 			}
 		}
+#endif
 	} /* if (g_sei_timestamping) */
 
 	int ret = avcodec_send_frame(ctx->c, frame);
@@ -458,6 +460,7 @@ static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *fr
 			exit(1);
 		}
 
+		/* TODO: This is defintely wrong. We're delivering the WRONG rf for the current nal. */
 		enc_pkt.stream_index = 0;
 		_deliver_nals(ctx, &enc_pkt, rf, 0);
 		av_packet_unref(&enc_pkt);
@@ -618,7 +621,9 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 #endif
 
 		/* Re-using the prior frame, remove previous side data else we append. Bug */
+#if 0
 		av_frame_remove_side_data(frame, AV_FRAME_DATA_ISO14496_USER_UNREGISTERED);
+#endif
 		av_frame_remove_side_data(frame, AV_FRAME_DATA_AFD);
 		ret = av_frame_make_writable(frame);
 		if (ret < 0) {
