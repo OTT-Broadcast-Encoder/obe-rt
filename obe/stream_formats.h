@@ -87,6 +87,7 @@ enum stream_formats_e
     VIDEO_HEVC_GPU_VAAPI_AVCODEC,
     VIDEO_AVC_CPU_AVCODEC,
     VIDEO_HEVC_CPU_AVCODEC,
+    VIDEO_HEVC_GPU_NVENC_AVCODEC,
 };
 
 const char *stream_format_name(enum stream_formats_e id);

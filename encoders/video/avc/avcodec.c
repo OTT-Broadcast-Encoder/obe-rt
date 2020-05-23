@@ -270,6 +270,13 @@ static int _init_codec(struct context_s *ctx)
 			return -1;
 		}
 		break;
+	case VIDEO_HEVC_GPU_NVENC_AVCODEC:
+		err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_CUDA, NULL, NULL, 0);
+		if (err < 0) {
+			fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
+			return -1;
+		}
+		break;
 	default:
 		break;
 	}
@@ -304,6 +311,9 @@ static int _init_codec(struct context_s *ctx)
         case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		c->pix_fmt = AV_PIX_FMT_VAAPI;
 		break;
+        case VIDEO_HEVC_GPU_NVENC_AVCODEC:
+		c->pix_fmt = AV_PIX_FMT_CUDA;
+		break;
 	default:
 		c->pix_fmt = AV_PIX_FMT_YUV420P;
 	}
@@ -322,13 +332,27 @@ printf("mode VIDEO_AVC_GPU_VAAPI_AVCODEC\n");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		/* gpu codec --  HEVC */
-printf("mode VIDEO_HEVC_GPU_VAAPI_AVCODEC, SKIPPING ALL\n");
+printf("mode VIDEO_HEVC_GPU_VAAPI_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
 		av_opt_set(c->priv_data, "profile", "main", 0);
 		av_opt_set(c->priv_data, "level", "51", 0);
 		av_opt_set(c->priv_data, "g", "30", 0);
+		//av_opt_set(c->priv_data, "bf", "0", 0);
+		//av_opt_set(c->priv_data, "qp", "28", 0);
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_NVENC_AVCODEC) {
+		/* gpu codec --  NVENC HEVC */
+printf("mode VIDEO_HEVC_GPU_NVENC_AVCODEC, SKIPPING ALL\n");
+		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
+		av_opt_set(c->priv_data, "cbr", "1", 0);
+		av_opt_set(c->priv_data, "preset", "ll", 0);
+		//av_opt_set(c->priv_data, "sei", "1", 0);
+		//av_opt_set(c->priv_data, "timing", "1", 0);
+		//av_opt_set(c->priv_data, "profile", "main", 0);
+		//av_opt_set(c->priv_data, "level", "51", 0);
+		//av_opt_set(c->priv_data, "g", "30", 0);
 		//av_opt_set(c->priv_data, "bf", "0", 0);
 		//av_opt_set(c->priv_data, "qp", "28", 0);
 	} else
@@ -521,6 +545,9 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_NVENC_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("hevc_nvenc");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("libx265");
