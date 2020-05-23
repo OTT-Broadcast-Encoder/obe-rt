@@ -77,7 +77,7 @@ static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBuffe
     frames_ctx->height    = ctx->enc_params->avc_param.i_height;
     frames_ctx->initial_pool_size = 20;
     if ((err = av_hwframe_ctx_init(hw_frames_ref)) < 0) {
-        fprintf(stderr, "Failed to initialize VAAPI frame context."
+        fprintf(stderr, "Failed to initialize GPU frame context."
                 "Error code: %s\n",av_err2str(err));
         av_buffer_unref(&hw_frames_ref);
         return err;
