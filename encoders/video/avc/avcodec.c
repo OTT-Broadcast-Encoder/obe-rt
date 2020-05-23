@@ -86,6 +86,13 @@ static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBuffe
     if (!avctx->hw_frames_ctx)
         err = AVERROR(ENOMEM);
 
+    AVHWFramesConstraints *c = av_hwdevice_get_hwframe_constraints(hw_frames_ref, 0);
+
+    enum AVPixelFormat *p;
+    for (p = c->valid_sw_formats; *p != AV_PIX_FMT_NONE; p++) {
+        printf(MESSAGE_PREFIX "GPU supports pixel format %s\n", av_get_pix_fmt_name(*p));
+    }
+
     av_buffer_unref(&hw_frames_ref);
     return err;
 }
