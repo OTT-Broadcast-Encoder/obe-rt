@@ -531,6 +531,10 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 		exit(1);
 	}
 
+	printf(MESSAGE_PREFIX "Support pixel formats:\n");
+	for (int i = 0; ctx->codec->pix_fmts[i] != AV_PIX_FMT_NONE; i++)
+		printf("fmt[%d] = %s\n", i, av_get_pix_fmt_name(ctx->codec->pix_fmts[i]));
+
 	ctx->c = avcodec_alloc_context3(ctx->codec);
 	if (!ctx->c) {
 		fprintf(stderr, MESSAGE_PREFIX "Unable to allocate codec\n");
