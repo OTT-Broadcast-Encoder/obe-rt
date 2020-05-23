@@ -1261,7 +1261,7 @@ int obe_start( obe_t *h )
                 }
                 pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
             }
-            else if (ostream->stream_format == VIDEO_AVC_GPU_AVCODEC)
+            else if (ostream->stream_format == VIDEO_AVC_GPU_VAAPI_AVCODEC)
             {
                 x264_param_t *x264_param = &ostream->avc_param;
                 if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
@@ -1288,7 +1288,7 @@ int obe_start( obe_t *h )
                 }
                 pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
             }
-            else if (ostream->stream_format == VIDEO_HEVC_GPU_AVCODEC)
+            else if (ostream->stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC)
             {
                 x264_param_t *x264_param = &ostream->avc_param;
                 if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )

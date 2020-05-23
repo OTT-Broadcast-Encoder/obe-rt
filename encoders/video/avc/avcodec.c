@@ -124,7 +124,7 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 	if (g_avcodec_nal_debug) {
 		/* For each nal, lookup and prepare a list of found NAL types. */
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-		case VIDEO_HEVC_GPU_AVCODEC:
+		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 			foundNals = ltn_nal_hevc_findNalTypes(pkt->data, pkt->size);
 			break;
 		default:
@@ -262,8 +262,8 @@ static int _init_codec(struct context_s *ctx)
 
 	int err;
 	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-	case VIDEO_AVC_GPU_AVCODEC:
-	case VIDEO_HEVC_GPU_AVCODEC:
+	case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+	case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
 		if (err < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
@@ -300,17 +300,17 @@ static int _init_codec(struct context_s *ctx)
 		ep->avc_param.vui.i_sar_height };
 
         switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-        case VIDEO_AVC_GPU_AVCODEC:
-        case VIDEO_HEVC_GPU_AVCODEC:
+        case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+        case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		c->pix_fmt = AV_PIX_FMT_VAAPI;
 		break;
 	default:
 		c->pix_fmt = AV_PIX_FMT_YUV420P;
 	}
 
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_VAAPI_AVCODEC) {
 		/* gpu codec --  H264 */
-printf("mode VIDEO_AVC_GPU_AVCODEC\n");
+printf("mode VIDEO_AVC_GPU_VAAPI_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
@@ -320,9 +320,9 @@ printf("mode VIDEO_AVC_GPU_AVCODEC\n");
 		//av_opt_set(c->priv_data, "bf", "0", 0);
 		//av_opt_set(c->priv_data, "qp", "28", 0);
 	} else
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		/* gpu codec --  HEVC */
-printf("mode VIDEO_HEVC_GPU_AVCODEC\n");
+printf("mode VIDEO_HEVC_GPU_VAAPI_AVCODEC, SKIPPING ALL\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
@@ -376,8 +376,8 @@ printf("mode undefined\n");
 	}
 
         switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-        case VIDEO_AVC_GPU_AVCODEC:
-        case VIDEO_HEVC_GPU_AVCODEC:
+        case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+        case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		/* set hw_frames_ctx for encoder's AVCodecContext */
 		if ((err = set_hwframe_ctx(ctx, ctx->c, ctx->hw_device_ctx)) < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Failed to set hwframe context.\n");
@@ -513,13 +513,13 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 	memcpy(ctx->encoder->encoder_params, &ctx->enc_params->avc_param, sizeof(ctx->enc_params->avc_param));
 
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_VAAPI_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_CPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("libx264");
 	} else
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
@@ -566,8 +566,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	}
 
 	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-	case VIDEO_AVC_GPU_AVCODEC:
-	case VIDEO_HEVC_GPU_AVCODEC:
+	case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+	case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		frame->format = AV_PIX_FMT_NV12;
 		break;
 	default:
@@ -665,8 +665,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 		int useHW;
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-		case VIDEO_AVC_GPU_AVCODEC:
-		case VIDEO_HEVC_GPU_AVCODEC:
+		case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 			useHW = 1;
 			break;
 		default:
