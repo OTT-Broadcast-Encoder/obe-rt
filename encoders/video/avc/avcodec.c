@@ -36,6 +36,7 @@
 #define MESSAGE_PREFIX "[avcodec]: "
 
 int g_avcodec_nal_debug = 0;
+int g_avcodec_monitor_bps = 0;
 
 struct context_s
 {
@@ -111,8 +112,48 @@ static void serialize_coded_frame(obe_coded_frame_t *cf)
 }
 #endif
 
+static void _monitor_bps(struct context_s *ctx, int lengthBytes)
+{
+	/* Monitor bps for sanity... */
+	static int codec_bps_current = 0;
+	static int codec_bps = 0;
+	static time_t codec_bps_time = 0;
+	time_t now;
+	time(&now);
+	if (now != codec_bps_time) {
+		codec_bps = codec_bps_current;
+		codec_bps_current = 0;
+		codec_bps_time = now;
+		double dbps = (double)codec_bps;
+		dbps /= 1e6;
+		if (dbps >= ctx->enc_params->avc_param.rc.i_vbv_max_bitrate) {
+			fprintf(stderr, MESSAGE_PREFIX " codec output %d bps exceeds vbv_max_bitrate %d @ %s",
+				codec_bps,
+				ctx->enc_params->avc_param.rc.i_vbv_max_bitrate,
+				ctime(&now));
+		}
+		if (g_avcodec_monitor_bps) {
+			printf(MESSAGE_PREFIX " codec output %.02f (Mb/ps) @ %s", dbps, ctime(&now));
+		}
+	}
+	codec_bps_current += (lengthBytes * 8);
+}
+
 static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type)
 {
+#if 0
+	static time_t lastTime = 0;
+	time_t now = time(NULL);
+	static int nps = 0;
+	if (lastTime != now) {
+		lastTime = now;
+		printf("nps %d\n", nps);
+		nps = 0;
+	}
+	nps++;
+#endif
+	_monitor_bps(ctx, pkt->size);
+
 	obe_coded_frame_t *cf = new_coded_frame(ctx->encoder->output_stream_id, pkt->size);
 	if (!cf) {
 		fprintf(stderr, MESSAGE_PREFIX " unable to alloc a new coded frame\n");
