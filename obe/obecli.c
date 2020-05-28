@@ -742,10 +742,10 @@ static int set_stream( char *command, obecli_command_t *child )
                 if (strcasecmp(video_codec, "HEVC_VAAPI") == 0)
                     video_codec_id = 3; /* HEVC via VAAPI */
                 else
-                if (strcasecmp(video_codec, "AVC_GPU_AVCODEC") == 0)
+                if (strcasecmp(video_codec, "AVC_GPU_VAAPI_AVCODEC") == 0)
                     video_codec_id = 4; /* AVC via AVCODEC (GPU encode) */
                 else
-                if (strcasecmp(video_codec, "HEVC_GPU_AVCODEC") == 0)
+                if (strcasecmp(video_codec, "HEVC_GPU_VAAPI_AVCODEC") == 0)
                     video_codec_id = 5; /* HEVC via AVCODEC (GPU encode) */
                 else
                 if (strcasecmp(video_codec, "AVC_CPU_AVCODEC") == 0)
@@ -754,6 +754,9 @@ static int set_stream( char *command, obecli_command_t *child )
                 if (strcasecmp(video_codec, "HEVC_CPU_AVCODEC") == 0)
                     video_codec_id = 7; /* HEVC via AVCODEC (CPU encode) */
 #endif
+                else
+                if (strcasecmp(video_codec, "HEVC_GPU_NVENC_AVCODEC") == 0)
+                    video_codec_id = 8; /* HEVC via AVCODEC (CPU encode) */
                 else {
                     fprintf(stderr, "video codec selection is invalid\n" );
                     return -1;
@@ -853,16 +856,19 @@ extern char g_video_encoder_tuning_name[64];
                     cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_VAAPI;
                 } else
                 if (video_codec_id == 4) {
-                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_GPU_AVCODEC;
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_GPU_VAAPI_AVCODEC;
                 } else
                 if (video_codec_id == 5) {
-                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_AVCODEC;
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_VAAPI_AVCODEC;
                 } else
                 if (video_codec_id == 6) {
                     cli.output_streams[output_stream_id].stream_format = VIDEO_AVC_CPU_AVCODEC;
                 } else
                 if (video_codec_id == 7) {
                     cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_CPU_AVCODEC;
+                } else
+                if (video_codec_id == 8) {
+                    cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_NVENC_AVCODEC;
                 }
 
                 avc_param->rc.i_vbv_max_bitrate = obe_otoi( vbv_maxrate, 0 );
@@ -1951,10 +1957,12 @@ static int show_output_streams( char *command, obecli_command_t *child )
                 printf( "Video: HEVC (VAAPI)\n" );
             else if (output_stream->stream_format == VIDEO_AVC_CPU_AVCODEC)
                 printf( "Video: AVC (AVCODEC CPU)\n" );
-            else if (output_stream->stream_format == VIDEO_AVC_GPU_AVCODEC)
-                printf( "Video: AVC (AVCODEC GPU)\n" );
-            else if (output_stream->stream_format == VIDEO_HEVC_GPU_AVCODEC)
-                printf( "Video: HEVC (AVCODEC GPU)\n" );
+            else if (output_stream->stream_format == VIDEO_AVC_GPU_VAAPI_AVCODEC)
+                printf( "Video: AVC (AVCODEC GPU VAAPI)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC)
+                printf( "Video: HEVC (AVCODEC GPU VAAPI)\n" );
+            else if (output_stream->stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC)
+                printf( "Video: HEVC (AVCODEC GPU NVENC)\n" );
             else if (output_stream->stream_format == VIDEO_HEVC_CPU_AVCODEC)
                 printf( "Video: HEVC (AVCODEC CPU)\n" );
             else 

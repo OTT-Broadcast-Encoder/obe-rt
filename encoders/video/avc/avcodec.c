@@ -36,6 +36,7 @@
 #define MESSAGE_PREFIX "[avcodec]: "
 
 int g_avcodec_nal_debug = 0;
+int g_avcodec_monitor_bps = 0;
 
 struct context_s
 {
@@ -111,8 +112,48 @@ static void serialize_coded_frame(obe_coded_frame_t *cf)
 }
 #endif
 
+static void _monitor_bps(struct context_s *ctx, int lengthBytes)
+{
+	/* Monitor bps for sanity... */
+	static int codec_bps_current = 0;
+	static int codec_bps = 0;
+	static time_t codec_bps_time = 0;
+	time_t now;
+	time(&now);
+	if (now != codec_bps_time) {
+		codec_bps = codec_bps_current;
+		codec_bps_current = 0;
+		codec_bps_time = now;
+		double dbps = (double)codec_bps;
+		dbps /= 1e6;
+		if (dbps >= ctx->enc_params->avc_param.rc.i_vbv_max_bitrate) {
+			fprintf(stderr, MESSAGE_PREFIX " codec output %d bps exceeds vbv_max_bitrate %d @ %s",
+				codec_bps,
+				ctx->enc_params->avc_param.rc.i_vbv_max_bitrate,
+				ctime(&now));
+		}
+		if (g_avcodec_monitor_bps) {
+			printf(MESSAGE_PREFIX " codec output %.02f (Mb/ps) @ %s", dbps, ctime(&now));
+		}
+	}
+	codec_bps_current += (lengthBytes * 8);
+}
+
 static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_t *rf, int frame_type)
 {
+#if 0
+	static time_t lastTime = 0;
+	time_t now = time(NULL);
+	static int nps = 0;
+	if (lastTime != now) {
+		lastTime = now;
+		printf("nps %d\n", nps);
+		nps = 0;
+	}
+	nps++;
+#endif
+	_monitor_bps(ctx, pkt->size);
+
 	obe_coded_frame_t *cf = new_coded_frame(ctx->encoder->output_stream_id, pkt->size);
 	if (!cf) {
 		fprintf(stderr, MESSAGE_PREFIX " unable to alloc a new coded frame\n");
@@ -124,7 +165,7 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 	if (g_avcodec_nal_debug) {
 		/* For each nal, lookup and prepare a list of found NAL types. */
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-		case VIDEO_HEVC_GPU_AVCODEC:
+		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 			foundNals = ltn_nal_hevc_findNalTypes(pkt->data, pkt->size);
 			break;
 		default:
@@ -262,9 +303,16 @@ static int _init_codec(struct context_s *ctx)
 
 	int err;
 	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-	case VIDEO_AVC_GPU_AVCODEC:
-	case VIDEO_HEVC_GPU_AVCODEC:
+	case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+	case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
+		if (err < 0) {
+			fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
+			return -1;
+		}
+		break;
+	case VIDEO_HEVC_GPU_NVENC_AVCODEC:
+		err = av_hwdevice_ctx_create(&ctx->hw_device_ctx, AV_HWDEVICE_TYPE_CUDA, NULL, NULL, 0);
 		if (err < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Failed to initialize GPU\n");
 			return -1;
@@ -300,17 +348,20 @@ static int _init_codec(struct context_s *ctx)
 		ep->avc_param.vui.i_sar_height };
 
         switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-        case VIDEO_AVC_GPU_AVCODEC:
-        case VIDEO_HEVC_GPU_AVCODEC:
+        case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+        case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		c->pix_fmt = AV_PIX_FMT_VAAPI;
+		break;
+        case VIDEO_HEVC_GPU_NVENC_AVCODEC:
+		c->pix_fmt = AV_PIX_FMT_CUDA;
 		break;
 	default:
 		c->pix_fmt = AV_PIX_FMT_YUV420P;
 	}
 
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_VAAPI_AVCODEC) {
 		/* gpu codec --  H264 */
-printf("mode VIDEO_AVC_GPU_AVCODEC\n");
+printf("mode VIDEO_AVC_GPU_VAAPI_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
@@ -320,15 +371,29 @@ printf("mode VIDEO_AVC_GPU_AVCODEC\n");
 		//av_opt_set(c->priv_data, "bf", "0", 0);
 		//av_opt_set(c->priv_data, "qp", "28", 0);
 	} else
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		/* gpu codec --  HEVC */
-printf("mode VIDEO_HEVC_GPU_AVCODEC\n");
+printf("mode VIDEO_HEVC_GPU_VAAPI_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "sei", "1", 0);
 		av_opt_set(c->priv_data, "timing", "1", 0);
 		av_opt_set(c->priv_data, "profile", "main", 0);
 		av_opt_set(c->priv_data, "level", "51", 0);
 		av_opt_set(c->priv_data, "g", "30", 0);
+		//av_opt_set(c->priv_data, "bf", "0", 0);
+		//av_opt_set(c->priv_data, "qp", "28", 0);
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_NVENC_AVCODEC) {
+		/* gpu codec --  NVENC HEVC */
+printf("mode VIDEO_HEVC_GPU_NVENC_AVCODEC, SKIPPING ALL\n");
+		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
+		av_opt_set(c->priv_data, "cbr", "1", 0);
+		av_opt_set(c->priv_data, "preset", "ll", 0);
+		//av_opt_set(c->priv_data, "sei", "1", 0);
+		//av_opt_set(c->priv_data, "timing", "1", 0);
+		//av_opt_set(c->priv_data, "profile", "main", 0);
+		//av_opt_set(c->priv_data, "level", "51", 0);
+		//av_opt_set(c->priv_data, "g", "30", 0);
 		//av_opt_set(c->priv_data, "bf", "0", 0);
 		//av_opt_set(c->priv_data, "qp", "28", 0);
 	} else
@@ -376,8 +441,8 @@ printf("mode undefined\n");
 	}
 
         switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-        case VIDEO_AVC_GPU_AVCODEC:
-        case VIDEO_HEVC_GPU_AVCODEC:
+        case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+        case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		/* set hw_frames_ctx for encoder's AVCodecContext */
 		if ((err = set_hwframe_ctx(ctx, ctx->c, ctx->hw_device_ctx)) < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Failed to set hwframe context.\n");
@@ -513,14 +578,17 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 	memcpy(ctx->encoder->encoder_params, &ctx->enc_params->avc_param, sizeof(ctx->enc_params->avc_param));
 
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_GPU_VAAPI_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("h264_vaapi");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_AVC_CPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("libx264");
 	} else
-	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_AVCODEC) {
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_VAAPI_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("hevc_vaapi");
+	} else
+	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_NVENC_AVCODEC) {
+		ctx->codec = avcodec_find_encoder_by_name("hevc_nvenc");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_CPU_AVCODEC) {
 		ctx->codec = avcodec_find_encoder_by_name("libx265");
@@ -566,8 +634,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	}
 
 	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-	case VIDEO_AVC_GPU_AVCODEC:
-	case VIDEO_HEVC_GPU_AVCODEC:
+	case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+	case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 		frame->format = AV_PIX_FMT_NV12;
 		break;
 	default:
@@ -665,8 +733,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
 		int useHW;
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
-		case VIDEO_AVC_GPU_AVCODEC:
-		case VIDEO_HEVC_GPU_AVCODEC:
+		case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
 			useHW = 1;
 			break;
 		default:
