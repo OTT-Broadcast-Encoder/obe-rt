@@ -36,7 +36,7 @@
 #define MESSAGE_PREFIX "[avcodec]: "
 
 int g_avcodec_nal_debug = 0;
-int g_avcodec_monitor_bps = 0;
+int g_avcodec_monitor_bps = 1;
 
 struct context_s
 {
@@ -72,7 +72,15 @@ static int set_hwframe_ctx(struct context_s *ctx, AVCodecContext *avctx, AVBuffe
         return -1;
     }
     frames_ctx = (AVHWFramesContext *)(hw_frames_ref->data);
-    frames_ctx->format    = AV_PIX_FMT_VAAPI;
+    switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
+    case VIDEO_HEVC_GPU_NVENC_AVCODEC:
+        frames_ctx->format    = AV_PIX_FMT_CUDA;
+        break;
+    case VIDEO_AVC_GPU_VAAPI_AVCODEC:
+    case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
+    default:
+        frames_ctx->format    = AV_PIX_FMT_VAAPI;
+    }
     frames_ctx->sw_format = AV_PIX_FMT_NV12;
     frames_ctx->width     = ctx->enc_params->avc_param.i_width;
     frames_ctx->height    = ctx->enc_params->avc_param.i_height;
@@ -385,7 +393,7 @@ printf("mode VIDEO_HEVC_GPU_VAAPI_AVCODEC\n");
 	} else
 	if (obe_core_encoder_get_stream_format(ctx->encoder) == VIDEO_HEVC_GPU_NVENC_AVCODEC) {
 		/* gpu codec --  NVENC HEVC */
-printf("mode VIDEO_HEVC_GPU_NVENC_AVCODEC, SKIPPING ALL\n");
+printf("mode VIDEO_HEVC_GPU_NVENC_AVCODEC\n");
 		av_opt_set(c->priv_data, "aud", "1", 0); /* Generate Access Unit Delimiters */
 		av_opt_set(c->priv_data, "cbr", "1", 0);
 		av_opt_set(c->priv_data, "preset", "ll", 0);
@@ -443,6 +451,7 @@ printf("mode undefined\n");
         switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
         case VIDEO_AVC_GPU_VAAPI_AVCODEC:
         case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
+        case VIDEO_HEVC_GPU_NVENC_AVCODEC:
 		/* set hw_frames_ctx for encoder's AVCodecContext */
 		if ((err = set_hwframe_ctx(ctx, ctx->c, ctx->hw_device_ctx)) < 0) {
 			fprintf(stderr, MESSAGE_PREFIX "Failed to set hwframe context.\n");
@@ -636,6 +645,7 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
 	case VIDEO_AVC_GPU_VAAPI_AVCODEC:
 	case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
+	case VIDEO_HEVC_GPU_NVENC_AVCODEC:
 		frame->format = AV_PIX_FMT_NV12;
 		break;
 	default:
@@ -735,6 +745,7 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
 		case VIDEO_AVC_GPU_VAAPI_AVCODEC:
 		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
+		case VIDEO_HEVC_GPU_NVENC_AVCODEC:
 			useHW = 1;
 			break;
 		default:
