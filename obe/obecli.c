@@ -742,10 +742,10 @@ static int set_stream( char *command, obecli_command_t *child )
                 if (strcasecmp(video_codec, "HEVC_VAAPI") == 0)
                     video_codec_id = 3; /* HEVC via VAAPI */
                 else
-                if (strcasecmp(video_codec, "AVC_GPU_AVCODEC") == 0)
+                if (strcasecmp(video_codec, "AVC_GPU_VAAPI_AVCODEC") == 0)
                     video_codec_id = 4; /* AVC via AVCODEC (GPU encode) */
                 else
-                if (strcasecmp(video_codec, "HEVC_GPU_AVCODEC") == 0)
+                if (strcasecmp(video_codec, "HEVC_GPU_VAAPI_AVCODEC") == 0)
                     video_codec_id = 5; /* HEVC via AVCODEC (GPU encode) */
                 else
                 if (strcasecmp(video_codec, "AVC_CPU_AVCODEC") == 0)
