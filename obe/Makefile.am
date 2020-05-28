@@ -92,8 +92,8 @@ obecli_SOURCES += ../encoders/video/avc/x264.c
 if LIBX265
 obecli_SOURCES += ../encoders/video/hevc/x265.c
 endif
-if LIBVA
 obecli_SOURCES += ../encoders/video/avc/avcodec.c
+if LIBVA
 obecli_SOURCES += ../encoders/video/avc/vaapi.c
 obecli_SOURCES += ../encoders/video/hevc/vaapi-hevc.c
 endif
