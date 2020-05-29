@@ -462,9 +462,10 @@ static int open_device(v4l2_opts_t *v4l2_opts)
 
     /* Select the video input */
     if (ioctl(v4l2_ctx->fd, VIDIOC_S_INPUT, &video_input_nr) < 0) {
-        fprintf( stderr, "[v4l2] Could not select video input\n" );
-        ret = -1;
-        goto finish;
+        /* Some webcams don't have multple inputs, so this assumption fails, continue regardless. */
+        fprintf( stderr, "[v4l2] Could not select video input, continuing...\n" );
+//        ret = -1;
+//        goto finish;
     }
 
     /* Confirm input selection */
