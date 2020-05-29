@@ -2540,8 +2540,12 @@ static void *runtime_statistics_thread(void *p)
 				char fn[256];
 				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_label", i);
 				FILE *fh = fopen(fn, "rb");
-				if (!fh)
-					continue;
+				if (!fh) {
+					sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon2/temp%d_label", i);
+					fh = fopen(fn, "rb");
+					if (!fh)
+						continue;
+				}
 
 				tmp[0] = 0;
 				fread(tmp, 1, sizeof(tmp), fh);
@@ -2563,8 +2567,12 @@ static void *runtime_statistics_thread(void *p)
 				char val[16];
 				sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon1/temp%d_input", i);
 				FILE *fh = fopen(fn, "rb");
-				if (!fh)
-					continue;
+				if (!fh) {
+					sprintf(fn, "/sys/devices/platform/coretemp.0/hwmon/hwmon2/temp%d_input", i);
+					fh = fopen(fn, "rb");
+					if (!fh)
+						continue;
+				}
 
 				fread(val, 1, sizeof(val), fh);
 				fclose(fh);
