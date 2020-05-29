@@ -486,7 +486,7 @@ static int open_device(v4l2_opts_t *v4l2_opts)
     while (l++ < 16) {
 	usleep(100 * 1000);
 
-       	fprintf(stderr, "[v4l2] Detecting\n");
+       	fprintf(stderr, "[v4l2] Detecting video format....\n");
         struct v4l2_format fmt;
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         int ret = ioctl(v4l2_ctx->fd, VIDIOC_G_FMT, &fmt);
