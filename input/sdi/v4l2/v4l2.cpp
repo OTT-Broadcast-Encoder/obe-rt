@@ -27,6 +27,13 @@
    would need to be addressed for 1080i, 44.1Khz, non YUYV colorspaces, etc.
  */
 
+/* Status 2020-05-28
+ * Testing with webcams, useful commands:
+ * v4l2-ctl --set-fmt-video=width=1280,height=720,pixelformat=YUYV    Select a raw format
+ * v4l2-ctl --set-fmt-video=width=1920,height=1080,pixelformat="H264" --set-parm=30    Select a compressed format
+ * ../../ffmpeg/ffmpeg -f alsa -i plughw:CARD=C920,DEV=0 -f video4linux2 -s 320x240 -i /dev/video0 new.mp4
+ */
+
 #define __STDC_FORMAT_MACROS   1
 #define __STDC_CONSTANT_MACROS 1
 
