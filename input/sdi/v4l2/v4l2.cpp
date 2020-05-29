@@ -525,9 +525,9 @@ static int open_device(v4l2_opts_t *v4l2_opts)
     req.memory = V4L2_MEMORY_MMAP;
 
     if (ioctl(v4l2_ctx->fd, VIDIOC_REQBUFS, &req) < 0) {
-        fprintf(stderr, "[v4l2] Driver error during _REQBUFS\n" );
-        ret = -1;
-        goto finish;
+        fprintf(stderr, "[v4l2] Driver error during _REQBUFS, continuing...\n" );
+        //ret = -1;
+        //goto finish;
     }
 
     /* Preserve how many buffers the driver wants to use */
