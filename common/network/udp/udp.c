@@ -339,6 +339,9 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
     if (now != s->bps_last) {
         s->bps_last = now;
         g_udp_output_bps = throughput_hires_sumtotal_i64(s->throughputHandle, 0, NULL, NULL);
+
+        /* Purge data older than 2 seconds */
+        throughput_hires_expire(s->throughputHandle, NULL);
     }
 
     if (!s->is_connected) {
