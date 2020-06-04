@@ -26,6 +26,7 @@
 #include "common/network/network.h"
 #include "output/output.h"
 #include "udp.h"
+#include <libltntstools/ltntstools.h>
 
 typedef struct
 {
@@ -43,9 +44,8 @@ typedef struct
     struct sockaddr_storage dest_addr;
     int dest_addr_len;
 
-    int bps;
-    int bps_current;
     time_t bps_last;
+    void *throughputHandle;
 } obe_udp_ctx;
 
 int g_udp_output_bps = 0;
@@ -304,6 +304,13 @@ int udp_open( hnd_t *p_handle, obe_udp_opts_t *udp_opts )
     if( s->is_connected && connect( udp_fd, (struct sockaddr *)&s->dest_addr, s->dest_addr_len ) )
         goto fail;
 
+    /* Allocate a hires throughput timer for measuring accurate bitrates.
+     * 4000 writes per second as an upper ballpark, beyond this the solution
+     * self adapts by allocating more slots. Calculate for 40mbps, a reasonable
+     * default.
+     */
+    throughput_hires_alloc(&s->throughputHandle, ((40 * 1e6) / 8 ) / 1316);
+
     s->udp_fd = udp_fd;
     *p_handle = s;
     return 0;
@@ -323,16 +330,16 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
     obe_udp_ctx *s = handle;
     int ret;
 
+    /* Measure throughput in bits per second. Store this bitrate with now (NULL). */
+    throughput_hires_write_i64(s->throughputHandle, 0, size * 8, NULL);
+
+    /* If its been a second size we last ran the bitrate calculate, run it again. */
     time_t now;
     time(&now);
-
     if (now != s->bps_last) {
         s->bps_last = now;
-        s->bps = s->bps_current;
-        s->bps_current = 0;
-        g_udp_output_bps = s->bps;
+        g_udp_output_bps = throughput_hires_sumtotal_i64(s->throughputHandle, 0, NULL, NULL);
     }
-    s->bps_current += (size * 8);
 
     if (!s->is_connected) {
         if (g_sei_timestamping > 1) {
@@ -380,5 +387,6 @@ void udp_close( hnd_t handle )
     obe_udp_ctx *s = handle;
 
     close( s->udp_fd );
+    throughput_hires_free(s->throughputHandle);
     free( s );
 }
