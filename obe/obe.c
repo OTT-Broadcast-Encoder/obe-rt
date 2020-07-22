@@ -2046,7 +2046,7 @@ int obe_core_get_platform_model()
 
 	char line[256];
 	FILE *fh = fopen("/proc/cpuinfo", "rb");
-	while (!feof(fh)) {
+	while (fh && !feof(fh)) {
 		memset(line, 0, sizeof(line));
 		fgets(&line[0], sizeof(line), fh);
 		if (feof(fh))
@@ -2057,6 +2057,8 @@ int obe_core_get_platform_model()
 			break;
 		}
 	}
+	if (fh)
+		fclose(fh);
 
 	return g_platform_model;
 }
