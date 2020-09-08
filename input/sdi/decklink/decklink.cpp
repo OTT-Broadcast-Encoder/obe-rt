@@ -2084,6 +2084,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         decklink_ctx->vanchdl->verbose = 0;
         decklink_ctx->vanchdl->callbacks = &callbacks;
         decklink_ctx->vanchdl->callback_context = decklink_ctx;
+        decklink_ctx->vanchdl->allow_bad_checksums = 1;
         decklink_ctx->last_vanc_cache_dump = 0;
 
         if (OPTION_ENABLED(vanc_cache)) {
