@@ -2063,3 +2063,22 @@ int obe_core_get_platform_model()
 	return g_platform_model;
 }
 
+/* Establish functions the enable the UDP sendto size
+ * to be something other than 7 * 188, if desired.
+ */
+static int g_core_payload_size = (7 * 188);
+void obe_core_set_payload_size(int n)
+{
+	printf("%s(%d)\n", __func__, n);
+	g_core_payload_size = n;
+}
+
+int obe_core_get_payload_size()
+{
+	return g_core_payload_size;
+}
+
+int obe_core_get_payload_packets()
+{
+	return obe_core_get_payload_size() / 188;
+}

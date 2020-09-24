@@ -509,5 +509,8 @@ time_t obe_getProcessStartTime();
 uint32_t obe_getProcessRuntimeSeconds();
 
 int obe_core_get_platform_model();
+int obe_core_get_payload_size(); /* Typically returns 7 * 188, but can be adjusted for development purposes */
+void obe_core_set_payload_size(int n); /* Should always be a multiple of 188 */
+int obe_core_get_payload_packets(); /* Typically returns 7 */
 
 #endif

@@ -1385,6 +1385,7 @@ extern time_t g_decklink_missing_video_last_time;
         g_udp_output_latency_alert_ms);
     printf("udp_output.bps                     = %d\n",
         g_udp_output_bps);
+    printf("udp_output.transport_payload_size  = %d\n", obe_core_get_payload_size());
     printf("core.runtime_statistics_to_file    = %d\n",
         g_core_runtime_statistics_to_file);
     printf("core.runtime_terminate_after_seconds = %d\n",
@@ -1534,6 +1535,9 @@ static int set_variable(char *command, obecli_command_t *child)
         g_x265_bitrate_bps_new = 1;
     } else
 #endif
+    if (strcasecmp(var, "udp_output.transport_payload_size") == 0) {
+        obe_core_set_payload_size(val);
+    } else
     if (strcasecmp(var, "core.runtime_statistics_to_file") == 0) {
         g_core_runtime_statistics_to_file = val;
     } else
