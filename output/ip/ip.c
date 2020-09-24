@@ -42,6 +42,8 @@
 #define NTP_OFFSET 2208988800ULL
 #define NTP_OFFSET_US (NTP_OFFSET * 1000000ULL)
 
+#define MAX_TS_PACKETS_SIZE (16 * 188)
+
 typedef struct
 {
     hnd_t udp_handle;
@@ -123,9 +125,9 @@ static int write_rtcp_pkt( hnd_t handle )
 static int write_rtp_pkt( hnd_t handle, uint8_t *data, int len, int64_t timestamp )
 {
     obe_rtp_ctx *p_rtp = handle;
-    uint8_t pkt[RTP_HEADER_SIZE+TS_PACKETS_SIZE];
+    uint8_t pkt[RTP_HEADER_SIZE + MAX_TS_PACKETS_SIZE];
     bs_t s;
-    bs_init( &s, pkt, RTP_HEADER_SIZE+TS_PACKETS_SIZE );
+    bs_init( &s, pkt, RTP_HEADER_SIZE + MAX_TS_PACKETS_SIZE );
 
     bs_write( &s, 2, RTP_VERSION ); // version
     bs_write1( &s, 0 );             // padding
@@ -140,7 +142,7 @@ static int write_rtp_pkt( hnd_t handle, uint8_t *data, int len, int64_t timestam
 
     memcpy( &pkt[RTP_HEADER_SIZE], data, len );
 
-    if( udp_write( p_rtp->udp_handle, pkt, RTP_HEADER_SIZE+TS_PACKETS_SIZE ) < 0 )
+    if( udp_write( p_rtp->udp_handle, pkt, RTP_HEADER_SIZE + obe_core_get_payload_size() ) < 0 )
         return -1;
 
     p_rtp->pkt_cnt++;
@@ -264,7 +266,7 @@ static void *open_output( void *ptr )
 
             if( output_dest->type == OUTPUT_RTP )
             {
-                if( write_rtp_pkt( ip_handle, &muxed_data[i]->data[7*sizeof(int64_t)], TS_PACKETS_SIZE, AV_RN64( muxed_data[i]->data ) ) < 0 )
+                if( write_rtp_pkt( ip_handle, &muxed_data[i]->data[ obe_core_get_payload_packets() * sizeof(int64_t)], obe_core_get_payload_size(), AV_RN64( muxed_data[i]->data ) ) < 0 )
                     syslog( LOG_ERR, "[rtp] Failed to write RTP packet\n" );
             }
             else
@@ -306,7 +308,7 @@ static void *open_output( void *ptr )
                     }
                 }
 #endif
-                if( udp_write( ip_handle, &muxed_data[i]->data[7*sizeof(int64_t)], TS_PACKETS_SIZE ) < 0 )
+                if( udp_write( ip_handle, &muxed_data[i]->data[obe_core_get_payload_packets() * sizeof(int64_t)], obe_core_get_payload_size() ) < 0 )
                     syslog( LOG_ERR, "[udp] Failed to write UDP packet\n" );
             }
 

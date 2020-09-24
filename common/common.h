@@ -76,9 +76,6 @@
 #define AC3_BS_DVB      5696
 #define MISC_AUDIO_BS   3584
 
-/* Network output */
-#define TS_PACKETS_SIZE 1316
-
 /* Audio sample patterns */
 #define MAX_AUDIO_SAMPLE_PATTERN 5
 

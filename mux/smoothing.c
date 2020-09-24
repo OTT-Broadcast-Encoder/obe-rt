@@ -48,14 +48,14 @@ static void *mux_start_smoothing( void *ptr )
     pthread_setschedparam( pthread_self(), SCHED_FIFO, &param );
 
     /* This thread buffers one VBV worth of frames */
-    fifo_data = av_fifo_alloc( TS_PACKETS_SIZE );
+    fifo_data = av_fifo_alloc( obe_core_get_payload_size() );
     if( !fifo_data )
     {
         fprintf( stderr, "[mux-smoothing] Could not allocate data fifo" );
         return NULL;
     }
 
-    fifo_pcr = av_fifo_alloc( 7 * sizeof(int64_t) );
+    fifo_pcr = av_fifo_alloc( obe_core_get_payload_packets() * sizeof(int64_t) );
     if( !fifo_pcr )
     {
         fprintf( stderr, "[mux-smoothing] Could not allocate pcr fifo" );
@@ -229,7 +229,7 @@ static void *mux_start_smoothing( void *ptr )
         num_muxed_data = 0;
 
         /* While we have atleast 7 transport packets in the TS packet fifo.... */
-        while(!h->mux_drop && av_fifo_size( fifo_data ) >= TS_PACKETS_SIZE )
+        while(!h->mux_drop && av_fifo_size( fifo_data ) >= obe_core_get_payload_size() )
         {
             if (av_fifo_size( fifo_data ) > 10000000) {
                 /* We won't want this much buffered content, lose it. */
@@ -237,9 +237,9 @@ static void *mux_start_smoothing( void *ptr )
                 continue;
             }
             /* allocate a buffer, of exactly 7 PCRs followed by 7 transport packets, drain the relevant fifos. */
-            output_buffers[0] = av_buffer_alloc( TS_PACKETS_SIZE + 7 * sizeof(int64_t) );
-            av_fifo_generic_read( fifo_pcr, output_buffers[0]->data, 7 * sizeof(int64_t), NULL );
-            av_fifo_generic_read( fifo_data, &output_buffers[0]->data[7 * sizeof(int64_t)], TS_PACKETS_SIZE, NULL );
+            output_buffers[0] = av_buffer_alloc( obe_core_get_payload_size() + obe_core_get_payload_packets() * sizeof(int64_t) );
+            av_fifo_generic_read( fifo_pcr, output_buffers[0]->data, obe_core_get_payload_packets() * sizeof(int64_t), NULL );
+            av_fifo_generic_read( fifo_data, &output_buffers[0]->data[obe_core_get_payload_packets() * sizeof(int64_t)], obe_core_get_payload_size(), NULL );
 
             /* Generally, we only ever have a single (IP transmitter) output, take a reference for each. */
             for( int i = 1; i < h->num_outputs; i++ )
