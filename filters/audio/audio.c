@@ -226,13 +226,13 @@ static void *start_filter_audio( void *ptr )
             if (raw_frame->audio_frame.sample_fmt != AV_SAMPLE_FMT_NONE)
                 continue; /* Ignore pcm frames */
 
-            /* Discard this buffer if it's not destined for our encoders sdi_audio_pair. */
 #if 0
             obe_int_input_stream_t *input_stream = get_input_stream(h, output_stream->input_stream_id);
             printf("raw_frame->input_stream_id %d != h->encoders[i]->output_stream_id %d\n", raw_frame->input_stream_id, h->encoders[i]->output_stream_id);
             printf("input_stream->sdi_audio_pair %d, output->sdi_audio_pair %d\n", input_stream->sdi_audio_pair, output_stream->sdi_audio_pair);
             printf("input_stream->input_stream_id %d\n", input_stream->input_stream_id);
 #endif
+            /* Discard this buffer if it's not destined for our encoders sdi_audio_pair. */
             if (raw_frame->input_stream_id != output_stream->sdi_audio_pair)
                 continue;
 
