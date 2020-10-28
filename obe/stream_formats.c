@@ -32,6 +32,7 @@ const char *stream_format_name(enum stream_formats_e id)
 	case AUDIO_AAC: return "AUDIO_AAC";
 	case AUDIO_AC_3: return "AUDIO_AC_3";
 	case AUDIO_E_AC_3: return "AUDIO_E_AC_3";
+	case AUDIO_AC_3_BITSTREAM: return "AUDIO_AC_3_BITSTREAM";
 	case VIDEO_AVC: return "VIDEO_AVC";
 	case VIDEO_UNCOMPRESSED: return "VIDEO_UNCOMPRESSED";
 	case VIDEO_HEVC_X265: return "VIDEO_HEVC_X265";
