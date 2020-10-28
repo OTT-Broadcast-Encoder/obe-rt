@@ -795,6 +795,7 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                 raw_frame->audio_frame.audio_data[0] = (uint8_t *)malloc(l);
                 raw_frame->audio_frame.linesize = raw_frame->audio_frame.num_channels * (depth / 8);
 
+		/* Move the audio to allign the bitstream audio in this specific pair into pair0 then send the buffer downstream. */
                 memcpy(raw_frame->audio_frame.audio_data[0], (uint8_t *)frame_bytes + offset, l - offset);
 
                 raw_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_NONE;
@@ -817,7 +818,7 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                 raw_frame->release_data = obe_release_audio_data;
                 raw_frame->release_frame = obe_release_frame;
                 raw_frame->input_stream_id = pair->input_stream_id;
-printf("frame for pair %d input %d at offset %d\n", pair->nr, raw_frame->input_stream_id, offset);
+                //printf("frame for pair->nr %d rf->input_stream_id %d at offset %d\n", pair->nr, raw_frame->input_stream_id, offset);
 
                 add_to_filter_queue(decklink_ctx->h, raw_frame);
             } /* pair->smpte337_detected_ac3 */
