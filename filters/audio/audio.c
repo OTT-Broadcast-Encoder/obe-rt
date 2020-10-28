@@ -232,8 +232,8 @@ static void *start_filter_audio( void *ptr )
                 continue;
 
 #if LOCAL_DEBUG
-            printf("%s() adding frame for input %d to encoder output %d\n", __func__,
-                raw_frame->input_stream_id, h->encoders[i]->output_stream_id);
+            printf("%s() adding A52 frame for input %d to encoder output %d sdi_audio_pair %d\n", __func__,
+                raw_frame->input_stream_id, h->encoders[i]->output_stream_id, output_stream->sdi_audio_pair);
 #endif
 
             remove_from_queue(&filter->queue);
