@@ -113,10 +113,21 @@ static void serialize_coded_frame(obe_coded_frame_t *cf)
 }
 #endif
 
+#define DO_X264_VERBOSE_LOGGING 0
 static void x264_logger( void *p_unused, int i_level, const char *psz_fmt, va_list arg )
 {
+#if DO_X264_VERBOSE_LOGGING
+    time_t now = time(NULL);
+    char ts[128];
+    sprintf(ts, "%s", ctime(&now));
+    ts[strlen(ts) - 1] = 0; /* Trim trailing CR */
+
+printf("%s : ", ts);
+    vprintf(psz_fmt, arg);
+#else
     if( i_level <= X264_LOG_INFO )
         vsyslog( i_level == X264_LOG_INFO ? LOG_INFO : i_level == X264_LOG_WARNING ? LOG_WARNING : LOG_ERR, psz_fmt, arg );
+#endif
 }
 
 /* Convert a obe_raw_frame_t into a x264_picture_t struct.
@@ -369,7 +380,9 @@ static void *x264_start_encoder( void *ptr )
     pthread_mutex_lock( &encoder->queue.mutex );
 
     enc_params->avc_param.pf_log = x264_logger;
-    //enc_params->avc_param.i_log_level = 65535;
+#if DO_X264_VERBOSE_LOGGING
+    enc_params->avc_param.i_log_level = 65535;
+#endif
 
     printf("%d x %d\n", enc_params->avc_param.i_width, enc_params->avc_param.i_height);
     printf("%d\n", enc_params->avc_param.i_fps_num);
