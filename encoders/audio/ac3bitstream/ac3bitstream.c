@@ -221,6 +221,8 @@ static void *start_encoder_ac3bitstream(void *ptr)
 	obe_encoder_t *encoder = enc_params->encoder;
 
 #if LOCAL_DEBUG
+	obe_t *h = enc_params->h;
+	obe_output_stream_t *output_stream = get_output_stream_by_id(h, encoder->output_stream_id);
 	printf("%s() output_stream_id = %d, ptr = %p\n", __func__, encoder->output_stream_id, ptr);
 #endif
 
@@ -252,13 +254,14 @@ static void *start_encoder_ac3bitstream(void *ptr)
 		 * Push the buffer starting at the channel containing bitstream, and span 2 channels,
 		 * we'll get called back with a completely aligned, crc'd and valid AC3 frame.
 		 */
-		printf("%s() output_stream_id = %d linesize = %d, num_samples = %d, num_channels = %d, sample_fmt = %d, raw_frame->input_stream_id = %d\n",
+		printf("%s() output_stream_id = %d linesize = %d, num_samples = %d, num_channels = %d, sample_fmt = %d, raw_frame->input_stream_id = %d, sdi_audio_pair = %d\n",
 			__func__,
 			encoder->output_stream_id,
 			frm->audio_frame.linesize,
 			frm->audio_frame.num_samples, frm->audio_frame.num_channels,
 			frm->audio_frame.sample_fmt,
-			frm->input_stream_id);
+			frm->input_stream_id,
+			output_stream->sdi_audio_pair);
 		hexdump((uint8_t *)frm->audio_frame.audio_data[0], 32, 32);
 #endif
 
