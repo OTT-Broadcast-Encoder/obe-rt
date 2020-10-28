@@ -1426,7 +1426,9 @@ int obe_start( obe_t *h )
             }
             else if (ostream->stream_format == AUDIO_AC_3_BITSTREAM) {
                 input_stream = get_input_stream(h, ostream->input_stream_id);
+#if 0
                 ostream->sdi_audio_pair = input_stream->sdi_audio_pair;
+#endif
                 aud_enc_params = calloc(1, sizeof(*aud_enc_params));
                 if(!aud_enc_params) {
                     fprintf(stderr, "Malloc failed\n");

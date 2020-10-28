@@ -226,10 +226,8 @@ static void *start_filter_audio( void *ptr )
             if (raw_frame->audio_frame.sample_fmt != AV_SAMPLE_FMT_NONE)
                 continue; /* Ignore pcm frames */
 
-            /* TODO: Match the input raw frame to the output encoder, else we could send
-             * frames for ac3 encoder #2 to ac3 encoder #1.
-             */
-            if (raw_frame->input_stream_id != h->encoders[i]->output_stream_id)
+            /* Discard this buffer if it's not destined for our encoders sdi_audio_pair. */
+            if (raw_frame->input_stream_id != output_stream->sdi_audio_pair)
                 continue;
 
 #if LOCAL_DEBUG
