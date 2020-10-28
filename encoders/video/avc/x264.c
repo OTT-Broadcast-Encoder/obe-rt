@@ -427,6 +427,7 @@ static void *x264_start_encoder( void *ptr )
         goto end;
     }
 
+    printf(MESSAGE_PREFIX "lookahead = %d\n", enc_params->avc_param.rc.i_lookahead);
     x264_encoder_parameters( s, &enc_params->avc_param );
 
     encoder->encoder_params = malloc( sizeof(enc_params->avc_param) );
