@@ -214,6 +214,7 @@ static void *start_filter_audio( void *ptr )
 	/* TODO: Only one buffer can be passed to one encoder, as the input SDI
 	 * group defines a single stream of data, so this buffer can only end up at one
 	 * ac3bitstream encoder.
+	 * That being said, the decklink input creates one bitstream buffer per detected pair.
 	 */
         int didForward = 0;
         for (int i = 1; i < h->num_encoders; i++)
