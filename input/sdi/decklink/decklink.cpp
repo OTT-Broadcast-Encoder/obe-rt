@@ -780,6 +780,9 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
             if (pair->smpte337_detected_ac3) {
 
                 /* Ship the buffer + offset into it, down to the encoders. The encoders will look at offset 0. */
+		/* In summary, we prepare a new and unique buffer for each detected audio pair, unlike PCM - 
+		 * which gets a single buffer containing all channels (and the audio filter splits them out).
+		 */
                 int depth = 32;
                 int span = 2;
                 int offset = i * ((depth / 8) * span);
@@ -814,10 +817,10 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                 raw_frame->release_data = obe_release_audio_data;
                 raw_frame->release_frame = obe_release_frame;
                 raw_frame->input_stream_id = pair->input_stream_id;
-//printf("frame for pair %d input %d at offset %d\n", pair->nr, raw_frame->input_stream_id, offset);
+printf("frame for pair %d input %d at offset %d\n", pair->nr, raw_frame->input_stream_id, offset);
 
                 add_to_filter_queue(decklink_ctx->h, raw_frame);
-            }
+            } /* pair->smpte337_detected_ac3 */
         } /* For all audio pairs... */
 end:
 
