@@ -192,7 +192,7 @@ if (fh) {
 	a_frame.p_data = new int32_t[frame->no_samples * frame->no_channels];
 	NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
 
-	int linesize = a_frame.no_channels * (depth /8);
+	//int linesize = a_frame.no_channels * (depth /8);
 	int stride  = a_frame.no_samples * (depth / 4);
 
 	uint8_t *data = (uint8_t *)calloc(16, stride);
