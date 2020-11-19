@@ -58,7 +58,7 @@ extern "C"
 #include "input/sdi/ancillary.h"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
-#include <libavresample/avresample.h>
+#include <libswresample/swresample.h>
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
@@ -113,7 +113,7 @@ typedef struct
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
-	AVAudioResampleContext *avr;
+	struct SwrContext *avr;
 
 	pthread_t vthreadId;
 	int vthreadTerminate, vthreadRunning, vthreadComplete;
@@ -131,7 +131,7 @@ typedef struct
     /* Input */
     int card_idx;
 
-	char *ndi_name;
+    char *ndi_name;
 
     int video_format;
     int num_channels;
@@ -232,16 +232,15 @@ printf("new linesize = %d\n", rf->audio_frame.linesize);
 		//printf("src[%d] %p\n", x, src[x]);
 	}
 
-	int out_samples = avresample_convert(ctx->avr,
+	/* Convert from NDI X format into S32P planer. */
+	if (swr_convert(ctx->avr,
 		rf->audio_frame.audio_data,
-		rf->audio_frame.linesize,
 		rf->audio_frame.num_samples,
-		(uint8_t**)&src,
-		0,
-		rf->audio_frame.num_samples);
-//printf("out_samples %d\n", out_samples);
-	if (out_samples < 0) {
-		fprintf(stderr, MODULE_PREFIX "sample format conversion failed\n");
+		(const uint8_t**)&src,
+		rf->audio_frame.num_samples) < 0)
+	{
+		fprintf(stderr, MODULE_PREFIX "Sample format conversion failed\n");
+		return;
 	}
 
 	free(data);
@@ -300,12 +299,14 @@ lastTimestamp = frame->timestamp;
 	}
 
 	/* TODO: YUYV only. Drivers will non YUYV colorspaces won't work reliably. */
-	rf->alloc_img.csp = (int)AV_PIX_FMT_YUV420P;
+	rf->alloc_img.csp = AV_PIX_FMT_YUV420P;
 	rf->alloc_img.format = opts->video_format;
 	rf->alloc_img.width = opts->width;
 	rf->alloc_img.height = opts->height;
 	rf->alloc_img.first_line = 1;
-	rf->alloc_img.planes = av_pix_fmt_descriptors[rf->alloc_img.csp].nb_components;
+
+	const AVPixFmtDescriptor *d = av_pix_fmt_desc_get(rf->alloc_img.csp);
+	rf->alloc_img.planes = d->nb_components;
 
 	rf->alloc_img.stride[0] = opts->width;
 	rf->alloc_img.stride[1] = opts->width / 2;
@@ -515,7 +516,7 @@ static void close_device(ndi_opts_t *opts)
 	}
 
 	if (ctx->avr)
-		avresample_free(&ctx->avr);
+		swr_free(&ctx->avr);
 
 	NDIlib_destroy();
 
@@ -540,42 +541,49 @@ static int open_device(ndi_opts_t *opts)
 		return -1;
 	}
 
-	// We now have at least one source, so we create a receiver to look at it.
+	/* We now have at least one source, so we create a receiver to look at it. */
 	ctx->pNDI_recv = NDIlib_recv_create_v3();
 	if (!ctx->pNDI_recv) {
 		fprintf(stderr, MODULE_PREFIX "Unable to create v3 receiver\n");
 		return -1;
 	}
 
-
 	if (opts->ndi_name != NULL) {
-		printf("NDI Source name: %s\n", opts->ndi_name);
-		//We where passed a source name, so we connect to it directly!
-		const NDIlib_source_t p_source (opts->ndi_name);
-		NDIlib_recv_connect(ctx->pNDI_recv, &p_source);
+		printf("Searching for NDI Source name: '%s'\n", opts->ndi_name);
 	} else {
-		opts->card_idx++;
 		printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
-		const NDIlib_source_t *p_sources = NULL;
-		uint32_t sourceCount = 0;
-		int i = 0;
-		while (sourceCount == 0) {
-			if (i++ >= 10) {
-				fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
-				return -1;
-			}
-			NDIlib_find_wait_for_sources(pNDI_find, 500 /* ms */);
-			p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
-		}
-
-		for (uint32_t x = 0; x < sourceCount; x++) {
-			printf("Found[%d] %s @ %s\n", x,
-				p_sources[x].p_ndi_name,
-				p_sources[x].p_url_address);
-		}
-	        printf("p_sources %p\n", p_sources);
-                NDIlib_recv_connect(ctx->pNDI_recv, p_sources + 0);
 	}
+
+	const NDIlib_source_t *p_sources = NULL;
+	uint32_t sourceCount = 0;
+	int i = 0;
+	while (sourceCount == 0) {
+		if (i++ >= 10) {
+			fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
+			return -1;
+		}
+		NDIlib_find_wait_for_sources(pNDI_find, 500 /* ms */);
+		p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
+	}
+
+	for (uint32_t x = 0; x < sourceCount; x++) {
+		printf(MODULE_PREFIX "Discovered[card-idx=%d] '%s' @ %s\n", x,
+			p_sources[x].p_ndi_name,
+			p_sources[x].p_url_address);
+
+		if (opts->ndi_name) {
+			if (strcasecmp(opts->ndi_name, p_sources[x].p_ndi_name) == 0) {
+				opts->card_idx = x;
+				break;
+			}
+		}
+	}
+
+	if (opts->card_idx > (int)(sourceCount - 1))
+		opts->card_idx = sourceCount - 1;
+
+	printf(MODULE_PREFIX "Found out requested stream, via card_idx %d\n", opts->card_idx);
+	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + opts->card_idx);
 
 	/* We don't need this */
 	NDIlib_find_destroy(pNDI_find);
@@ -591,9 +599,10 @@ static int open_device(ndi_opts_t *opts)
 		NDIlib_video_frame_v2_t video_frame;
 		NDIlib_audio_frame_v2_t audio_frame;
 
-		switch (NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000)) {
+		int ftype = NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000);
+		switch (ftype) {
 			case NDIlib_frame_type_video:
-#if 0
+#if 1
 printf("line_stride_in_bytes = %d\n", video_frame.line_stride_in_bytes);
 static int64_t lastTimestamp = 0;
 printf("timestamp = %" PRIi64 " (%" PRIi64 ")\n",
@@ -633,8 +642,20 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 				opts->num_channels = audio_frame.no_channels;
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
+        		case NDIlib_frame_type_none:
+				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_none\n");
+				break;
+        		case NDIlib_frame_type_metadata:
+				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_metadata\n");
+				break;
+        		case NDIlib_frame_type_error:
+				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_error\n");
+				break;
+        		case NDIlib_frame_type_status_change:
+				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_status_change\n");
+				break;
 			default:
-				printf("other\n");
+				printf(MODULE_PREFIX "other frame type not supported, type 0x%x\n", ftype);
 		}
 	}
 
@@ -647,8 +668,6 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 		opts->width, opts->height,
 		opts->timebase_den, opts->timebase_num);
 
-	avcodec_register_all();
-
 	ctx->dec = avcodec_find_decoder(AV_CODEC_ID_V210);
 	if (!ctx->dec) {
 		fprintf(stderr, MODULE_PREFIX "Could not find v210 decoder\n");
@@ -659,13 +678,13 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 		fprintf(stderr, MODULE_PREFIX "Could not allocate a codec context\n");
 	}
 
-	ctx->avr = avresample_alloc_context();
+	ctx->avr = swr_alloc();
         if (!ctx->avr) {
-            fprintf(stderr, MODULE_PREFIX "Unable to alloc avresample context\n");
+            fprintf(stderr, MODULE_PREFIX "Unable to alloc libswresample context\n");
         }
 
 	/* Give libavresample our custom audio channel map */
-	//av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
+	printf(MODULE_PREFIX "audio num_channels detected = %d\n", opts->num_channels);
 	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
@@ -673,14 +692,16 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
 	av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );
 
-	if (avresample_open(ctx->avr) < 0) {
-		fprintf(stderr, MODULE_PREFIX "Could not configure avresample\n");
+	if (swr_init(ctx->avr) < 0) {
+		fprintf(stderr, MODULE_PREFIX "Could not configure libswresample\n");
 	}
 
-	ctx->codec->get_buffer = obe_get_buffer;
+	ctx->codec->get_buffer2 = obe_get_buffer2;
+#if 0
 	ctx->codec->release_buffer = obe_release_buffer;
 	ctx->codec->reget_buffer = obe_reget_buffer;
 	ctx->codec->flags |= CODEC_FLAG_EMU_EDGE;
+#endif
 
 	if (avcodec_open2(ctx->codec, ctx->dec, NULL) < 0) {
 		fprintf(stderr, MODULE_PREFIX "Could not open libavcodec\n");
@@ -723,7 +744,7 @@ static void *ndi_probe_stream(void *ptr)
 
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
-	opts->ndi_name = user_opts->ndi_name;
+	opts->ndi_name = user_opts->name;
 	opts->probe = 1;
 
 	ctx = &opts->ctx;
@@ -774,7 +795,7 @@ static void *ndi_probe_stream(void *ptr)
 			streams[i]->height = opts->height;
 			streams[i]->timebase_num = opts->timebase_num;
 			streams[i]->timebase_den = opts->timebase_den;
-			streams[i]->csp    = PIX_FMT_UYVY422;
+			streams[i]->csp    = AV_PIX_FMT_UYVY422;
 			streams[i]->interlaced = opts->interlaced;
 			streams[i]->tff = 1; /* NTSC is bff in baseband but coded as tff */
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
@@ -830,7 +851,7 @@ static void *ndi_open_input(void *ptr)
 
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
-	opts->ndi_name = user_opts->ndi_name;
+	opts->ndi_name = user_opts->name;
 
 	ctx = &opts->ctx;
 
