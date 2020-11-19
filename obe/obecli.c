@@ -118,6 +118,7 @@ static const char * input_opts[]  = { "location", "card-idx", "video-format", "v
                                       "smpte2038", "scte35", "vanc-cache", "bitstream-audio", "patch1", "los-exit-ms",
                                       "frame-injection", /* 11 */
                                       "allow-1080p60", /* 12 */
+                                      "name", /* 13 */
                                       NULL };
 static const char * add_opts[] =    { "type" };
 /* TODO: split the stream options into general options, video options, ts options */
@@ -595,6 +596,7 @@ static int set_input( char *command, obecli_command_t *child )
         char *los_exit_ms = obe_get_option( input_opts[10], opts );
         char *frame_injection = obe_get_option(input_opts[11], opts);
         char *allow_1080p60 = obe_get_option(input_opts[12], opts);
+        char *name = obe_get_option(input_opts[13], opts);
 
         FAIL_IF_ERROR( video_format && ( check_enum_value( video_format, input_video_formats ) < 0 ),
                        "Invalid video format\n" );
@@ -604,6 +606,10 @@ static int set_input( char *command, obecli_command_t *child )
 
         FAIL_IF_ERROR( audio_connection && ( check_enum_value( audio_connection, input_audio_connections ) < 0 ),
                        "Invalid audio connection\n" );
+
+        if (name) {
+            cli.input.name = strdup(name);
+        }
 
         if( location )
         {
