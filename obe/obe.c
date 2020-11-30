@@ -2058,9 +2058,15 @@ int obe_core_get_platform_model()
 			g_platform_model = 573;
 			break;
 		}
+		if (strstr(line, "i7-8700")) {
+			g_platform_model = 590;
+			break;
+		}
 	}
-	if (fh)
+	if (fh) {
 		fclose(fh);
+		fh = NULL;
+	}
 
 	return g_platform_model;
 }
