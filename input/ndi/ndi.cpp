@@ -518,6 +518,10 @@ static void close_device(ndi_opts_t *opts)
 	if (ctx->avr)
 		swr_free(&ctx->avr);
 
+	if (ctx->pNDI_recv) {
+		NDIlib_recv_destroy(ctx->pNDI_recv);
+	}
+
 	NDIlib_destroy();
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
