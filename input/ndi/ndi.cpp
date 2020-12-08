@@ -638,11 +638,12 @@ lastTimestamp = video_frame.timestamp;
 				break;
 			case NDIlib_frame_type_audio:
 #if 0
-printf("Detected audio\n");
-printf("sample_rate = %d\n", audio_frame.sample_rate);
-printf("no_channels = %d\n", audio_frame.no_channels);
-printf("no_samples = %d\n", audio_frame.no_samples);
-printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
+				/* Useful when debugging probe audio issues. */
+				printf("Detected audio\n");
+				printf("sample_rate = %d\n", audio_frame.sample_rate);
+				printf("no_channels = %d\n", audio_frame.no_channels);
+				printf("no_samples = %d\n", audio_frame.no_samples);
+				printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 #endif
 				opts->num_channels = audio_frame.no_channels;
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
