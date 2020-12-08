@@ -384,8 +384,10 @@ static void *x264_start_encoder( void *ptr )
     enc_params->avc_param.i_log_level = 65535;
 #endif
 
-    printf("%d x %d\n", enc_params->avc_param.i_width, enc_params->avc_param.i_height);
-    printf("%d\n", enc_params->avc_param.i_fps_num);
+    printf(MESSAGE_PREFIX "Input resolution: %d x %d\n", enc_params->avc_param.i_width, enc_params->avc_param.i_height);
+    printf(MESSAGE_PREFIX "Input framerate : %d / %d\n",
+		enc_params->avc_param.i_fps_num,
+		enc_params->avc_param.i_fps_den);
 
     if (h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
         if ((enc_params->avc_param.i_width == 1920) && (enc_params->avc_param.i_height == 1080)) {
