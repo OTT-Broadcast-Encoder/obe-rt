@@ -582,7 +582,7 @@ static int open_device(ndi_opts_t *opts)
 	if (opts->card_idx > (int)(sourceCount - 1))
 		opts->card_idx = sourceCount - 1;
 
-	printf(MODULE_PREFIX "Found out requested stream, via card_idx %d\n", opts->card_idx);
+	printf(MODULE_PREFIX "Found user requested stream, via card_idx %d\n", opts->card_idx);
 	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + opts->card_idx);
 
 	/* We don't need this */
