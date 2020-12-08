@@ -602,6 +602,7 @@ static int open_device(ndi_opts_t *opts)
 		/* Grab a frame of video and audio, probe it. */
 		NDIlib_video_frame_v2_t video_frame;
 		NDIlib_audio_frame_v2_t audio_frame;
+		NDIlib_metadata_frame_t metadata_frame;
 
 		int ftype = NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000);
 		switch (ftype) {
@@ -651,6 +652,7 @@ printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 				break;
         		case NDIlib_frame_type_metadata:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_metadata\n");
+				NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata_frame);
 				break;
         		case NDIlib_frame_type_error:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_error\n");
