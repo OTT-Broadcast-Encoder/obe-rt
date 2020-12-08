@@ -608,7 +608,7 @@ static int open_device(ndi_opts_t *opts)
 		switch (ftype) {
 			case NDIlib_frame_type_video:
 #if 1
-printf("line_stride_in_bytes = %d\n", video_frame.line_stride_in_bytes);
+printf("probe: line_stride_in_bytes = %d -- ", video_frame.line_stride_in_bytes);
 static int64_t lastTimestamp = 0;
 printf("timestamp = %" PRIi64 " (%" PRIi64 ")\n",
 	video_frame.timestamp,
