@@ -424,16 +424,7 @@ bool  MxAvRecorderDemo::Start()
 
     // Create record thread
     m_Exit = false;
-    m_pRecThread = new MxThread;
-    if (!m_pRecThread->Create(MxAvRecorderDemo::RecordLoopEntry, this))
-    {
-        m_pRecLock->Close();
-        delete m_pRecLock; m_pRecLock=NULL;
-        m_pRecEvent->Close();
-        delete m_pRecEvent; m_pRecEvent = NULL;
-        delete m_pRecThread; m_pRecThread = NULL;
-        return false;
-    }
+
     return MxDemoMatrixBase::Start();
 }
 
@@ -486,7 +477,6 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
 	DtVidStdInfo VidInfo;
 	DTAPI_RESULT dr = ::DtapiGetVidStdInfo(pTheFrame->m_VidStd, VidInfo);
 
-	//bool AddedFrameToQueue = false;
 	if (pTheFrame->m_VideoValid) {
 #if 0
 		printf("%s() got a video frame %" PRIi64 " num_lines %d stride %d\n",
@@ -541,7 +531,7 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
 			if (i == 0)
 				r += (tbufdepth / 2);
 
-			/* unpack into planer */
+			/* unpack interleaved into planer */
 			uint32_t *s = tbuf;
 			for (int z = 0; z < tbufdepth; z++) {
 				*(l++) = *(s++); /* left */
@@ -556,78 +546,6 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
 		free(abuf);
 		free(tbuf);
         }
-}
-
-void  MxAvRecorderDemo::RecordLoopEntry(void*  pContext)
-{
-    ((MxAvRecorderDemo*)pContext)->RecordLoop();
-}
-void  MxAvRecorderDemo::RecordLoop()
-{
-    while (!m_Exit)
-    {
-        // Wait for new data event
-        m_pRecEvent->WaitTimeout(250);
-
-        //.-.-.-.-.-.-.-.-.-.-.- Process all buffer in record queue -.-.-.-.-.-.-.-.-.-.-.
-
-        // Get first buffer from queue
-        m_pRecLock->Lock();
-        AvStreamBuf*  pAvBuf = m_RecQueue.empty() ? NULL : m_RecQueue.front();
-        m_pRecLock->Unlock();
-
-        if (pAvBuf == NULL)
-            continue;   // No buffer to process
-
-        do
-        {
-            //.-.-.-.-.-.-.-.-.-.-.-.-.- Write buffer to stream -.-.-.-.-.-.-.-.-.-.-.-.-.
-
-            // Get associated stream
-            AvStream*  pAvStream = pAvBuf->m_pStream;
-            MX_ASSERT(pAvStream != NULL);
-
-            // Does the stream file exist already
-            if (!pAvStream->IsOpen())
-            {
-                char  Filename[256];
-                if (pAvStream->Type() == AvStream::VIDEO_STREAM)
-                    sprintf(Filename, VIDEO_FILENAME_FMT, pAvStream->m_Width,
-                                                                     pAvStream->m_Height);
-                else
-                {
-                    // Do we record per channel or per service
-                    if (AUDMODE()==AUDMODE_CHANNEL_32B)
-                    {
-                        sprintf(Filename, AUDIO_FILENAME_FMT1, pAvStream->Index()+1,
-                                                                 pAvStream->m_SampleSize);
-                    }
-                    else
-                    {
-                        sprintf(Filename, AUDIO_FILENAME_FMT2, pAvStream->Index()+1,
-                                       pAvStream->m_NumChannels, pAvStream->m_SampleSize);
-                    }
-
-                }
-                pAvStream->Open(Filename);
-            }
-            // Append buffer to file
-            pAvStream->Write(pAvBuf->m_pBuf, pAvBuf->m_NumValid);
-            //.-.-.-.-.-.-.-.-.-.-.- Update queue and buffer status -.-.-.-.-.-.-.-.-.-.-.
-
-            // Get the lock first
-            m_pRecLock->Lock();
-
-            m_RecQueue.pop_front();     // Remove buffer from queue
-            pAvBuf->m_pStream = NULL;   // Mark buffer as free by setting stream to NULL
-
-            // Check for more buffer in queue
-            pAvBuf = m_RecQueue.empty() ? NULL : m_RecQueue.front();
-
-            m_pRecLock->Unlock();
-
-        } while (pAvBuf!=NULL && !m_Exit);
-    }
 }
 
 #endif
