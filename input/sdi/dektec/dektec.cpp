@@ -326,38 +326,29 @@ bool MxAvRecorderDemo::PrepCard(DtDevice& TheCard)
     return (dr == DTAPI_OK);
 }
 
-bool  MxAvRecorderDemo::Start()
+bool MxAvRecorderDemo::Start()
 {
-    //-.-.-.-.-.-.-.-.-.-.-.-.-.- Init AV streams and buffers -.-.-.-.-.-.-.-.-.-.-.-.-.-.
-#if 0
-    // Step 1: close video streams
-    for (int  i=0; i<(int)m_VidStreams.size(); i++)
-        m_VidStreams[i]->Close();
-    for (int  i=0; i<(int)m_AudStreams.size(); i++)
-        m_AudStreams[i]->Close();
-#endif
+	AvStreamBufList::iterator  it = m_VidBuffers.begin();
+	for ( ; it!=m_VidBuffers.end(); it++)
+		it->Clear();
 
-    // Step 2: reset buffers
-    AvStreamBufList::iterator  it = m_VidBuffers.begin();
-    for ( ; it!=m_VidBuffers.end(); it++)
-        it->Clear();
-    it = m_AudBuffers.begin();
-    for ( ; it!=m_AudBuffers.end(); it++)
-        it->Clear();
+	it = m_AudBuffers.begin();
+	for ( ; it!=m_AudBuffers.end(); it++)
+		it->Clear();
 
-    return MxDemoMatrixBase::Start();
+	return MxDemoMatrixBase::Start();
 }
 
 void  MxAvRecorderDemo::Stop()
 {
-    MxDemoMatrixBase::Stop();
+	MxDemoMatrixBase::Stop();
 }
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.- MxAvRecorderDemo::OnNewFrame -.-.-.-.-.-.-.-.-.-.-.-.-.-.-
 //
 void  MxAvRecorderDemo::OnNewFrame(DtMxData* pData, void* pOpaque)
 {
-    ((MxAvRecorderDemo*)pOpaque)->OnNewFrame(pData);
+	((MxAvRecorderDemo*)pOpaque)->OnNewFrame(pData);
 }
 
 void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)

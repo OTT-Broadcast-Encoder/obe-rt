@@ -106,8 +106,6 @@ protected:
     }
 
 protected:
-    AvStreamBufPtrList  m_RecQueue;  // Queue with buffers to record
-
     AvStreamBufList  m_VidBuffers;  // List with free video buffers
     AvStreamBufList  m_AudBuffers;  // List with free audio buffers
 
