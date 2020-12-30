@@ -40,6 +40,7 @@ extern "C"
 #include "input/sdi/ancillary.h"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
+#include "input/sdi/v210.h"
 }
 
 #include <DTAPI.h>
@@ -127,7 +128,7 @@ typedef struct
     int tff;
 } dektec_opts_t;
 
-static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes);
+static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int strideBytes);
 static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime);
 
 /* All of the dektec specific class implemenation */
@@ -379,7 +380,8 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
 
 		deliver_video_frame(opts,
 			pTheFrame->m_Video[0].m_Planes[0].m_pBuf,
-			pTheFrame->m_Video[0].m_Planes[0].m_BufSize);
+			pTheFrame->m_Video[0].m_Planes[0].m_BufSize,
+			pTheFrame->m_Video[0].m_Planes[0].m_Stride);
 
 	}
 
@@ -499,10 +501,17 @@ static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int s
 	}
 }
 
-static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes)
+static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int strideBytes)
 {
 	dektec_ctx_t *ctx = &opts->ctx;
 
+#if 1
+// MMM
+	struct V210_painter_s painter;
+	V210_painter_reset(&painter, plane, 1280, 720, strideBytes, 0);
+	V210_painter_draw_ascii_at(&painter, 0, 2, "This is a test");
+	V210_painter_draw_ascii_at(&painter, 0, 3, "And so is this 1234");
+#endif
 	do {
 		/* Ship the payload into the OBE pipeline. */
 		obe_raw_frame_t *raw_frame = new_raw_frame();
