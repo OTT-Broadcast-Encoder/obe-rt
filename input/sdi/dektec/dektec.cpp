@@ -49,7 +49,7 @@ extern "C"
 #define STR(x) STR_HELPER(x)
 #define DEKTEC_VERSION STR(DTAPI_VERSION_MAJOR) "." STR(DTAPI_VERSION_MINOR) "." STR(DTAPI_VERSION_BUGFIX) "." STR(DTAPI_VERSION_BUILD)
 
-char *dektec_sdk_version = DEKTEC_VERSION;
+const char *dektec_sdk_version = DEKTEC_VERSION;
 
 struct obe_to_dektec_video
 {
