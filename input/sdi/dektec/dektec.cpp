@@ -25,19 +25,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <iostream>
-#include <signal.h>
 
 using namespace std;
-
-// Other
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-
 
 #define MODULE_PREFIX "[dektec]: "
 
@@ -50,11 +40,6 @@ extern "C"
 #include "input/sdi/ancillary.h"
 #include "input/sdi/vbi.h"
 #include "input/sdi/x86/sdi.h"
-#include <libavutil/opt.h>
-#include <libavutil/mathematics.h>
-#include <libavutil/bswap.h>
-//#include <libswresample/swresample.h>
-//#include <libavutil/opt.h>
 }
 
 #include <DTAPI.h>
