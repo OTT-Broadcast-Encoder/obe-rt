@@ -166,7 +166,6 @@ static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int s
 /* All of the dektec specific class implemenation */
 
 static const int DEF_CARD_TYPE = 2172;
-static const int DEF_CARD_NO = 0;
 static const int DEF_IN_PORT = 1;
 
 #define DTAPI_VIDSTD_AUTO  -2   // Extra helper for auto detection of video standard
@@ -807,7 +806,12 @@ static int open_device(dektec_opts_t *opts, int mute)
 	ctx->R->userContext = opts;
 
 	if (mute) {
-		DTAPI_RESULT dr = ctx->TheCard->AttachToType(DEF_CARD_TYPE, DEF_CARD_NO);
+		/*
+		 * Terminology: A CARD in the SDK is a physical card, so trying to
+		 * attached to CARD 1 will look for card 1, not port 1 on card 0.
+		 * In A system with a single dektec card, we'll always attach to card0.
+		 */
+		DTAPI_RESULT dr = ctx->TheCard->AttachToType(DEF_CARD_TYPE, opts->card_idx);
 		if (dr != DTAPI_OK) {
 			fprintf(stderr, MODULE_PREFIX "Failed to attached to DTA-%d\n", DEF_CARD_TYPE);
 			return -1;
