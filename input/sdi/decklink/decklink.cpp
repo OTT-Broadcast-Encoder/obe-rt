@@ -53,6 +53,7 @@ extern "C"
 #include <libavutil/pixdesc.h>
 #include <libklvanc/vanc.h>
 #include <libklscte35/scte35.h>
+#include "input/sdi/v210.h"
 }
 
 #include <input/sdi/v210.h>
@@ -1341,6 +1342,15 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
     }
 #endif
 
+    if (0 && videoframe) {
+        /* Demonstrate V210 writes into the video packet format. */
+	/* Tested with 720p and 1080i */
+        videoframe->GetBytes(&frame_bytes);
+        struct V210_painter_s painter;
+        V210_painter_reset(&painter, (unsigned char *)frame_bytes, 1280, 720, stride, 0);
+        V210_painter_draw_ascii_at(&painter, 0, 2, "This is a test");
+        V210_painter_draw_ascii_at(&painter, 0, 3, "And so is this 1234");
+    }
     if (sfc && (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max)) {
         if (videoframe && (videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {
             klsyslog_and_stdout(LOG_ERR, "Decklink card index %i: illegal audio sample count %d, wanted %d to %d, "
