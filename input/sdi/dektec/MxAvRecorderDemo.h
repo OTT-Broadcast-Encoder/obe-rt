@@ -28,34 +28,13 @@ public:
         };
 
     protected:
-        bool  Init()
-        {
-            MX_ASSERT(m_pLock == NULL);
-            m_pLock = new MxCritSec;
-            return m_pLock->Init();
-        }
-        void  Cleanup()
-        {
-            // Free lock
-            if (m_pLock != NULL)
-            {
-                m_pLock->Close();
-                delete m_pLock; m_pLock = NULL;
-            }
-        }
-
-    protected:
-
-        IMxCritSec* m_pLock;    // Lock protecting internal state variables
 
         // Constructor / Destructor
     public:
         AvStream(AvType  T, int  Index=-1) 
         {
-            m_pLock = NULL;
-            Init(); 
         }
-        ~AvStream() { Cleanup(); }
+        ~AvStream() { }
     private:
         AvStream(const AvStream&);  // No copy constructor allowed
     };
