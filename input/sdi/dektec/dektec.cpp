@@ -112,7 +112,6 @@ static int lookupDektecName(int w, int h, int den, int num)
 #endif
 
 DtDevice TheCard;
-MxAvRecorderDemo R;
 
 typedef struct
 {
@@ -804,7 +803,7 @@ static int open_device(dektec_opts_t *opts, int mute)
 	ctx->R->ParseCommandLine(0, NULL);
 
 	ctx->TheCard = &TheCard;
-	ctx->R = &R;
+	ctx->R = new MxAvRecorderDemo();
 	ctx->R->userContext = opts;
 
 	if (mute) {
