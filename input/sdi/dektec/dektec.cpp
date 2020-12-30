@@ -271,7 +271,7 @@ bool MxAvRecorderDemo::Init(DtDevice& TheCard)
 bool MxAvRecorderDemo::PrepCard(DtDevice& TheCard)
 {
     DTAPI_RESULT  dr;
-    dektec_opts_t *opts = (dektec_opts_t *)userPriv;
+    dektec_opts_t *opts = (dektec_opts_t *)userContext;
 
     //-.-.-.-.-.-.-.-.-.-.-.-.-.- Configure port io-direction -.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
@@ -638,7 +638,6 @@ static int open_device(dektec_opts_t *opts, int mute)
 		printf(MODULE_PREFIX "Using DTA-%d, Port=%d, Standard=auto\n", DEF_CARD_TYPE, DEF_IN_PORT);
 	}
 
-        ctx->R->userPriv = (void *)opts;
 	if (!ctx->R->Detect(TheCard)) {
 		fprintf(stderr, MODULE_PREFIX "No signal found\n");
 		return -1;

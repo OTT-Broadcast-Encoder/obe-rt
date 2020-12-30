@@ -33,7 +33,6 @@ public:
     };
     typedef std::vector<AvStream*>  AvStreamPtrVec;
 
-
     //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- class AvStreamBuf -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-
     // Object describing a data buffer for a stream
     struct AvStreamBuf
@@ -86,8 +85,6 @@ public:
     virtual void  Stop();
 
     void *userContext;
-
-    void *userPriv;
 
 protected:
     bool  PrepCard(DtDevice &TheCard);
