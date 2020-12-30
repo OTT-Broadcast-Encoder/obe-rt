@@ -193,10 +193,6 @@ static const char AUDIO_FILENAME_FMT2[] = "audio_service_%d_%dx%dbit.pcm";
 #define  MX_PRINT_PROFILING_INFO
 
 MxAvRecorderDemo::MxAvRecorderDemo()
-: m_pRecThread(NULL)
-, m_Exit(false)
-, m_pRecEvent(NULL)
-, m_pRecLock(NULL)
 {
     // Create av-stream descriptors
     for (int  i=0; i<VIDEO_MAX_NUM_STREAMS; i++)
@@ -380,10 +376,6 @@ bool MxAvRecorderDemo::PrepCard(DtDevice& TheCard)
 
 bool  MxAvRecorderDemo::Start()
 {
-    // Cannot start twice
-    if (m_pRecThread != NULL)
-        return false;
-
     //-.-.-.-.-.-.-.-.-.-.-.-.-.- Init AV streams and buffers -.-.-.-.-.-.-.-.-.-.-.-.-.-.
 
     // Step 1: close video streams
@@ -400,57 +392,12 @@ bool  MxAvRecorderDemo::Start()
     for ( ; it!=m_AudBuffers.end(); it++)
         it->Clear();
 
-    // Step 3: clear record queue
-    m_RecQueue.clear();
-
-    //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- Init record thread -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
-
-    // Create state lock
-    m_pRecLock = new MxCritSec;
-    if (!m_pRecLock->Init())
-    {
-        delete m_pRecLock; m_pRecLock=NULL;
-    }
-
-    // Create record event
-    m_pRecEvent = new MxEvent;
-    if (!m_pRecEvent->Init())
-    {
-        m_pRecLock->Close();
-        delete m_pRecLock; m_pRecLock=NULL;
-        delete m_pRecEvent; m_pRecEvent = NULL;
-        return false;
-    }
-
-    // Create record thread
-    m_Exit = false;
-
     return MxDemoMatrixBase::Start();
 }
 
 void  MxAvRecorderDemo::Stop()
 {
     MxDemoMatrixBase::Stop();
-
-    // Clean-up record thread
-    if (m_pRecThread != NULL)
-    {
-        m_Exit = true;
-        m_pRecThread->WaitFinished();
-        delete m_pRecThread; m_pRecThread = NULL;
-    }
-    // Clean-up record event
-    if (m_pRecEvent != NULL)
-    {
-        m_pRecEvent->Close();
-        delete m_pRecEvent; m_pRecEvent = NULL;
-    }
-    // Clean-up state lock
-    if (m_pRecLock != NULL)
-    {
-        m_pRecLock->Close();
-        delete m_pRecLock; m_pRecLock=NULL;
-    }
 }
 
 //-.-.-.-.-.-.-.-.-.-.-.-.-.-.- MxAvRecorderDemo::OnNewFrame -.-.-.-.-.-.-.-.-.-.-.-.-.-.-

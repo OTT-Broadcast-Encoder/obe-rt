@@ -213,10 +213,8 @@ protected:
         std::list<AvStreamBuf>::iterator  it=BufList.begin();
         for (; it!=BufList.end() && pFreeBuf==NULL; it++)
         {
-            m_pRecLock->Lock();
             if (it->m_pStream == NULL)
                 pFreeBuf = &(*it);
-            m_pRecLock->Unlock();
         }
         return pFreeBuf;
     }
@@ -230,12 +228,6 @@ protected:
     int  m_OptInPort;         // -p: Input port 
     int  m_OptInVidStd;       // -v: input video standard
     int  m_OptAudMode;        // -a: audio mode 
-
-    // Recording data
-    IMxThread*  m_pRecThread;   // Recording thread
-    volatile  bool  m_Exit;     // Exit record loop
-    IMxEvent*  m_pRecEvent;     // Data added to record queue event
-    IMxCritSec*  m_pRecLock;    // State lock to protect record data
 
     AvStreamBufPtrList  m_RecQueue;  // Queue with buffers to record
     AvStreamBufList  m_VidBuffers;  // List with free video buffers
