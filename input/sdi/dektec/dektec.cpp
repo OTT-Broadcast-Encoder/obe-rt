@@ -160,8 +160,8 @@ typedef struct
     int tff;
 } dektec_opts_t;
 
-void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes);
-void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime);
+static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes);
+static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime);
 
 #if 1
 /* All of the dektec specific class implemenation */
@@ -634,7 +634,7 @@ void  MxAvRecorderDemo::RecordLoop()
 
 #endif
 
-void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime)
+static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime)
 {
 // MMM
 	dektec_ctx_t *ctx = &opts->ctx;
@@ -705,7 +705,7 @@ void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeByte
 	}
 }
 
-void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes)
+static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes)
 {
 	dektec_ctx_t *ctx = &opts->ctx;
 	int finished = 1;
