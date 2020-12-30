@@ -43,6 +43,9 @@ endif
 if WEBSOCKETS
 LDFLAGS += -lwebsockets -ljson-c
 endif
+if DEKTECLIB
+LDFLAGS += /storage/dev/obe-build-environment-v3.4.0/dektecsdk/2019.11.0/DTAPI/Lib/GCC4.8_CXX11_ABI0/DTAPI64.o
+endif
 CXXFLAGS = $(CFLAGS) -std=c++11
 
 bin_PROGRAMS  = obecli
@@ -76,6 +79,9 @@ obecli_SOURCES += ../input/sdi/bluefish/bluefish.cpp
 endif
 if NDILIB
 obecli_SOURCES += ../input/ndi/ndi.cpp
+endif
+if DEKTECLIB
+obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif
 obecli_SOURCES += ../filters/audio/audio.c
 obecli_SOURCES += ../filters/audio/337m/337m.c

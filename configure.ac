@@ -72,6 +72,14 @@ AC_CHECK_HEADERS([twolame.h],
                  [break],
                  [AC_MSG_ERROR([libtwolame headers not found or not usable])])
 
+AC_LANG_PUSH([C++])
+AC_CHECK_HEADERS([DTAPI.h], HEADER_DEKTECLIB="yes")
+AC_LANG_POP([C++])
+if test "x$HEADER_DEKTECLIB" == "xyes" ; then
+    LDFLAGS+=" "
+fi
+AM_CONDITIONAL(DEKTECLIB, test x"$HEADER_DEKTECLIB" == x"yes")
+
 AC_CHECK_HEADERS([Processing.NDI.Lib.h], HEADER_NDILIB="yes")
 if test "x$HEADER_NDILIB" == "xyes" ; then
     LDFLAGS+=" -lndi "

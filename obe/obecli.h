@@ -189,6 +189,9 @@ static const obecli_input_name_t input_names[] =
 #if HAVE_PROCESSING_NDI_LIB_H
     { INPUT_DEVICE_NDI,      "NDI",  "NDI Raw Frame Device", "internal" },
 #endif
+#if HAVE_DTAPI_H
+    { INPUT_DEVICE_DEKTEC,   "DekTec", "Dektec DTA-2172 Dual Port Device", "internal" },
+#endif
     { 0, 0, 0 },
 };
 

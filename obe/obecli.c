@@ -42,6 +42,10 @@
 #include "common/common.h"
 #include "ltn_ws.h"
 
+#if HAVE_DTAPI_H
+extern char *dektec_sdk_version;
+#endif
+
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
 #define RETURN_IF_ERROR( cond, ... ) RETURN_IF_ERR( cond, "options", NULL, __VA_ARGS__ )
 
@@ -87,6 +91,9 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 								"bluefish",
 //#endif
 								"v210",
+#if HAVE_DTAPI_H
+                                                               "dektec",
+#endif
 #if HAVE_PROCESSING_NDI_LIB_H
 								"ndi",
 #endif
@@ -1217,6 +1224,7 @@ extern int64_t cur_pts; /* audio clock */
 extern int64_t cpb_removal_time; /* Last video frame clock */
 
 extern int64_t ac3_offset_ms;
+extern int64_t mp2_offset_ms;
 
 /* Mux */
 extern int64_t initial_audio_latency;
@@ -1321,6 +1329,7 @@ extern time_t g_decklink_missing_video_last_time;
         g_decklink_histogram_print_secs);
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
+    printf("audio_encoder.mp2_offset_ms = %" PRIi64 "\n", mp2_offset_ms);
     printf("audio_encoder.last_pts = %" PRIi64 "\n", cur_pts);
 
     printf("video_encoder.sei_timestamping = %d [%s]\n",
@@ -1478,6 +1487,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "audio_encoder.ac3_offset_ms") == 0) {
         ac3_offset_ms = val;
+    } else
+    if (strcasecmp(var, "audio_encoder.mp2_offset_ms") == 0) {
+        mp2_offset_ms = val;
     } else
     if (strcasecmp(var, "udp_output.drop_next_video_packet") == 0) {
         g_udp_output_drop_next_video_packet = val;
@@ -2299,6 +2311,14 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+    printf("Supports YUV VIA DekTec: %s\n",
+#if HAVE_DTAPI_H
+        "true"
+#else
+        "false"
+#endif
+    );
+
     printf("Supports RAW VIA NDISDK: %s\n",
 #if HAVE_PROCESSING_NDI_LIB_H
         "true"
@@ -2310,6 +2330,10 @@ static void _usage(const char *prog, int exitcode)
     printf("BlueFish444 Epoch SDK\n");
 #endif
     printf("Decklink SDK %s\n", BLACKMAGIC_DECKLINK_API_VERSION_STRING);
+#if HAVE_DTAPI_H
+    printf("DekTec SDK %s\n", dektec_sdk_version);
+#endif
+
     printf("\n");
 
     if (exitcode) {

@@ -191,8 +191,22 @@ static void *start_encoder_mp2( void *ptr )
         }
 
         raw_frame = encoder->queue.queue[0];
+
+#define DEKTEC 0
+#if DEKTEC
         if (raw_frame->avfm.audio_pts - avfm.audio_pts >= (2 * 648000)) {
+#else
+	if (raw_frame->avfm.audio_pts - avfm.audio_pts >= (4 * 648000)) {
+#endif
             cur_pts = -1; /* Reset the audio timebase from the hardware. */
+#if DEKTEC
+/* 720p30 seems to go through constant reset because the math exceeds our sense of normality.
+ * I changed to be 4 * 648000 to keep the console debug noise down.
+ */
+printf("Reset audio because raw_frame->avfm.audio_pts %" PRIi64 " - avfm.audio_pts %" PRIi64 " >= (2 * 648000)\n",
+raw_frame->avfm.audio_pts, avfm.audio_pts);
+#endif
+
         }
         memcpy(&avfm, &raw_frame->avfm, sizeof(avfm));
 

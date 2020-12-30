@@ -56,5 +56,8 @@ extern const obe_input_func_t v210_input;
 #if HAVE_PROCESSING_NDI_LIB_H
 extern const obe_input_func_t ndi_input;
 #endif
+#if HAVE_DTAPI_H
+extern const obe_input_func_t dektec_input;
+#endif
 
 #endif
