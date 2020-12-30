@@ -467,17 +467,7 @@ static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int s
 		return;
 	}
 
-	//rf->audio_frame.audio_data[0] = (uint8_t *)malloc(sizeBytes);
-
-#if 1
 	memcpy(rf->audio_frame.audio_data[0], plane, 3328);
-	//memcpy(rf->audio_frame.audio_data[1], plane + 3328, 3328);
-#else
-	unsigned char *p = rf->audio_frame.audio_data[0];
-	for (int z = 0; z < 3328; z++) {
-		*(p++) = z;
-	}
-#endif
 
 	avfm_init(&rf->avfm, AVFM_AUDIO_PCM);
 
