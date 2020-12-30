@@ -86,8 +86,6 @@ public:
     typedef std::list<AvStreamBuf>  AvStreamBufList;
     typedef std::list<AvStreamBuf*>  AvStreamBufPtrList;
 
-
-    // Operations
 public:
     virtual bool  Init(DtDevice&  TheCard);
     virtual bool  Detect(DtDevice &TheCard);
@@ -98,15 +96,6 @@ public:
 
     void *userPriv;
 
-	void ParseCommandLine(int argc, char* argv[]);
-
-    // Command-line option getters
-    int  CARD_TYPE() const { return m_OptCardType; }
-    int  CARD_NO() const { return m_OptCardNo; }
-    //int  IN_PORT() const { return m_OptInPort; }
-    int  IN_VIDSTD() const { return m_OptInVidStd; }
-    AudioMode  AUDMODE() const { return (AudioMode)m_OptAudMode; }
-    
 protected:
     bool  PrepCard(DtDevice &TheCard);
     static void  OnNewFrame(DtMxData* pData, void* pOpaque);
@@ -126,24 +115,15 @@ protected:
         return pFreeBuf;
     }
 
-    // Data / Attributes
-public:
 protected:
-    // Command-line options
-    int  m_OptCardType;       // -t: Card type (e.g. 2152=DTA-2152)
-    int  m_OptCardNo;         // -n: Card number (0=first, 1=second, ... , etc)
-    int  m_OptInPort;         // -p: Input port 
-    int  m_OptInVidStd;       // -v: input video standard
-    int  m_OptAudMode;        // -a: audio mode 
-
     AvStreamBufPtrList  m_RecQueue;  // Queue with buffers to record
+
     AvStreamBufList  m_VidBuffers;  // List with free video buffers
     AvStreamBufList  m_AudBuffers;  // List with free audio buffers
 
     AvStreamPtrVec  m_VidStreams;  // List with state per video stream
     AvStreamPtrVec  m_AudStreams;  // List with state per audio streams
     
-    // Constructor / Destructor
 public:
     MxAvRecorderDemo();
     virtual ~MxAvRecorderDemo();

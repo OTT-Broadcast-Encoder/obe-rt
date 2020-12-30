@@ -190,10 +190,6 @@ MxAvRecorderDemo::~MxAvRecorderDemo()
         it->Free();
 }
 
-void MxAvRecorderDemo::ParseCommandLine(int argc, char* argv[])
-{
-}
-
 bool MxAvRecorderDemo::Detect(DtDevice& TheCard)
 {
     if (!TheCard.IsAttached())
@@ -617,8 +613,6 @@ static int open_device(dektec_opts_t *opts, int mute)
 	dektec_ctx_t *ctx = &opts->ctx;
 
 	printf(MODULE_PREFIX "Searching for device port%d\n", opts->card_idx);
-
-	ctx->R->ParseCommandLine(0, NULL);
 
 	ctx->TheCard = &TheCard;
 	ctx->R = new MxAvRecorderDemo();
