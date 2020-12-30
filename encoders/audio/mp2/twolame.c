@@ -54,6 +54,8 @@ __inline__ void historical_int64_printf(struct historical_int64_s *s, char *pref
 
 #define MODULE "[mp2]: "
 
+int64_t mp2_offset_ms = 0;
+
 static void *start_encoder_mp2( void *ptr )
 {
 #if LOCAL_DEBUG
@@ -352,6 +354,7 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
                 coded_frame->pts -=  (67LL * 270LL);
             }
             coded_frame->pts +=  ((int64_t)stream->audio_offset_ms * 27000LL);
+            coded_frame->pts +=  (mp2_offset_ms * 27000LL);
             coded_frame->random_access = 1; /* Every frame output is a random access point */
             coded_frame->type = CF_AUDIO;
 
