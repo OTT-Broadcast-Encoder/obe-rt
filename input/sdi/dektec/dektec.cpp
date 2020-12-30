@@ -137,7 +137,7 @@ static const int DEF_IN_PORT = 1;
 
 #define DTAPI_VIDSTD_AUTO  -2   // Extra helper for auto detection of video standard
 static const int  DEF_IN_VIDSTD = DTAPI_VIDSTD_AUTO;
-static const MxAvRecorderDemo::AudioMode DEF_AUDIO_MODE = MxAvRecorderDemo::AUDMODE_CHANNEL_32B;
+//static const MxAvRecorderDemo::AudioMode DEF_AUDIO_MODE = MxAvRecorderDemo::AUDMODE_CHANNEL_32B;
 
 static const int IN_ROW=0;
 static const int MAX_NUM_FRAMES = 16;

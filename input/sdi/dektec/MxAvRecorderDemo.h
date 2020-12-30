@@ -8,13 +8,6 @@ class MxAvRecorderDemo : public MxDemoMatrixBase
 {
     // Constants / Types
 public:
-    enum  AudioMode
-    {
-        AUDMODE_CHANNEL_32B,    // Record per channel as 32-bit samples
-        AUDMODE_SERVICE_16B,    // Record as service with interleaved 16-bit samples
-        AUDMODE_SERVICE_24B,    // Record as service with interleaved 24-bit samples
-        AUDMODE_SERVICE_32B     // Record as service with interleaved 32-bit samples
-    };
 
     //.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.- class AvStream -.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.
     // Object maintaning the state information for a AV stream
