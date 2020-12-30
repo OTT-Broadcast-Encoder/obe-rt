@@ -502,7 +502,6 @@ static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int s
 static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes)
 {
 	dektec_ctx_t *ctx = &opts->ctx;
-	int finished = 1;
 
 	do {
 		/* Ship the payload into the OBE pipeline. */
@@ -520,9 +519,13 @@ static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int s
 		pkt->data = plane;
 		pkt->size = sizeBytes;
 
-		int ret = avcodec_decode_video2(ctx->codec, frame, &finished, pkt);
-		if (ret < 0 || !finished) {
-			fprintf(stderr, MODULE_PREFIX "Could not decode video frame, finished %d\n", finished);
+		int ret = avcodec_send_packet(ctx->codec, pkt);
+		while (ret >= 0) {
+			ret = avcodec_receive_frame(ctx->codec, frame);
+			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+				return;
+			} else if (ret < 0) {
+			}
 			break;
 		}
 
