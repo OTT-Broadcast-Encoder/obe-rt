@@ -53,8 +53,8 @@ extern "C"
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/bswap.h>
-#include <libswresample/swresample.h>
-#include <libavutil/opt.h>
+//#include <libswresample/swresample.h>
+//#include <libavutil/opt.h>
 }
 
 #include <DTAPI.h>
@@ -348,12 +348,13 @@ bool MxAvRecorderDemo::PrepCard(DtDevice& TheCard)
 bool  MxAvRecorderDemo::Start()
 {
     //-.-.-.-.-.-.-.-.-.-.-.-.-.- Init AV streams and buffers -.-.-.-.-.-.-.-.-.-.-.-.-.-.
-
+#if 0
     // Step 1: close video streams
     for (int  i=0; i<(int)m_VidStreams.size(); i++)
         m_VidStreams[i]->Close();
     for (int  i=0; i<(int)m_AudStreams.size(); i++)
         m_AudStreams[i]->Close();
+#endif
 
     // Step 2: reset buffers
     AvStreamBufList::iterator  it = m_VidBuffers.begin();

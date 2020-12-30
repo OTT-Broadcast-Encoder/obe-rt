@@ -27,53 +27,6 @@ public:
             AUDIO_STREAM
         };
 
-        // Operations
-    public:
-        inline bool IsOpen() const { MxAutoCritSec L(m_pLock);  return (m_pFile!=NULL); }
-        inline __int64  Size() const { MxAutoCritSec L(m_pLock); return m_Size; }
-        inline AvType Type() const { MxAutoCritSec L(m_pLock); return m_Type; }
-        inline int  Index() const { MxAutoCritSec L(m_pLock); return m_Index; }
-
-        // Open new file for stream
-        bool  Open(const char*  Filename)
-        {
-            // Lock the stream
-            MxAutoCritSec  Lock(m_pLock);
-
-            if (m_pFile != NULL)
-                Close();
-
-            // Create file
-            m_pFile = ::fopen(Filename, "wb");
-            m_Size = 0;
-            return (m_pFile != NULL);
-        }
-        // Close file
-        void Close()
-        {
-            // Lock the stream
-            MxAutoCritSec  Lock(m_pLock);
-
-            if (m_pFile != NULL)
-            {
-                ::fclose(m_pFile); m_pFile = NULL;
-                m_Size = 0;
-            }
-        }
-        // Write data to file
-        bool  Write(const unsigned char*  pBuf, int  NumToWrite)
-        {
-            // Lock the stream
-            MxAutoCritSec  Lock(m_pLock);
-
-            if (!IsOpen())
-                return false;
-            
-            ::fwrite(pBuf, 1, NumToWrite, m_pFile);
-            // Update size
-            m_Size += NumToWrite;
-            return true;
-        }
     protected:
         bool  Init()
         {
@@ -83,9 +36,6 @@ public:
         }
         void  Cleanup()
         {
-            // Close file
-            Close();
-
             // Free lock
             if (m_pLock != NULL)
             {
@@ -94,34 +44,15 @@ public:
             }
         }
 
-        // Data / Attributes
-    public:
-        // Video properties
-        int  m_Height, m_Width; // Video height and width in pixels
-
-        // Audio properties
-        int  m_SampleSize;      // Audio sample size (in # bits)
-        int  m_NumChannels;     // Number of audio channels stroed in stream
     protected:
-        AvType  m_Type;         // Type of stream
-        int  m_Index;           // Stream index. // NOTE: video uses index -1 and for
-                                // audio the index indicates the audio channel/service
-        FILE*  m_pFile;         // Record file
-        __int64  m_Size;        // #bytes recorded
 
         IMxCritSec* m_pLock;    // Lock protecting internal state variables
 
         // Constructor / Destructor
     public:
         AvStream(AvType  T, int  Index=-1) 
-            : m_Type(T),
-              m_Index(Index), 
-              m_Width(0), m_Height(0), 
-              m_SampleSize(0), m_NumChannels(0),
-              m_pFile(NULL), 
-              m_Size(0),
-              m_pLock(NULL)
-        { 
+        {
+            m_pLock = NULL;
             Init(); 
         }
         ~AvStream() { Cleanup(); }
@@ -201,9 +132,6 @@ protected:
     bool  PrepCard(DtDevice &TheCard);
     static void  OnNewFrame(DtMxData* pData, void* pOpaque);
     void  OnNewFrame(DtMxData* pData);
-
-    static void  RecordLoopEntry(void*  pContext);
-    void  RecordLoop();
 
     // Get a free buffer from the buffer list. A free buffer is a buffer who's stream 
     // pointer has not been set
