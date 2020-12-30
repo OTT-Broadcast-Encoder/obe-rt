@@ -77,7 +77,6 @@ struct obe_to_dektec_video
 
 const static struct obe_to_dektec_video video_format_tab[] =
 {
-    //{ INPUT_VIDEO_FORMAT_720P_30,   1280, 720,     DTAPI_VIDSTD_720P30, 1000, 30000 },
     { INPUT_VIDEO_FORMAT_720P_5994, 1280, 720,  DTAPI_VIDSTD_720P59_94, 1001, 60000 },
     { INPUT_VIDEO_FORMAT_720P_60,   1280, 720,     DTAPI_VIDSTD_720P60, 1000, 60000 },
 };
@@ -94,22 +93,6 @@ static const struct obe_to_dektec_video *lookupDektecStandard(int std)
 
 	return NULL;
 }
-
-#if 0
-static int lookupDektecName(int w, int h, int den, int num)
-{
-	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_dektec_video)); i++) {
-		const struct obe_to_dektec_video *fmt = &video_format_tab[i];
-		if ((fmt->width == w) && (fmt->height == h) &&
-			(fmt->timebase_den == den) && (fmt->timebase_num == num))
-		{
-			return fmt->obe_name;
-		}
-	}
-
-	return video_format_tab[0].obe_name;
-}
-#endif
 
 DtDevice TheCard;
 
@@ -162,7 +145,6 @@ typedef struct
 static void deliver_video_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes);
 static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime);
 
-#if 1
 /* All of the dektec specific class implemenation */
 
 static const int DEF_CARD_TYPE = 2172;
@@ -171,26 +153,15 @@ static const int DEF_IN_PORT = 1;
 #define DTAPI_VIDSTD_AUTO  -2   // Extra helper for auto detection of video standard
 static const int  DEF_IN_VIDSTD = DTAPI_VIDSTD_AUTO;
 static const MxAvRecorderDemo::AudioMode DEF_AUDIO_MODE = MxAvRecorderDemo::AUDMODE_CHANNEL_32B;
+
 static const int IN_ROW=0;
-
-// AV stream configuration (max #frames queue, size of AV buffer and number of buffers)
 static const int MAX_NUM_FRAMES = 16;
-
 static const int VIDEO_MAX_NUM_STREAMS = 1;
 static const int VIDEO_BUF_SIZE = 8*1024*1024;
 static const int VIDEO_NUM_BUFFERS = VIDEO_MAX_NUM_STREAMS * MAX_NUM_FRAMES;
-
 static const int AUDIO_MAX_NUM_STREAMS = 16;
 static const int AUDIO_BUF_SIZE = 32*1024;
 static const int AUDIO_NUM_BUFFERS = AUDIO_MAX_NUM_STREAMS * MAX_NUM_FRAMES;
-
-static const char VIDEO_FILENAME_FMT[] = "video_%dx%d.yuv";
-static const char AUDIO_FILENAME_FMT1[] = "audio_channel_%d_%dbit.pcm";
-static const char AUDIO_FILENAME_FMT2[] = "audio_service_%d_%dx%dbit.pcm";
-
-
-// Enable this define to get profiling information
-#define  MX_PRINT_PROFILING_INFO
 
 MxAvRecorderDemo::MxAvRecorderDemo()
 {
@@ -441,7 +412,7 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
 
 	if (pTheFrame->m_AudioValid) {
 
-		/* Audio is delivered as 8 pairs (currently). Each time we call GetAudio, we
+		/* Audio is delivered as 8 pairs (interleaved). Each time we call GetAudio, we
 		 * get the audio for a specific pair as a series of LEFT.RIGHT.LEFT.RIGHT 32bit
 		 * samples, alligned in an array. We need to convert that left/right array
 		 * into a planer S32P buffer (abuf). We do this by means of tbuf.
@@ -495,11 +466,8 @@ void MxAvRecorderDemo::OnNewFrame(DtMxData* pData)
         }
 }
 
-#endif
-
 static void deliver_audio_frame(dektec_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime)
 {
-// MMM
 	dektec_ctx_t *ctx = &opts->ctx;
 
 #if 0
