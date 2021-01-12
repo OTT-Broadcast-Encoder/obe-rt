@@ -593,13 +593,57 @@ int64_t get_wallclock_in_mpeg_ticks( void )
     return ((int64_t)ts.tv_sec * (int64_t)27000000) + (int64_t)(ts.tv_nsec * 27 / 1000);
 }
 
+#if defined(__APPLE__)
+
+#define TIMING_GIGA (1000000000)
+
+/* timespec difference (monotonic) right - left */
+inline void timespec_monodiff_rml(struct timespec *ts_out, const struct timespec *ts_in)
+{
+    /* out = in - out,
+       where in > out
+     */
+    ts_out->tv_sec = ts_in->tv_sec - ts_out->tv_sec;
+    ts_out->tv_nsec = ts_in->tv_nsec - ts_out->tv_nsec;
+    if (ts_out->tv_sec < 0) {
+        ts_out->tv_sec = 0;
+        ts_out->tv_nsec = 0;
+    } else if (ts_out->tv_nsec < 0) {
+        if (ts_out->tv_sec == 0) {
+            ts_out->tv_sec = 0;
+            ts_out->tv_nsec = 0;
+        } else {
+            ts_out->tv_sec = ts_out->tv_sec - 1;
+            ts_out->tv_nsec = ts_out->tv_nsec + TIMING_GIGA;
+        }
+    } else {}
+}
+
+/* emulate clock_nanosleep for CLOCK_MONOTONIC and TIMER_ABSTIME */
+inline int clock_nanosleep_abstime(const struct timespec *req)
+{
+    struct timespec ts_delta;
+    int retval = clock_gettime(CLOCK_MONOTONIC, &ts_delta);
+    if (retval == 0) {
+        timespec_monodiff_rml(&ts_delta, req);
+        retval = nanosleep(&ts_delta, NULL);
+    }
+    return retval;
+}
+#endif /* defined(__APPLE__) */
+
 void sleep_mpeg_ticks( int64_t i_time )
 {
     struct timespec ts;
     ts.tv_sec = i_time / 27000000;
     ts.tv_nsec = ((i_time % 27000000) * 1000) / 27;
 
-    clock_nanosleep( CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, &ts );
+#if defined(__linux__)
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, &ts);
+#endif
+#if defined(__APPLE__)
+    clock_nanosleep_abstime(&ts);
+#endif
 }
 
 void obe_clock_tick( obe_t *h, int64_t value )
