@@ -284,7 +284,7 @@ static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram
 
 		dprintf(fd,
 #if defined(__APPLE__)
-			"-> %5" PRIu64 " %8" PRIu64 "  %s (%ld.%d)\n",
+			"-> %5" PRIu64 " %8" PRIu64 "  %s (%d.%d)\n",
 #endif
 #if defined(__linux__)
 			"-> %5" PRIu64 " %8" PRIu64 "  %s (%u.%u)\n",
