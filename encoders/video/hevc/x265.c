@@ -518,7 +518,7 @@ static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struc
 		/* Start time - Always the last SEI */
 		static uint32_t framecount = 0;
 		x = &p->userSEI.payloads[count - 1];
-		x->payloadType = USER_DATA_AVC_UNREGISTERED;
+		x->payloadType = (SEIPayloadType)USER_DATA_AVC_UNREGISTERED;
 		x->payloadSize = SEI_TIMESTAMP_PAYLOAD_LENGTH;
 		x->payload = sei_timestamp_alloc(); /* Freed when we enter the function prior to pic re-init. */
 
