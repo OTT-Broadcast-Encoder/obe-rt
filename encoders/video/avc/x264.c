@@ -877,10 +877,10 @@ if (fh)
             int64_t new_dts = 0;
             if (h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
                 new_dts = avfm->audio_pts + 0 -
-                    abs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
+                    llabs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
             } else {
                 new_dts = avfm->audio_pts + 24299700 -
-                    abs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
+                    llabs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
             }
 
             /* We need to userstand, for this temporal frame, how much it varies from the dts. */
@@ -907,7 +907,7 @@ if (fh)
 
             int64_t ft = pic_out.hrd_timing.cpb_final_arrival_time;
             int64_t it = pic_out.hrd_timing.cpb_initial_arrival_time;
-            int64_t fit = abs(ft - it);
+            int64_t fit = llabs(ft - it);
 
             coded_frame->cpb_initial_arrival_time += dts_diff_accum;
 
