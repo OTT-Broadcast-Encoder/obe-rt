@@ -26,6 +26,12 @@ LDFLAGS += -lpthread -lz -lx264 -lyuv
 LDFLAGS += -lavformat -lavcodec -ldl -lasound -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
 LDFLAGS += -lklscte35 -lklvanc -llzma
 LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses -lltntstools
+
+#APPLE
+#LDFLAGS += -framework AudioToolbox -lfdk-aac -lx264 -pthread -lm -pthread -framework VideoToolbox
+#LDFLAGS += -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices
+#LDFLAGS += -framework Security -framework AVFoundation -framework Foundation
+
 if LIBX265
 LDFLAGS += -lx265
 endif
@@ -83,6 +89,11 @@ endif
 if DEKTECLIB
 obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif
+
+# APPLE
+#obecli_SOURCES += ../input/avfoundation/avf_capture.m
+#obecli_SOURCES += ../input/avfoundation/avfoundation.cpp
+ 
 obecli_SOURCES += ../filters/audio/audio.c
 obecli_SOURCES += ../filters/audio/337m/337m.c
 obecli_SOURCES += ../filters/video/cc.c
