@@ -2220,6 +2220,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         goto finish;
     }
 
+#if defined(__linux__)
     result = decklink_ctx->p_card->GetModelName( &model_name );
 
     if( result != S_OK )
@@ -2231,6 +2232,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
 
     syslog( LOG_INFO, "Opened DeckLink PCI card %d (%s)", decklink_opts->card_idx, model_name );
     free( (char *)model_name );
+#endif
 
     if( decklink_ctx->p_card->QueryInterface( IID_IDeckLinkInput, (void**)&decklink_ctx->p_input ) != S_OK )
     {
