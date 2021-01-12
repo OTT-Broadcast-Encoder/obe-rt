@@ -2511,7 +2511,7 @@ int main( int argc, char **argv )
 /* RUNTIME STATISTICS */
 #define LOCAL_DEBUG 0
 int g_core_runtime_statistics_to_file = 0;
-extern int pthread_setname_np(pthread_t thread, const char *name);
+extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 
 struct runtime_statistics_ctx
 {
@@ -2533,7 +2533,7 @@ static void *runtime_statistics_thread(void *p)
 #endif
 	struct runtime_statistics_ctx *ctx = (struct runtime_statistics_ctx *)p;
 
-	pthread_setname_np(ctx->threadId, "obe-rt-stats");
+	ltnpthread_setname_np(ctx->threadId, "obe-rt-stats");
 
 	ctx->running = 1;
 	char ts[64];
@@ -2680,7 +2680,7 @@ static void *terminate_after_thread(void *p)
 #endif
 	struct terminate_after_ctx *ctx = (struct terminate_after_ctx *)p;
 
-	pthread_setname_np(ctx->threadId, "obe-ta-after");
+	ltnpthread_setname_np(ctx->threadId, "obe-ta-after");
 
 	char ts[64];
 	char line[256] = { 0 };
