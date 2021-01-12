@@ -401,7 +401,7 @@ __inline__ void avfm_dump(struct avfm_s *s) {
         s->frame_type == AVFM_VIDEO     ? "  V" : "U",
         s->audio_pts, s->video_pts,
         s->audio_pts_corrected,
-        (int64_t)abs(s->audio_pts - s->video_pts),
+        (int64_t)llabs(s->audio_pts - s->video_pts),
         (unsigned int)s->hw_received_tv.tv_sec,
         (unsigned int)s->hw_received_tv.tv_usec);
 }
