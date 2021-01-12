@@ -43,6 +43,7 @@ int ltnpthread_setname_np(pthread_t thread, const char *name)
 #endif
 #if defined(__APPLE__)
 	/* We don't support thread naming on OSX, yet. */
+	return 0;
 #endif
 }
 
