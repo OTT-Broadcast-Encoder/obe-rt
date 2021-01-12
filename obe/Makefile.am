@@ -23,7 +23,7 @@ CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFS
 	-DVERSION_PATCH=$(VERSION_PATCH)
 
 LDFLAGS += -lpthread -lz -lx264 -lyuv
-LDFLAGS += -lavformat -lavcodec -ldl -lasound -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
+LDFLAGS += -lavformat -lavcodec -ldl -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
 LDFLAGS += -lklscte35 -lklvanc -llzma
 LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses -lltntstools
 
