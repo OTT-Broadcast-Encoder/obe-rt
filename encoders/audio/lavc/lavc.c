@@ -86,7 +86,7 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
         char msg[128];
         sprintf(msg, MODULE "malloc av_fifo_realloc2(?, %d + %d)\n", av_fifo_size(fifo), pkt->size);
         fprintf(stderr, "%s\n", msg);
-        syslog(LOG_ERR, msg);
+        syslog(LOG_ERR, "%s", msg);
         return;
     }
 
