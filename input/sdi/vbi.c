@@ -448,7 +448,7 @@ static void write_header_byte( bs_t *s, int smpte_line, int ntsc )
 
 static void write_generic_field( bs_t *s, uint8_t *data, int type )
 {
-    int len;
+    int len = 0;
 
     if( type == MISC_VPS )
         len = VPS_BLOCK_LEN;
