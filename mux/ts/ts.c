@@ -466,9 +466,7 @@ void *open_muxer( void *ptr )
     obe_coded_frame_t *coded_frame;
     char *service_name = "OBE Service";
     char *provider_name = "Open Broadcast Encoder";
-
-    struct ltntstools_stream_statistics_s streamstats;
-    ltntstools_pid_stats_reset(&streamstats);
+    struct ltntstools_stream_statistics_s *streamstats = NULL;
 
     struct sched_param param = {0};
     param.sched_priority = 99;
@@ -794,6 +792,9 @@ void *open_muxer( void *ptr )
 
     //FILE *fp = fopen( "test.ts", "wb" );
 
+    streamstats = malloc(sizeof(*streamstats));
+    ltntstools_pid_stats_reset(streamstats);
+
     while( 1 )
     {
         video_found = 0;
@@ -971,9 +972,9 @@ if (fh)
 
         if( len )
         {
-            ltntstools_pid_stats_update(&streamstats, output, len / 188);
+            ltntstools_pid_stats_update(streamstats, output, len / 188);
 
-            uint32_t null_pct = ltntstools_pid_stats_stream_padding_pct(&streamstats);
+            uint32_t null_pct = ltntstools_pid_stats_stream_padding_pct(streamstats);
             uint32_t null_pct_val = 3;
             /* Report null padding issues after the few first seconds of startup. */
             if (null_pct <= null_pct_val && obe_getProcessRuntimeSeconds() > 3) {
@@ -1015,6 +1016,8 @@ if (fh)
     }
 
 end:
+    free(streamstats);
+
     ts_close_writer( w );
 
     /* TODO: clean more */
