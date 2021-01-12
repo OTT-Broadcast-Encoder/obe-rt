@@ -379,7 +379,10 @@ static void setup_pixel_funcs( decklink_opts_t *decklink_opts )
 {
     decklink_ctx_t *decklink_ctx = &decklink_opts->decklink_ctx;
 
+#if defined(__APPLE__)
+#else
     int cpu_flags = av_get_cpu_flags();
+#endif
 
     /* Setup VBI and VANC unpack functions */
     if( IS_SD( decklink_opts->video_format ) )
