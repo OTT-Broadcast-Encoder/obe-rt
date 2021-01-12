@@ -1210,8 +1210,11 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
         gettimeofday(&ts, NULL);
         obe_timeval_subtract(&diff, &ts, &lastts);
         lastts = ts;
-
+#if defined(__linux__)
         printf("%lu.%08lu -- vtime %012" PRIi64 ":%08" PRIi64 "  atime %012" PRIi64 ":%08" PRIi64 "  vduration %" PRIi64 " a-vdiff: %" PRIi64,
+#else
+        printf("%lu.%08u -- vtime %012" PRIi64 ":%08" PRIi64 "  atime %012" PRIi64 ":%08" PRIi64 "  vduration %" PRIi64 " a-vdiff: %" PRIi64,
+#endif
             diff.tv_sec,
             diff.tv_usec,
             vtime,
