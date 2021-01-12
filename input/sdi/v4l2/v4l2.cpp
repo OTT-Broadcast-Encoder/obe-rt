@@ -34,6 +34,8 @@
  * ../../ffmpeg/ffmpeg -f alsa -i plughw:CARD=C920,DEV=0 -f video4linux2 -s 320x240 -i /dev/video0 new.mp4
  */
 
+#if defined(__linux__)
+
 #define __STDC_FORMAT_MACROS   1
 #define __STDC_CONSTANT_MACROS 1
 
@@ -735,3 +737,6 @@ static void *open_input( void *ptr )
 }
 
 const obe_input_func_t v4l2_input = { probe_stream, open_input };
+
+#endif /* #if defined(__linux__) */
+

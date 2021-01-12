@@ -706,10 +706,12 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
 #endif
     else if (input_device->input_type == INPUT_DEVICE_V210)
         input = v210_input;
+#if defined(__linux__)
     else if( input_device->input_type == INPUT_DEVICE_LINSYS_SDI )
         input = linsys_sdi_input;
     else if (input_device->input_type == INPUT_DEVICE_V4L2)
         input = v4l2_input;
+#endif
     else
     {
         fprintf( stderr, "Invalid input device \n" );

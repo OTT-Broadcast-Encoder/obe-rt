@@ -22,6 +22,8 @@
  *
  *****************************************************************************/
 
+#if defined(__linux__)
+
 /* NOTE: Using valgrind to debug this card does not work because of the ioctls used! */
 
 #include <poll.h>
@@ -1295,3 +1297,4 @@ static void *open_input( void *ptr )
 
 const obe_input_func_t linsys_sdi_input = { probe_stream, open_input };
 
+#endif /* if defined(__linux__); */
