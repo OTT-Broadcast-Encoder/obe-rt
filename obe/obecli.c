@@ -27,6 +27,7 @@
 #include <math.h>
 #include <assert.h>
 #include <getopt.h>
+#include <ctype.h>
 #include <include/DeckLinkAPIVersion.h>
 
 #include <signal.h>
@@ -96,6 +97,9 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 #endif
 #if HAVE_PROCESSING_NDI_LIB_H
 								"ndi",
+#endif
+#if defined(__APPLE__)
+								"avfoundation",
 #endif
 								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
@@ -2326,6 +2330,13 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+    printf("Supports   AVFoundation: %s\n",
+#if defined(__APPLE__)
+	"true"
+#else
+	"false"
+#endif
+        );
 #if HAVE_BLUEDRIVER_P_H
     printf("BlueFish444 Epoch SDK\n");
 #endif
@@ -2359,6 +2370,15 @@ int main( int argc, char **argv )
     const char *syslogSuffix = NULL;
 
     obe_setProcessStartTime();
+
++#if 0
++// APPLE
++    avf_capture_init();
++    avf_capture_start();
++    sleep(5);
++    avf_capture_stop();
++printf("Stopped\n");
++#endif
 
     while ((opt = getopt(argc, argv, "c:C:hL:")) != -1) {
         switch (opt) {
