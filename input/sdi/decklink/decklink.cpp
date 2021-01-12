@@ -970,8 +970,8 @@ HRESULT DeckLinkCaptureDelegate::noVideoInputFrameArrived(IDeckLinkVideoInputFra
             sprintf(msg, "Decklink card index %i: More than %d frames were injected, aborting.\n",
                 decklink_opts_->card_idx,
                 g_decklink_injected_frame_count_max);
-            syslog(LOG_ERR, msg);
-            fprintf(stderr, msg);
+            syslog(LOG_ERR, "%s", msg);
+            fprintf(stderr, "%s", msg);
             exit(1);
         }
 
@@ -1285,8 +1285,8 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
                     decklink_opts_->card_idx,
                     g_decklink_fake_every_other_frame_lose_video_count,
                     g_decklink_fake_every_other_frame_lose_audio_count);
-                syslog(LOG_ERR, msg);
-                fprintf(stderr, msg);
+                syslog(LOG_ERR, "%s", msg);
+                fprintf(stderr, "%s", msg);
                 exit(1);
             }
         }
