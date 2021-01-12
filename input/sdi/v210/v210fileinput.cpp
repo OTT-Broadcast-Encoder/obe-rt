@@ -88,7 +88,7 @@ typedef struct
 	/* V210 input related */
 	int v210_fd;
 	uint8_t *v210_addr;
-	size_t v210_file_size;
+	int64_t v210_file_size;
 	unsigned int frameSizeBytesVideo;
 	unsigned int totalInputFrames;
 	unsigned int currentFrame;
