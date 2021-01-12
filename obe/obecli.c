@@ -2371,14 +2371,14 @@ int main( int argc, char **argv )
 
     obe_setProcessStartTime();
 
-+#if 0
-+// APPLE
-+    avf_capture_init();
-+    avf_capture_start();
-+    sleep(5);
-+    avf_capture_stop();
-+printf("Stopped\n");
-+#endif
+#if 0
+// APPLE
+    avf_capture_init();
+    avf_capture_start();
+    sleep(5);
+    avf_capture_stop();
+    printf("Stopped\n");
+#endif
 
     while ((opt = getopt(argc, argv, "c:C:hL:")) != -1) {
         switch (opt) {
