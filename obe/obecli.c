@@ -81,7 +81,7 @@ int  terminate_after_start(void **ctx, obecli_ctx_t *cli, int afterNSeconds);
 void terminate_after_stop(void *ctx);
 
 /* Ctrl-C handler */
-static volatile int b_ctrl_c = 0;
+//static volatile int b_ctrl_c = 0;
 
 static int g_running = 0;
 static int system_type_value = OBE_SYSTEM_TYPE_GENERIC;
