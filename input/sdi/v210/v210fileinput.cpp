@@ -270,12 +270,24 @@ static int open_device(v210_opts_t *opts)
 	sprintf(fn, "../../raw-input%d.v210", opts->card_idx);
 	printf(MODULE_PREFIX "Searching for V210 filename '%s'\n", fn);
 
-	ctx->v210_fd = open(fn, O_LARGEFILE, 0600); //6 = read+write for me!
+	ctx->v210_fd = open(fn,
+#if defined(__linux__)
+		O_LARGEFILE,
+#else
+		0,
+#endif
+		0600); //6 = read+write for me!
 	if (ctx->v210_fd < 0) {
 		fprintf(stderr, MODULE_PREFIX "No input filename '%s' detected.\n", fn);
 		sprintf(fn, "raw-input%d.v210", opts->card_idx);
 		printf(MODULE_PREFIX "Searching for V210 filename '%s'\n", fn);
-		ctx->v210_fd = open(fn, O_LARGEFILE, 0600); //6 = read+write for me!
+		ctx->v210_fd = open(fn,
+#if defined(__linux__)
+			O_LARGEFILE,
+#else
+			0,
+#endif
+			0600); //6 = read+write for me!
 		if (ctx->v210_fd < 0) {
 			fprintf(stderr, MODULE_PREFIX "No input filename '%s' detected.\n", fn);
 			return -1;
@@ -297,7 +309,7 @@ static int open_device(v210_opts_t *opts)
 	ctx->totalInputFrames = ctx->v210_file_size / ctx->frameSizeBytesVideo;
 
 	ctx->v210_addr = (uint8_t *)mmap(NULL, ctx->v210_file_size, PROT_READ, MAP_SHARED, ctx->v210_fd, 0);
-	printf("Mapped %" PRIi64 " bytes at %p, %lu frames.\n",
+	printf("Mapped %" PRIi64 " bytes at %p, %" PRIu64" frames.\n",
 		ctx->v210_file_size, ctx->v210_addr,
 		ctx->v210_file_size / ctx->frameSizeBytesVideo);
 
