@@ -262,18 +262,28 @@ static void init_filter( obe_vid_filter_ctx_t *vfilt )
 
     if( vfilt->avutil_cpu & AV_CPU_FLAG_SSE2 )
     {
+#if defined(__linux__)
+        /* inline assembly doesn't link on mac, yet, remove for non linux platforms */
         vfilt->downsample_chroma_row_top = obe_downsample_chroma_row_top_sse2;
         vfilt->downsample_chroma_row_bottom = obe_downsample_chroma_row_bottom_sse2;
+#endif
     }
 
-    if( vfilt->avutil_cpu & AV_CPU_FLAG_SSE4 )
+    if( vfilt->avutil_cpu & AV_CPU_FLAG_SSE4 ) {
+#if defined(__linux__)
+        /* inline assembly doesn't link on mac, yet, remove for non linux platforms */
         vfilt->dither_row_10_to_8 = obe_dither_row_10_to_8_sse4;
+#endif
+   }
 
     if( vfilt->avutil_cpu & AV_CPU_FLAG_AVX )
     {
+#if defined(__linux__)
+        /* inline assembly doesn't link on mac, yet, remove for non linux platforms */
         vfilt->downsample_chroma_row_top = obe_downsample_chroma_row_top_avx;
         vfilt->downsample_chroma_row_bottom = obe_downsample_chroma_row_bottom_avx;
         vfilt->dither_row_10_to_8 = obe_dither_row_10_to_8_avx;
+#endif
     }
 }
 
