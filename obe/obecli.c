@@ -2331,7 +2331,7 @@ static void _usage(const char *prog, int exitcode)
     );
     printf("Supports   AVFoundation: %s\n",
 #if defined(__APPLE__)
-	"true"
+	"true (ish)"
 #else
 	"false"
 #endif
