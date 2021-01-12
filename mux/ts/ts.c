@@ -428,7 +428,7 @@ static void mux_monitor_queue(obe_t *h)
         if (now >= lastReport + 15) {
             char msg[256];
             sprintf(msg, "Warning: Encoder video codec is probably running less than realtime, usually bad.");
-            syslog(LOG_ERR, msg);
+            syslog(LOG_ERR, "%s", msg);
             fprintf(stderr, "%s\n", msg);
             lastReport = now;
         }
