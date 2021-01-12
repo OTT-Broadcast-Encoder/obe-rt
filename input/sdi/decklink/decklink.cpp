@@ -384,6 +384,9 @@ static void setup_pixel_funcs( decklink_opts_t *decklink_opts )
     /* Setup VBI and VANC unpack functions */
     if( IS_SD( decklink_opts->video_format ) )
     {
+#if defined(__APPLE__)
+        printf("%s() No SD format support on APPLE, yet. Skipping.\n", __func__);
+#else   
         decklink_ctx->unpack_line = obe_v210_line_to_uyvy_c;
         decklink_ctx->downscale_line = obe_downscale_line_c;
         decklink_ctx->blank_line = obe_blank_line_uyvy_c;
@@ -393,6 +396,7 @@ static void setup_pixel_funcs( decklink_opts_t *decklink_opts )
 
         if( cpu_flags & AV_CPU_FLAG_SSE2 )
             decklink_ctx->downscale_line = obe_downscale_line_sse2;
+#endif
     }
     else
     {
