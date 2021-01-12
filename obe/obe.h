@@ -73,6 +73,7 @@ enum input_video_format_e
     INPUT_VIDEO_FORMAT_NTSC,
 
     /* 720p HD */
+    INPUT_VIDEO_FORMAT_720P_2997, /* Apple Webcams */
     INPUT_VIDEO_FORMAT_720P_50,
     INPUT_VIDEO_FORMAT_720P_5994,
     INPUT_VIDEO_FORMAT_720P_60 , /* NB: actually 60.00Hz */
