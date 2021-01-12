@@ -2618,7 +2618,7 @@ static void *runtime_statistics_thread(void *p)
 		sprintf(msg, "ts=%s%s\n", ts, line);
 
 		if (g_core_runtime_statistics_to_file > 1)
-			printf(msg);
+			printf("%s", msg);
 
 		char statsfile[256];
 		sprintf(statsfile, "/tmp/%d-obe-runtime-statistics.log", getpid());
@@ -2686,7 +2686,7 @@ static void *terminate_after_thread(void *p)
 	char line[256] = { 0 };
 
 	sprintf(line, MODULE_PREFIX "WARNING: process configured to self terminate in %lu seconds.\n", ctx->terminateWhen - time(NULL));
-	fprintf(stderr, line);
+	fprintf(stderr, "%s", line);
 	syslog(LOG_INFO | LOG_LOCAL4, "%s", line);
 
 	ctx->running = 1;
@@ -2696,7 +2696,7 @@ static void *terminate_after_thread(void *p)
 		if (now >= ctx->terminateWhen) {
 			obe_getTimestamp(ts, NULL);
 			sprintf(line, MODULE_PREFIX "FATAL: Self terminating on command.\n");
-			fprintf(stderr, line);
+			fprintf(stderr, "%s", line);
 			syslog(LOG_INFO | LOG_LOCAL4, "%s", line);
 			exit(0);
 		}
