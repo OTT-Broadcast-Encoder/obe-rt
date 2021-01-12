@@ -32,7 +32,19 @@
 #include "output/output.h"
 
 /* Avoid a minor compiler warning and defining GNU_SOURCE */
+#if defined(__linux__)
 extern int pthread_setname_np(pthread_t thread, const char *name);
+#endif
+
+int ltnpthread_setname_np(pthread_t thread, const char *name)
+{
+#if defined(__linux__)
+	return pthread_setname_np(thread, name);
+#endif
+#if defined(__APPLE__)
+	/* We don't support thread naming on OSX, yet. */
+#endif
+}
 
 /** Utilities **/
 
@@ -753,7 +765,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
         fprintf( stderr, "Couldn't create probe thread \n" );
         goto fail;
     }
-    pthread_setname_np(thread, "obe-probe");
+    ltnpthread_setname_np(thread, "obe-probe");
 
     if( input_device->location )
         printf( "Probing device: \"%s\". ", input_device->location );
@@ -1169,7 +1181,7 @@ int obe_start( obe_t *h )
             fprintf( stderr, "Couldn't create output thread \n" );
             goto fail;
         }
-        pthread_setname_np(h->outputs[i]->output_thread, "obe-output");
+        ltnpthread_setname_np(h->outputs[i]->output_thread, "obe-output");
     }
 
     /* Open Encoder Threads */
@@ -1216,7 +1228,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create x264 encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x264-encoder");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x264-encoder");
             }
 #if HAVE_X265_H
             else if (ostream->stream_format == VIDEO_HEVC_X265)
@@ -1244,7 +1256,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create x265 encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x265-encoder");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x265-encoder");
             }
 #endif
 #if HAVE_VA_VA_H
@@ -1273,7 +1285,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create AVC CPU avcodec encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
             }
             else if (ostream->stream_format == VIDEO_AVC_GPU_VAAPI_AVCODEC)
             {
@@ -1300,7 +1312,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create AVC GPU avcodec encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcco");
             }
             else if (ostream->stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC)
             {
@@ -1327,7 +1339,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create AVC GPU avcodec encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
             }
             else if (ostream->stream_format == VIDEO_HEVC_CPU_AVCODEC)
             {
@@ -1354,7 +1366,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create HEVC CPU avcodec encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
             }
             else if (ostream->stream_format == VIDEO_AVC_VAAPI)
             {
@@ -1381,7 +1393,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create x265 encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcva");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-avcva");
             }
             else if (ostream->stream_format == VIDEO_HEVC_VAAPI)
             {
@@ -1408,7 +1420,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create x265 encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hevcva");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hevcva");
             }
 #endif
             else if (ostream->stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC)
@@ -1436,7 +1448,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create AVC NVENC GPU avcodec encode thread\n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vid-hvcco");
             }
             else if (ostream->stream_format == AUDIO_AC_3_BITSTREAM) {
                 input_stream = get_input_stream(h, ostream->input_stream_id);
@@ -1457,7 +1469,7 @@ int obe_start( obe_t *h )
                     fprintf(stderr, "Couldn't create ac3bitstream encode thread\n");
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-aud-encoder");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-aud-encoder");
             }
             else if (ostream->stream_format == AUDIO_AC_3 || ostream->stream_format == AUDIO_E_AC_3 ||
                      ostream->stream_format == AUDIO_AAC  || ostream->stream_format == AUDIO_MP2)
@@ -1513,7 +1525,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create encode thread \n" );
                     goto fail;
                 }
-                pthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-aud-encoder");
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-aud-encoder");
             }
 
             h->num_encoders++;
@@ -1528,7 +1540,7 @@ int obe_start( obe_t *h )
             fprintf( stderr, "Couldn't create encoder smoothing thread \n" );
             goto fail;
         }
-        pthread_setname_np(h->enc_smoothing_thread, "obe-enc-smoothing");
+        ltnpthread_setname_np(h->enc_smoothing_thread, "obe-enc-smoothing");
     }
 
     /* Open Mux Smoothing Thread */
@@ -1537,7 +1549,7 @@ int obe_start( obe_t *h )
         fprintf( stderr, "Couldn't create mux smoothing thread \n" );
         goto fail;
     }
-    pthread_setname_np(h->mux_smoothing_thread, "obe-mux-smoothing");
+    ltnpthread_setname_np(h->mux_smoothing_thread, "obe-mux-smoothing");
 
     /* Open Mux Thread */
     obe_mux_params_t *mux_params = calloc( 1, sizeof(*mux_params) );
@@ -1556,7 +1568,7 @@ int obe_start( obe_t *h )
         fprintf( stderr, "Couldn't create mux thread \n" );
         goto fail;
     }
-    pthread_setname_np(h->mux_thread, "obe-muxer");
+    ltnpthread_setname_np(h->mux_thread, "obe-muxer");
 
     /* Open Filter Thread */
     for( int i = 0; i < h->devices[0]->num_input_streams; i++ )
@@ -1612,7 +1624,7 @@ int obe_start( obe_t *h )
                     fprintf( stderr, "Couldn't create video filter thread \n" );
                     goto fail;
                 }
-                pthread_setname_np(h->filters[h->num_filters]->filter_thread, "obe-vid-filter");
+                ltnpthread_setname_np(h->filters[h->num_filters]->filter_thread, "obe-vid-filter");
 #if 0
 PRINT_OBE_FILTER(h->filters[h->num_filters], "VIDEO FILTER");
 #endif
@@ -1637,7 +1649,7 @@ PRINT_OBE_FILTER(h->filters[h->num_filters], "AUDIO FILTER");
                     fprintf( stderr, "Couldn't create filter thread \n" );
                     goto fail;
                 }
-                pthread_setname_np(h->filters[h->num_filters]->filter_thread, "obe-aud-filter");
+                ltnpthread_setname_np(h->filters[h->num_filters]->filter_thread, "obe-aud-filter");
             }
 
             h->num_filters++;
@@ -1662,7 +1674,7 @@ PRINT_OBE_FILTER(h->filters[h->num_filters], "AUDIO FILTER");
         fprintf( stderr, "Couldn't create input thread \n" );
         goto fail;
     }
-    pthread_setname_np(h->devices[0]->device_thread, "obe-device");
+    ltnpthread_setname_np(h->devices[0]->device_thread, "obe-device");
 
     h->is_active = 1;
 
