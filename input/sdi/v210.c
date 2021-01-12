@@ -1232,7 +1232,7 @@ __inline__ void V210_draw_6_pixels(uint32_t *addr, uint32_t *coloring)
 	}
 }
 
-__inline__ void V210_draw_box(uint32_t *frame_addr, uint32_t stride, int color, int interlaced)
+void V210_draw_box(uint32_t *frame_addr, uint32_t stride, int color, int interlaced)
 {
 	uint32_t *coloring;
 	if (color == 1)
