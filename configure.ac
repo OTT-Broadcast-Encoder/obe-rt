@@ -10,6 +10,7 @@ AM_SILENT_RULES([yes])
 
 # Checks for programs.
 AC_CHECK_PROGS(YASM, yasm)
+AC_PROG_OBJC
 AC_PROG_CC
 AC_PROG_CC_C99
 AC_PROG_CXX
@@ -20,7 +21,6 @@ AX_PROG_YASM()
 
 #AC_SUBST(CCAS)
 #AC_SUBST(CCASFLAGS)
-
 
 # We always build with -fPIC in case our static libraries end up
 # being linked into a consumer's shared library
@@ -38,9 +38,6 @@ AC_PROG_LIBTOOL
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
-AC_CHECK_HEADERS([alsa/asoundlib.h],
-                 [break],
-                 [AC_MSG_ERROR([libasound (alsa) headers not found or not usable])])
 AC_CHECK_HEADERS([fdk-aac/aacdecoder_lib.h],
                  [break],
                  [AC_MSG_ERROR([libfdk-aac headers not found or not usable])])
@@ -71,6 +68,10 @@ AC_CHECK_HEADERS([libzvbi.h],
 AC_CHECK_HEADERS([twolame.h],
                  [break],
                  [AC_MSG_ERROR([libtwolame headers not found or not usable])])
+AC_CHECK_HEADERS([alsa/asoundlib.h], HEADER_ASOUND="yes")
+if test "x$HEADER_ASOUND" == "xyes" ; then
+    LDFLAGS+=" -lasound "
+fi
 
 AC_LANG_PUSH([C++])
 AC_CHECK_HEADERS([DTAPI.h], HEADER_DEKTECLIB="yes")
@@ -140,4 +141,3 @@ AM_CONDITIONAL(WEBSOCKETS, test x"$websockets" = x"true")
 
 AC_CONFIG_FILES([Makefile obe/Makefile])
 AC_OUTPUT
-

@@ -59,5 +59,8 @@ extern const obe_input_func_t ndi_input;
 #if HAVE_DTAPI_H
 extern const obe_input_func_t dektec_input;
 #endif
+#if defined(__APPLE__)
+extern const obe_input_func_t avfoundation_input;
+#endif
 
 #endif
