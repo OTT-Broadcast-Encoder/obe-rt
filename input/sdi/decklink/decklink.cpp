@@ -2077,7 +2077,6 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     int         ret = 0;
     int         i;
     const int   sample_rate = 48000;
-    const char *model_name;
     BMDDisplayMode wanted_mode_id;
     BMDDisplayMode start_mode_id = bmdModeNTSC;
     IDeckLinkAttributes *decklink_attributes = NULL;
@@ -2221,6 +2220,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     }
 
 #if defined(__linux__)
+    const char *model_name;
     result = decklink_ctx->p_card->GetModelName( &model_name );
 
     if( result != S_OK )
