@@ -106,6 +106,9 @@ typedef struct
 
 	/* NDI SDK related */
 	NDIlib_recv_instance_t pNDI_recv;
+	struct timeval lastVideoFrameTime;
+	struct timeval currVideoFrameTime;
+	int64_t videoFrameIntervalMs;
 	/* End: NDI SDK related */
 
 	/* AVCodec for V210 conversion. */
@@ -155,15 +158,42 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 {
 	ndi_ctx_t *ctx = &opts->ctx;
 
+	if (0)
+	{
+		static time_t lastTime;
+		static int lastSecondCount = 0;
+		static int currentCount = 0;
+		time_t now;
+		time(&now);
+		if (lastTime != now) {
+			lastTime = now;
+			lastSecondCount = currentCount;
+			currentCount = 0;
+			printf(MODULE_PREFIX "Audio frames per second %d\n", lastSecondCount);
+		}
+		currentCount++;
+	}
+
 	if (ctx->clock_offset == 0) {
 	   return;
 	}
 
-#if 0
-printf("sample_rate = %d\n", frame->sample_rate);
-printf("no_channels = %d\n", frame->no_channels);
-printf("no_samples = %d\n", frame->no_samples);
-printf("channel_stride_in_bytes = %d\n", frame->channel_stride_in_bytes);
+#if 1
+	int statsdump = 0;
+	if ((frame->sample_rate != 48000) ||
+		(frame->no_channels != 2) ||
+		(frame->no_samples != 960) ||
+		(frame->channel_stride_in_bytes != 3840))
+	{
+		statsdump = 1;
+	}
+
+	if (statsdump) {
+		printf("sample_rate = %d ", frame->sample_rate);
+		printf("no_channels = %d ", frame->no_channels);
+		printf("no_samples = %d ", frame->no_samples);
+		printf("channel_stride_in_bytes = %d\n", frame->channel_stride_in_bytes);
+	}
 #endif
 
 	/* Handle all of the Audio..... */
@@ -281,9 +311,31 @@ static void processFrameVideo(ndi_opts_t *opts, NDIlib_video_frame_v2_t *frame)
 {
 	ndi_ctx_t *ctx = &opts->ctx;
 
-#if 0
-printf("%s()\n", __func__);
-printf("line_stride_in_bytes = %d\n", frame->line_stride_in_bytes);
+	ctx->lastVideoFrameTime = ctx->currVideoFrameTime;
+	gettimeofday(&ctx->currVideoFrameTime, NULL);
+	struct timeval diff;
+	obe_timeval_subtract(&diff, &ctx->currVideoFrameTime, &ctx->lastVideoFrameTime);
+	ctx->videoFrameIntervalMs = obe_timediff_to_msecs(&diff);
+	printf("%" PRIi64 "\n", ctx->videoFrameIntervalMs);
+
+	if (1)
+	{
+		static time_t lastTime;
+		static int lastSecondCount = 0;
+		static int currentCount = 0;
+		time_t now;
+		time(&now);
+		if (lastTime != now) {
+			lastTime = now;
+			lastSecondCount = currentCount;
+			currentCount = 0;
+			printf(MODULE_PREFIX "Video frames per second %d\n", lastSecondCount);
+		}
+		currentCount++;
+	}
+
+#if 1
+printf(MODULE_PREFIX "line_stride_in_bytes = %d, ", frame->line_stride_in_bytes);
 static int64_t lastTimestamp = 0;
 printf("timestamp = %" PRIi64 " (%" PRIi64 ")\n",
 	frame->timestamp,
