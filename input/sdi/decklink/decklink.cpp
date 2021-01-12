@@ -1412,12 +1412,12 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 
                 char msg[128];
                 sprintf(msg, "Decklink card index %i: No frame received for %d ms", decklink_opts_->card_idx, noFrameMS);
-                syslog(LOG_WARNING, msg);
+                syslog(LOG_WARNING, "%s", msg);
                 printf("%s\n", msg);
 
                 if (OPTION_ENABLED_(los_exit_ms) && noFrameMS >= OPTION_ENABLED_(los_exit_ms)) {
                     sprintf(msg, "Terminating encoder as enable_los_exit_ms is active.");
-                    syslog(LOG_WARNING, msg);
+                    syslog(LOG_WARNING, "%s", msg);
                     printf("%s\n", msg);
                     exit(0);
                 }
