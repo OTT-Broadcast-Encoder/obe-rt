@@ -298,8 +298,17 @@ int udp_open( hnd_t *p_handle, obe_udp_opts_t *udp_opts )
 
     /* limit the tx buf size to limit latency */
     tmp = s->buffer_size;
+#if defined(__APPLE__)
+    /* Mac goes nuts if the default value of 0, s->buffer_size, is used. */
+    if (s->buffer_size) {
+        if( setsockopt( udp_fd, SOL_SOCKET, SO_SNDBUF, &tmp, sizeof(tmp) ) < 0 )
+            goto fail;
+    }
+#else
+    /* Linux */
     if( setsockopt( udp_fd, SOL_SOCKET, SO_SNDBUF, &tmp, sizeof(tmp) ) < 0 )
         goto fail;
+#endif
 
     if( s->is_connected && connect( udp_fd, (struct sockaddr *)&s->dest_addr, s->dest_addr_len ) )
         goto fail;
