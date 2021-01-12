@@ -2283,7 +2283,7 @@ static void _usage(const char *prog, int exitcode)
 
     char *version = getSoftwareVersion();
     printf("%s\n", version);
-    syslog(LOG_INFO, version);
+    syslog(LOG_INFO, "%s", version);
     free(version);
 
     printf("Built %s @ %s\n", __DATE__, __TIME__);
