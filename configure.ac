@@ -81,6 +81,16 @@ if test "x$HEADER_DEKTECLIB" == "xyes" ; then
 fi
 AM_CONDITIONAL(DEKTECLIB, test x"$HEADER_DEKTECLIB" == x"yes")
 
+AC_LANG_PUSH([Objective C++])
+AC_CHECK_HEADERS([AVFoundation/AVFoundation.h], HEADER_AVFOUNDATION="yes")
+AC_LANG_POP([Objective C++])
+if test "x$HEADER_AVFOUNDATION" == "xyes" ; then
+    LDFLAGS+=" -framework AudioToolbox -lfdk-aac -lx264 -pthread -lm -pthread -framework VideoToolbox "
+    LDFLAGS+=" -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework CoreServices "
+    LDFLAGS+=" -framework Security -framework AVFoundation -framework Foundation "
+fi
+AM_CONDITIONAL(AVFOUNDATION, test x"$HEADER_AVFOUNDATION" == x"yes")
+
 AC_CHECK_HEADERS([Processing.NDI.Lib.h], HEADER_NDILIB="yes")
 if test "x$HEADER_NDILIB" == "xyes" ; then
     LDFLAGS+=" -lndi "
