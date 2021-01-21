@@ -88,15 +88,21 @@ static int system_type_value = OBE_SYSTEM_TYPE_GENERIC;
 
 static const char * const system_types[]             = { "generic", "lowestlatency", "lowlatency", 0 };
 static const char * const input_types[]              = { "url", "decklink", "linsys-sdi", "v4l2",
-//#if HAVE_BLUEDRIVER_P_H
+#if HAVE_BLUEDRIVER_P_H
 								"bluefish",
-//#endif
+#else
+								"bluefish-not-available",
+#endif
 								"v210",
 #if HAVE_DTAPI_H
-                                                               "dektec",
+                                                                "dektec",
+#else
+                                                                "dektec-not-available",
 #endif
 #if HAVE_PROCESSING_NDI_LIB_H
 								"ndi",
+#else
+								"ndi-not-available",
 #endif
 #if defined(__APPLE__)
 								"avfoundation",
