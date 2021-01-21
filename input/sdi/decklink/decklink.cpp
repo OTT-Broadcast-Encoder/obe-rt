@@ -26,6 +26,13 @@
  *
  *****************************************************************************/
 
+/*
+ * ./pcm.x 1   memory bandwidth reporting
+ *    dwts 720p59.94 encoding via avc-ll-20mb-1xmp2.cfg
+ *       SKT   0     2.03     1.64     0.17      22.22    frame-injection on
+ *       SKT   0     1.93     1.40     0.17      21.45    frame-injection off
+ *
+ */
 #define __STDC_FORMAT_MACROS   1
 #define __STDC_CONSTANT_MACROS 1
 
