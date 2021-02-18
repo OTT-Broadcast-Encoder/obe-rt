@@ -178,7 +178,7 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	   return;
 	}
 
-#if 1
+#if 0
 	int statsdump = 0;
 	if ((frame->sample_rate != 48000) ||
 		(frame->no_channels != 2) ||
@@ -196,8 +196,17 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	}
 #endif
 
+#if 0
+	int from = frame->no_samples * 2;
+	int to = from + 20;
+	for (int x = from - 2; x < to; x++) {
+		printf("%08f ", frame->p_data[x]);
+	}
+	printf("\n");
+#endif
+
 	/* Handle all of the Audio..... */
-	/* NDI is planer, convert to S32 planer */
+	/* NDI is float planer, convert it to S32 planer, which is what our framework wants. */
 	obe_raw_frame_t *rf = new_raw_frame();
 	if (!rf) {
 		fprintf(stderr, MODULE_PREFIX "Could not allocate raw audio frame\n" );
@@ -222,16 +231,16 @@ if (fh) {
 	a_frame.p_data = new int32_t[frame->no_samples * frame->no_channels];
 	NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
 
-	//int linesize = a_frame.no_channels * (depth /8);
 	int stride  = a_frame.no_samples * (depth / 4);
 
+	/* Alloc a large enough buffer for all 16 possible channels. */
 	uint8_t *data = (uint8_t *)calloc(16, stride);
 	memcpy(data, a_frame.p_data, a_frame.no_channels * stride);
 
 	rf->release_data = obe_release_audio_data;
 	rf->release_frame = obe_release_frame;
 	rf->audio_frame.num_samples = a_frame.no_samples;
-	rf->audio_frame.num_channels = 2;
+	rf->audio_frame.num_channels = a_frame.no_channels;
 	rf->audio_frame.sample_fmt = AV_SAMPLE_FMT_S32P;
 	rf->input_stream_id = 1;
 
@@ -255,8 +264,8 @@ printf("new linesize = %d\n", rf->audio_frame.linesize);
 #endif
 
 	/* Convert input samples from S16 interleaved into S32P planer. */
+	/* Setup the source pointers for all 16 channels. */
 	uint8_t *src[16] = { 0 };
-
 	for (int x = 0; x < opts->num_channels; x++) {
 		src[x] = data + (x * stride);
 		//printf("src[%d] %p\n", x, src[x]);
@@ -316,7 +325,7 @@ static void processFrameVideo(ndi_opts_t *opts, NDIlib_video_frame_v2_t *frame)
 	struct timeval diff;
 	obe_timeval_subtract(&diff, &ctx->currVideoFrameTime, &ctx->lastVideoFrameTime);
 	ctx->videoFrameIntervalMs = obe_timediff_to_msecs(&diff);
-	printf("%" PRIi64 "\n", ctx->videoFrameIntervalMs);
+	//printf("%" PRIi64 "\n", ctx->videoFrameIntervalMs);
 
 	if (1)
 	{
@@ -334,7 +343,7 @@ static void processFrameVideo(ndi_opts_t *opts, NDIlib_video_frame_v2_t *frame)
 		currentCount++;
 	}
 
-#if 1
+#if 0
 printf(MODULE_PREFIX "line_stride_in_bytes = %d, ", frame->line_stride_in_bytes);
 static int64_t lastTimestamp = 0;
 printf("timestamp = %" PRIi64 " (%" PRIi64 ")\n",
@@ -442,13 +451,16 @@ static void *ndi_videoThreadFunc(void *p)
 		NDIlib_video_frame_v2_t video_frame;
 		NDIlib_audio_frame_v2_t audio_frame;
                 NDIlib_metadata_frame_t metadata;
+#if 0
 		NDIlib_tally_t tally (true);
 		NDIlib_recv_set_tally(ctx->pNDI_recv, &tally);
+#endif
 
 		int timeout = av_rescale_q(1000, ctx->v_timebase, (AVRational){1, 1});
-		timeout = timeout + 40;
+		timeout = timeout + 500;
 
-		switch (NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout)) {
+		int v = NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout);
+		switch (v) {
 			case NDIlib_frame_type_video:
 				processFrameVideo(opts, &video_frame);
 				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
@@ -466,7 +478,7 @@ static void *ndi_videoThreadFunc(void *p)
 				ctx->reset_v_pts = 1;
 				ctx->reset_a_pts = 1;
 			default:
-				printf("no frame?\n");
+				printf("no frame? v = 0x%x\n", v);
 		}
 
 #if 0
@@ -645,10 +657,11 @@ static int open_device(ndi_opts_t *opts)
 	NDIlib_find_destroy(pNDI_find);
 
 	/* Detect signal properties */
+	opts->num_channels = 0;
 	int l = 0;
-	while (++l) {
+	while (++l < 1024) {
 
-		if (opts->width && l > 32)
+		if (opts->width && opts->num_channels)
 			break;
 
 		/* Grab a frame of video and audio, probe it. */
@@ -689,7 +702,7 @@ lastTimestamp = video_frame.timestamp;
 				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
 				break;
 			case NDIlib_frame_type_audio:
-#if 0
+#if 1
 				/* Useful when debugging probe audio issues. */
 				printf("Detected audio\n");
 				printf("sample_rate = %d\n", audio_frame.sample_rate);
@@ -789,7 +802,7 @@ static void *ndi_probe_stream(void *ptr)
 	obe_input_t *user_opts = &probe_ctx->user_opts;
 	obe_device_t *device;
 	obe_int_input_stream_t *streams[MAX_STREAMS];
-	int num_streams = 2;
+	int num_streams = 1 /* video */ + 1 /* audio pair */;
 
 	printf(MODULE_PREFIX "%s()\n", __func__);
 
@@ -860,7 +873,6 @@ static void *ndi_probe_stream(void *ptr)
 			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
 		else if (i > 0) {
-			printf("loop count = %d\n",i);
 			streams[i]->stream_type = STREAM_TYPE_AUDIO;
 			streams[i]->stream_format = AUDIO_PCM;
 			streams[i]->num_channels  = 2;
