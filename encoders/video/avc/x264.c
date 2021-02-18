@@ -21,9 +21,13 @@
  *
  ******************************************************************************/
 
+#define NEW_X264 0
+
 #include "common/common.h"
 #include "encoders/video/video.h"
 #include <libavutil/mathematics.h>
+
+#include <histogram.h>
 
 #if DEV_ABR
 #include "obe/osd.h"
@@ -147,6 +151,8 @@ PRINT_OBE_IMAGE(&raw_frame->alloc_img, "alloc X264->img");
 
     x264_picture_init( pic );
 
+//pic->i_type = X264_TYPE_AUTO;
+//pic->i_qpplus1 = X264_QP_AUTO;
     memcpy( pic->img.i_stride, img->stride, sizeof(img->stride) );
     memcpy( pic->img.plane, img->plane, sizeof(img->plane) );
     pic->img.i_plane = img->planes;
@@ -444,8 +450,33 @@ static void *x264_start_encoder( void *ptr )
         goto end;
     }
 
+#if NEW_X264
+    printf(MESSAGE_PREFIX "X264 TIP Testing\n");
+    x264_param_t param = { 0 };
+    x264_param_apply_profile(&param, "high");
+    x264_param_default_preset(&param, "veryfast", "");
+
+    param.rc.i_bitrate = 18000;
+    param.rc.i_vbv_max_bitrate = 18000;
+    param.rc.i_vbv_buffer_size = 18000;
+    param.rc.i_lookahead = 8;
+    param.rc.i_rc_method = 2; /* ABR */
+    param.i_scenecut_threshold = 0;
+    param.i_keyint_max = 60;
+    param.i_keyint_min = 30;
+    param.i_fps_num = 59940;
+    param.i_fps_den = 1000;
+    param.i_timebase_num = 1000;
+    param.i_timebase_den = 59940;
+    param.i_fps_den = 1000;
+    param.i_width = 1280;
+    param.i_height = 720;
+    param.b_vfr_input = 1;
+    x264_encoder_parameters(s, &param);
+#else
     printf(MESSAGE_PREFIX "lookahead = %d\n", enc_params->avc_param.rc.i_lookahead);
     x264_encoder_parameters( s, &enc_params->avc_param );
+#endif
 
     encoder->encoder_params = malloc( sizeof(enc_params->avc_param) );
     if( !encoder->encoder_params )
@@ -771,7 +802,13 @@ printf("Malloc failed\n");
                 x264_picture_free(up);
 	}
 #else
+struct timeval begin, end, diff;
+gettimeofday(&begin, NULL);
         frame_size = x264_encoder_encode( s, &nal, &i_nal, &pic, &pic_out );
+gettimeofday(&end, NULL);
+obe_timeval_subtract(&diff, &end, &begin);
+int us = ltn_histogram_timeval_to_us(&diff);
+//printf("frame_size = %7d pic_type %d time %6d keyframe %d\n", frame_size, pic_out.i_type, us, pic_out.b_keyframe);
 #endif
 
         if (g_sei_timestamping) {
