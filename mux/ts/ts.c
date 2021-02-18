@@ -648,8 +648,11 @@ void *open_muxer( void *ptr )
         {
             x264_param_t *p_param = encoder->encoder_params;
             int j = 0;
+//p_param->i_profile = 100;
             while( avc_profiles[j][0] && p_param->i_profile != avc_profiles[j][0] )
                 j++;
+//p_param->i_level_idc = 32;
+//printf("p_param->i_level_idc = %d\n", p_param->i_level_idc);
 
             if( ts_setup_mpegvideo_stream( w, stream->pid, p_param->i_level_idc, avc_profiles[j][1], 0, 0, 0 ) < 0 )
             {
