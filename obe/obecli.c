@@ -1676,7 +1676,7 @@ static int set_output( char *command, obecli_command_t *child )
 /* show functions */
 static int show_bitdepth( char *command, obecli_command_t *child )
 {
-    printf( "AVC output bit depth: %i bits per sample\n", x264_bit_depth );
+    printf( "AVC output bit depth: %i bits per sample\n", X264_BIT_DEPTH );
 
     return 0;
 }
