@@ -194,6 +194,13 @@ static void *start_filter_audio( void *ptr )
             /* Copy samples for each channel into a new buffer, so each downstream encoder can
              * compress the channels the user has selected via sdi_audio_pair.
              */
+#if LOCAL_DEBUG
+printf("%s() output_stream->mono_channel %d", __func__, output_stream->mono_channel);
+printf(" num_channels %d", num_channels);
+printf(" split_raw_frame->audio_frame.num_samples %d", split_raw_frame->audio_frame.num_samples);
+printf(" split_raw_frame->audio_frame.sample_fmt %d", split_raw_frame->audio_frame.sample_fmt);
+printf(" split_raw_frame->audio_frame.linesize %d", split_raw_frame->audio_frame.linesize);
+#endif
             av_samples_copy(split_raw_frame->audio_frame.audio_data, /* dst */
                             &raw_frame->audio_frame.audio_data[((output_stream->sdi_audio_pair - 1) << 1) + output_stream->mono_channel], /* src */
                             0, /* dst offset */
