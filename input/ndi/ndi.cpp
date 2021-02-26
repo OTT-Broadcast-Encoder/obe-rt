@@ -36,8 +36,6 @@
 #include <cstring>
 #include <Processing.NDI.Lib.h>
 
-#pragma comment(lib, "Processing.NDI.Lib.x86.lib")
-
 using namespace std;
 
 // Other
@@ -48,6 +46,8 @@ using namespace std;
 #include <fcntl.h>
 
 #define MODULE_PREFIX "[ndi-input]: "
+
+#define TEAMS_16KHZ 0
 
 extern "C"
 {
@@ -137,7 +137,8 @@ typedef struct
     char *ndi_name;
 
     int video_format;
-    int num_channels;
+    int audio_channel_count;
+    int audio_channel_samplerate;
 
     /* True if we're problem, else false during normal streaming. */
     int probe;
@@ -154,9 +155,42 @@ typedef struct
     int tff;
 } ndi_opts_t;
 
+#if 0
+// /storage/dev/ffmpeg/root/bin/ffmpeg -y -f f32le -ar 48k -ac 1 -i samples.flt file.wav
+static FILE *fh = NULL;
+if (fh == NULL)
+	fh = fopen("samples.flt", "wb");
+
+if (fh) {
+	uint8_t *p = (uint8_t *)frame->p_data;
+	fwrite(p, 1, 4800, fh);
+}
+	return;
+#endif
+
+#if 0
+	int from = frame->no_samples * 2;
+	int to = from + 20;
+	for (int x = from - 2; x < to; x++) {
+		printf("%08f ", frame->p_data[x]);
+	}
+	printf("\n");
+#endif
+
 static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 {
 	ndi_ctx_t *ctx = &opts->ctx;
+
+#if 0
+	printf("%s() ", __func__);
+	int from = 0;
+	int to = frame->no_samples;
+	printf("float myaddr[] = {\n");
+	for (int x = from; x < to; x++) {
+		printf(" %08f,", frame->p_data[x]);
+	}
+	printf("};\n");
+#endif
 
 	if (0)
 	{
@@ -175,10 +209,11 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	}
 
 	if (ctx->clock_offset == 0) {
-	   return;
+		printf("%s() clock_offset %" PRIi64 ", skipping\n", __func__, ctx->clock_offset);
+		return;
 	}
 
-#if 0
+#if 1
 	int statsdump = 0;
 	if ((frame->sample_rate != 48000) ||
 		(frame->no_channels != 2) ||
@@ -189,6 +224,7 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	}
 
 	if (statsdump) {
+		printf("%s() : ", __func__);
 		printf("sample_rate = %d ", frame->sample_rate);
 		printf("no_channels = %d ", frame->no_channels);
 		printf("no_samples = %d ", frame->no_samples);
@@ -196,91 +232,120 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	}
 #endif
 
-#if 0
-	int from = frame->no_samples * 2;
-	int to = from + 20;
-	for (int x = from - 2; x < to; x++) {
-		printf("%08f ", frame->p_data[x]);
-	}
-	printf("\n");
-#endif
-
 	/* Handle all of the Audio..... */
 	/* NDI is float planer, convert it to S32 planer, which is what our framework wants. */
+	/* We almost may need to sample rate convert to 48KHz */
 	obe_raw_frame_t *rf = new_raw_frame();
 	if (!rf) {
 		fprintf(stderr, MODULE_PREFIX "Could not allocate raw audio frame\n" );
 		return;
 	}
 
-#if 0
-// /storage/dev/ffmpeg/root/bin/ffmpeg -y -f f32le -ar 48k -ac 1 -i samples.flt file.wav
-static FILE *fh = NULL;
-if (fh == NULL)
-	fh = fopen("samples.flt", "wb");
-
-if (fh) {
-	uint8_t *p = (uint8_t *)frame->p_data;
-	fwrite(p, 1, 4800, fh);
-}
-	return;
-#endif
-	int depth = 32;
-
 	NDIlib_audio_frame_interleaved_32s_t a_frame;
 	a_frame.p_data = new int32_t[frame->no_samples * frame->no_channels];
 	NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
 
-	int stride  = a_frame.no_samples * (depth / 4);
+	/* compute destination number of samples */
+	int out_samples = av_rescale_rnd(swr_get_delay(ctx->avr, frame->sample_rate) + frame->no_samples, 48000, frame->sample_rate, AV_ROUND_UP);
+	int out_stride = out_samples * 4;
+//printf("out_stride %d vs frame stride %d\n", out_stride, frame->channel_stride_in_bytes);
+//printf("out_samples %d vs frame samples %d\n", out_samples, frame->no_samples);
 
-	/* Alloc a large enough buffer for all 16 possible channels. */
-	uint8_t *data = (uint8_t *)calloc(16, stride);
-	memcpy(data, a_frame.p_data, a_frame.no_channels * stride);
+	switch (frame->sample_rate) {
+	case 16000:
+#if TEAMS_16KHZ
+		out_stride *= 3; /* Output sample stride needs to increase. */
+		//printf("out_strideX3 increased to %d\n", out_stride);
+		//printf("out_samplesX3 increased to %d\n", out_samples);
+#else
+		printf("No NDI-to-ip support for 32KHz\n");
+#endif
+		break;
+	case 32000:
+		/* Not supported */
+		printf("No NDI-to-ip support for 32KHz\n");
+		exit(0);
+	case 44100:
+		/* Not supported */
+		printf("No NDI-to-ip support for 44.1KHz\n");
+		exit(0);
+	case 48000:
+		/* Nothing required */
+		break;
+	}
+
+	/* Alloc a large enough buffer for all 16 possible channels at the
+	 * output sample rate with 16 channels.
+	 */
+	uint8_t *data = (uint8_t *)calloc(16, out_stride);
+	memcpy(data, a_frame.p_data, a_frame.no_channels * frame->channel_stride_in_bytes);
 
 	rf->release_data = obe_release_audio_data;
 	rf->release_frame = obe_release_frame;
-	rf->audio_frame.num_samples = a_frame.no_samples;
-	rf->audio_frame.num_channels = a_frame.no_channels;
+	rf->audio_frame.num_samples = out_samples;
+	rf->audio_frame.num_channels = 16;
 	rf->audio_frame.sample_fmt = AV_SAMPLE_FMT_S32P;
 	rf->input_stream_id = 1;
 
 	delete[] a_frame.p_data;
 
-	/* Allocate a new sample buffer ready to hold S32P */
+//printf("b opts->audio_channel_count %d\n", opts->audio_channel_count);
+	/* Allocate a new sample buffer ready to hold S32P, make it large enough for 16 channels. */
 	if (av_samples_alloc(rf->audio_frame.audio_data,
 		&rf->audio_frame.linesize,
-		opts->num_channels,
+		16 /*opts->audio_channel_count */,
 		rf->audio_frame.num_samples,
 		(AVSampleFormat)rf->audio_frame.sample_fmt, 0) < 0)
 	{
 		fprintf(stderr, MODULE_PREFIX "avsample alloc failed\n");
 	}
+//printf("c rf->audio_frame.linesize = %d\n", rf->audio_frame.linesize);
 
-#if 0
-for (int h = 0; h < MAX_CHANNELS; h++)
-  printf("data[%d] = %p\n", h, rf->audio_frame.audio_data[h]);
-
-printf("new linesize = %d\n", rf->audio_frame.linesize);
-#endif
+	/* -- */
 
 	/* Convert input samples from S16 interleaved into S32P planer. */
 	/* Setup the source pointers for all 16 channels. */
 	uint8_t *src[16] = { 0 };
-	for (int x = 0; x < opts->num_channels; x++) {
-		src[x] = data + (x * stride);
+	for (int x = 0; x < 16; x++) {
+		src[x] = data + (x * out_stride);
 		//printf("src[%d] %p\n", x, src[x]);
 	}
 
+	/* odd number of channels, create a dual mono stereo pair as designed by
+	 * adjusting the source pointers, for the last pair.
+	 */
+#if TEAMS_16KHZ
+	if (opts->audio_channel_count % 2) {
+		src[opts->audio_channel_count] = src[opts->audio_channel_count - 1];
+		printf("remap src[%d] %p\n", opts->audio_channel_count, src[opts->audio_channel_count]);
+	}
+#endif
+
+//printf("d rf->audio_frame.num_samples %d\n", rf->audio_frame.num_samples);
 	/* Convert from NDI X format into S32P planer. */
-	if (swr_convert(ctx->avr,
-		rf->audio_frame.audio_data,
-		rf->audio_frame.num_samples,
+	int samplesConverted = swr_convert(ctx->avr,
+		rf->audio_frame.audio_data,  /* array of 16 planes */
+		out_samples,                 /* out_count */
 		(const uint8_t**)&src,
-		rf->audio_frame.num_samples) < 0)
+		frame->no_samples            /* in_count */
+		);
+	if (samplesConverted < 0)
 	{
 		fprintf(stderr, MODULE_PREFIX "Sample format conversion failed\n");
 		return;
 	}
+//printf("e samplesConverted %d\n", samplesConverted);
+	rf->audio_frame.num_samples = samplesConverted;
+
+#if 0
+	for (int x = 0; x < 2 /*16*/; x++) {
+		printf("ch%02d: ", x);
+		for (int y = 0; y < 8 /* samplesConverted */; y++) {
+			printf("%04d: %08x ", y, *(((int32_t *)rf->audio_frame.audio_data[x]) + y));
+		}
+		printf("\n");
+	}
+#endif
 
 	free(data);
         if (ctx->reset_a_pts == 1) {
@@ -312,7 +377,8 @@ printf("new linesize = %d\n", rf->audio_frame.linesize);
 	//avfm_dump(&raw_frame->avfm);
 
 	if (add_to_filter_queue(ctx->h, rf) < 0 ) {
-		printf("Failed to add\n");
+		printf("%s() Failed to add frame for raw_frame->input_stream_id %d\n", __func__,
+			rf->input_stream_id);
 	}
 }
 
@@ -505,7 +571,7 @@ static void *ndi_videoThreadFunc(void *p)
 				/* Allocate a new sample buffer ready to hold S32P */
 				if (av_samples_alloc(aud_frame->audio_frame.audio_data,
 					&aud_frame->audio_frame.linesize,
-					opts->num_channels,
+					opts->audio_channel_count,
 					aud_frame->audio_frame.num_samples,
 					(AVSampleFormat)aud_frame->audio_frame.sample_fmt, 0) < 0)
 				{
@@ -545,7 +611,7 @@ static void *ndi_videoThreadFunc(void *p)
 				//avfm_dump(&raw_frame->avfm);
 
 				if (add_to_filter_queue(ctx->h, aud_frame) < 0 ) {
-					printf("Failed to add\n");
+					printf("%s() Failed to add\n", __func__);
 				}
 			}
 
@@ -603,16 +669,12 @@ static int open_device(ndi_opts_t *opts)
 		return -1;
 	}
 
-	NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2();
+	NDIlib_find_create_t find_create;
+	find_create.show_local_sources = true;
+	find_create.p_groups = nullptr;
+	NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2(&find_create);
 	if (!pNDI_find) {
 		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib finder\n");
-		return -1;
-	}
-
-	/* We now have at least one source, so we create a receiver to look at it. */
-	ctx->pNDI_recv = NDIlib_recv_create_v3();
-	if (!ctx->pNDI_recv) {
-		fprintf(stderr, MODULE_PREFIX "Unable to create v3 receiver\n");
 		return -1;
 	}
 
@@ -630,15 +692,21 @@ static int open_device(ndi_opts_t *opts)
 			fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
 			return -1;
 		}
-		NDIlib_find_wait_for_sources(pNDI_find, 500 /* ms */);
+		if (!NDIlib_find_wait_for_sources(pNDI_find, 5000 /* ms */)) {
+			printf("No change to sources found\n");
+			continue;
+		}
 		p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
 	}
 
 	for (uint32_t x = 0; x < sourceCount; x++) {
 		printf(MODULE_PREFIX "Discovered[card-idx=%d] '%s' @ %s\n", x,
 			p_sources[x].p_ndi_name,
-			p_sources[x].p_url_address);
+				p_sources[x].p_url_address);
+	}
 
+	uint32_t x;
+	for (x = 0; x < sourceCount; x++) {
 		if (opts->ndi_name) {
 			if (strcasecmp(opts->ndi_name, p_sources[x].p_ndi_name) == 0) {
 				opts->card_idx = x;
@@ -646,9 +714,20 @@ static int open_device(ndi_opts_t *opts)
 			}
 		}
 	}
+	if (x == sourceCount && (opts->ndi_name != NULL)) {
+		printf(MODULE_PREFIX "Unable to find user requested stream '%s', aborting.\n", opts->ndi_name);
+		return -1;
+	}
 
 	if (opts->card_idx > (int)(sourceCount - 1))
 		opts->card_idx = sourceCount - 1;
+
+	/* We now have at least one source, so we create a receiver to look at it. */
+	ctx->pNDI_recv = NDIlib_recv_create_v3();
+	if (!ctx->pNDI_recv) {
+		fprintf(stderr, MODULE_PREFIX "Unable to create v3 receiver\n");
+		return -1;
+	}
 
 	printf(MODULE_PREFIX "Found user requested stream, via card_idx %d\n", opts->card_idx);
 	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + opts->card_idx);
@@ -657,11 +736,11 @@ static int open_device(ndi_opts_t *opts)
 	NDIlib_find_destroy(pNDI_find);
 
 	/* Detect signal properties */
-	opts->num_channels = 0;
+	opts->audio_channel_count = 0;
 	int l = 0;
 	while (++l < 1024) {
 
-		if (opts->width && opts->num_channels)
+		if (opts->width && opts->audio_channel_count)
 			break;
 
 		/* Grab a frame of video and audio, probe it. */
@@ -702,6 +781,10 @@ lastTimestamp = video_frame.timestamp;
 				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
 				break;
 			case NDIlib_frame_type_audio:
+				opts->audio_channel_samplerate = audio_frame.sample_rate;
+				opts->audio_channel_count = audio_frame.no_channels;
+				if (opts->audio_channel_count & 1)
+					opts->audio_channel_count++;
 #if 1
 				/* Useful when debugging probe audio issues. */
 				printf("Detected audio\n");
@@ -710,7 +793,7 @@ lastTimestamp = video_frame.timestamp;
 				printf("no_samples = %d\n", audio_frame.no_samples);
 				printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 #endif
-				opts->num_channels = audio_frame.no_channels;
+				opts->audio_channel_count = audio_frame.no_channels;
 				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
         		case NDIlib_frame_type_none:
@@ -756,11 +839,20 @@ lastTimestamp = video_frame.timestamp;
         }
 
 	/* Give libavresample our custom audio channel map */
-	printf(MODULE_PREFIX "audio num_channels detected = %d\n", opts->num_channels);
-	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
+	printf(MODULE_PREFIX "audio num_channels detected = %d @ %d, (1 << opts->audio_channel_count) - 1 = %d\n",
+		opts->audio_channel_count,
+		opts->audio_channel_samplerate,
+		(1 << opts->audio_channel_count) - 1);
+	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->audio_channel_count) - 1, 0 );
+#if TEAMS_16KHZ
+	av_opt_set_int(ctx->avr, "in_channel_layout",   1, 0 );
+#endif
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
-	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
-	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_channels) - 1, 0 );
+	av_opt_set_int(ctx->avr, "in_sample_rate",      opts->audio_channel_samplerate, 0 );
+	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->audio_channel_count) - 1, 0 );
+#if TEAMS_16KHZ
+	av_opt_set_int(ctx->avr, "out_channel_layout",  1, 0 );
+#endif
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
 	av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );
 
@@ -842,7 +934,7 @@ static void *ndi_probe_stream(void *ptr)
 
 	//Split audio in seperate stereo tracks
 	//Todo: allow user to specify desired channel count per pair
-	num_streams  = opts->num_channels / 2 + 1;
+	num_streams = 1 /* Video */ + ((opts->audio_channel_count + 1) / 2);
 
 
 	/* TODO: probe for SMPTE 337M */
