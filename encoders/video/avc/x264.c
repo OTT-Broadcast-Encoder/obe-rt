@@ -21,7 +21,8 @@
  *
  ******************************************************************************/
 
-#define NEW_X264 0
+#define NEW_X264_720p 0
+#define NEW_X264_1080i 0
 
 #include "common/common.h"
 #include "encoders/video/video.h"
@@ -442,6 +443,107 @@ static void *x264_start_encoder( void *ptr )
     enc_params->avc_param.i_csp = X264_CSP_I422;
 #endif
 
+#if NEW_X264_1080i
+    printf(MESSAGE_PREFIX "X264 Testing - Hardcoded 1080i29.97 with iFrames and moderate Latency\n");
+    x264_param_t param = { 0 };
+    x264_param_default_preset(&param, "veryfast", "");
+
+    param.rc.i_bitrate = 17000;
+    param.rc.i_vbv_max_bitrate = 17000;
+    param.rc.i_vbv_buffer_size = 1700;
+    param.rc.i_lookahead = 2;
+    param.rc.i_rc_method = 2; /* ABR */
+    param.i_threads = 8;
+    param.i_scenecut_threshold = 40;
+    param.i_keyint_max = 30;
+    param.i_keyint_min = 0;
+    param.i_fps_num = 30000;
+    param.i_fps_den = 1001;
+    param.i_bframe = 3;
+    param.i_timebase_num = 0;
+    param.i_timebase_den = 0;
+    param.i_width = 1920;
+    param.i_height = 1080;
+    param.b_interlaced = 1;
+    param.b_tff = 1;
+    param.b_open_gop = 1;
+    param.b_vfr_input = 0;
+    param.b_pic_struct = 1;
+    param.b_aud = 1;
+    param.i_nal_hrd = 3; /* Adds PTS/DTS output timing to callbacks */
+    param.i_frame_reference = 4;
+
+    param.vui.i_sar_height = 1;
+    param.vui.i_sar_width = 1;
+    param.vui.i_overscan = 2;
+    param.vui.i_vidformat = 2;
+    param.vui.b_fullrange = -1;
+    param.vui.i_colorprim = 1;
+    param.vui.i_transfer = 1;
+    param.vui.i_colmatrix = 1;
+    param.vui.i_chroma_loc = 0;
+    //param.rc.i_vbv_buffer_size = param.rc.i_vbv_max_bitrate / (param.i_fps_num / param.i_fps_den);
+
+printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
+
+    x264_param_apply_profile(&param, "high");
+
+    /* Shunt all of the params into the global space, just as if the
+     * core had originally configured them.
+     */
+    memcpy(&enc_params->avc_param, &param, sizeof(param));
+#endif
+
+#if NEW_X264_720p
+    printf(MESSAGE_PREFIX "X264 Testing - Hardcoded 720p59.94 with iFrames and moderate Latency\n");
+    x264_param_t param = { 0 };
+    x264_param_default_preset(&param, "veryfast", "");
+
+    param.rc.i_bitrate = 17000;
+    param.rc.i_vbv_max_bitrate = 17000;
+    param.rc.i_vbv_buffer_size = 1700;
+    param.rc.i_lookahead = 2;
+    param.rc.i_rc_method = 2; /* ABR */
+    param.i_threads = 4;
+    param.i_scenecut_threshold = 40;
+    param.i_keyint_max = 60;
+    param.i_keyint_min = 0;
+    param.i_fps_num = 60000;
+    param.i_fps_den = 1001;
+    param.i_bframe = 3;
+    param.i_timebase_num = 0;
+    param.i_timebase_den = 0;
+    param.i_width = 1280;
+    param.i_height = 720;
+    //param.b_interlaced = 1;
+    param.b_open_gop = 1;
+    param.b_vfr_input = 0;
+    param.b_pic_struct = 1;
+    param.b_aud = 1;
+    param.i_nal_hrd = 3; /* Adds PTS/DTS output timing to callbacks */
+    param.i_frame_reference = 4;
+
+    param.vui.i_sar_height = 1;
+    param.vui.i_sar_width = 1;
+    param.vui.i_overscan = 2;
+    param.vui.i_vidformat = 2;
+    param.vui.b_fullrange = -1;
+    param.vui.i_colorprim = 1;
+    param.vui.i_transfer = 1;
+    param.vui.i_colmatrix = 1;
+    param.vui.i_chroma_loc = 0;
+    //param.rc.i_vbv_buffer_size = param.rc.i_vbv_max_bitrate / (param.i_fps_num / param.i_fps_den);
+
+printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
+
+    x264_param_apply_profile(&param, "high");
+
+    /* Shunt all of the params into the global space, just as if the
+     * core had originally configured them.
+     */
+    memcpy(&enc_params->avc_param, &param, sizeof(param));
+#endif
+
     s = x264_encoder_open( &enc_params->avc_param );
     if( !s )
     {
@@ -450,33 +552,8 @@ static void *x264_start_encoder( void *ptr )
         goto end;
     }
 
-#if NEW_X264
-    printf(MESSAGE_PREFIX "X264 TIP Testing\n");
-    x264_param_t param = { 0 };
-    x264_param_apply_profile(&param, "high");
-    x264_param_default_preset(&param, "veryfast", "");
-
-    param.rc.i_bitrate = 18000;
-    param.rc.i_vbv_max_bitrate = 18000;
-    param.rc.i_vbv_buffer_size = 18000;
-    param.rc.i_lookahead = 8;
-    param.rc.i_rc_method = 2; /* ABR */
-    param.i_scenecut_threshold = 0;
-    param.i_keyint_max = 60;
-    param.i_keyint_min = 30;
-    param.i_fps_num = 59940;
-    param.i_fps_den = 1000;
-    param.i_timebase_num = 1000;
-    param.i_timebase_den = 59940;
-    param.i_fps_den = 1000;
-    param.i_width = 1280;
-    param.i_height = 720;
-    param.b_vfr_input = 1;
-    x264_encoder_parameters(s, &param);
-#else
     printf(MESSAGE_PREFIX "lookahead = %d\n", enc_params->avc_param.rc.i_lookahead);
     x264_encoder_parameters( s, &enc_params->avc_param );
-#endif
 
     encoder->encoder_params = malloc( sizeof(enc_params->avc_param) );
     if( !encoder->encoder_params )
@@ -808,7 +885,18 @@ gettimeofday(&begin, NULL);
 gettimeofday(&end, NULL);
 obe_timeval_subtract(&diff, &end, &begin);
 int us = ltn_histogram_timeval_to_us(&diff);
-//printf("frame_size = %7d pic_type %d time %6d keyframe %d\n", frame_size, pic_out.i_type, us, pic_out.b_keyframe);
+
+#if 0
+printf("frame_size = %7d pic_type %d (%s) time %6d keyframe %d qp %d\n", frame_size,
+  pic_out.i_type,
+  pic_out.i_type == X264_TYPE_I  ? "I    " :
+  pic_out.i_type == X264_TYPE_IDR ? "IDR  " :
+  pic_out.i_type == X264_TYPE_P ? "P    " :
+  pic_out.i_type == X264_TYPE_B ? "B    " :
+  pic_out.i_type == X264_TYPE_BREF ? "BREF " :
+  "UNKNO",
+  us, pic_out.b_keyframe, pic_out.i_qpplus1);
+#endif
 #endif
 
         if (g_sei_timestamping) {
