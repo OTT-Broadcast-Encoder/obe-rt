@@ -463,6 +463,8 @@ typedef struct
     /* ATSC */
     int sb_leak_rate;
     int sb_size;
+
+    int section_padding;
 } obe_mux_opts_t;
 
 int obe_setup_muxer( obe_t *h, obe_mux_opts_t *mux_opts );
