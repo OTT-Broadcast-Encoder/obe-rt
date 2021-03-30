@@ -148,7 +148,8 @@ static const char * stream_opts[] = { "action", "format",
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
-                                      "pcr-period", "pat-period", "service-name", "provider-name", "scte35-pid", "smpte2038-pid", NULL };
+                                      "pcr-period", "pat-period", "service-name", "provider-name", "scte35-pid", "smpte2038-pid",
+                                      "section-padding", NULL };
 static const char * ts_types[]    = { "generic", "dvb", "cablelabs", "atsc", "isdb", NULL };
 static const char * output_opts[] = { "type", "target", NULL };
 
@@ -1114,6 +1115,7 @@ static int set_muxer( char *command, obecli_command_t *child )
         char *provider_name = obe_get_option( muxer_opts[11], opts );
         char *scte35_pid    = obe_get_option( muxer_opts[12], opts );
         char *smpte2038_pid = obe_get_option( muxer_opts[13], opts );
+        char *sect_padding  = obe_get_option( muxer_opts[14], opts );
 
         FAIL_IF_ERROR( ts_type && ( check_enum_value( ts_type, ts_types ) < 0 ),
                       "Invalid AVC profile\n" );
@@ -1133,6 +1135,7 @@ static int set_muxer( char *command, obecli_command_t *child )
         cli.mux_opts.pat_period = obe_otoi( pat_period, cli.mux_opts.pat_period );
         cli.mux_opts.scte35_pid = obe_otoi( scte35_pid, cli.mux_opts.scte35_pid ) & 0x1fff;
         cli.mux_opts.smpte2038_pid = obe_otoi( smpte2038_pid, cli.mux_opts.smpte2038_pid ) & 0x1fff;
+        cli.mux_opts.section_padding = obe_otoi( sect_padding, cli.mux_opts.section_padding );
 
         if( service_name )
         {
