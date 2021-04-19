@@ -622,6 +622,8 @@ void *open_muxer( void *ptr )
 
     ts_set_ve_version(w, h->sw_major, h->sw_minor, h->sw_patch);
 
+    ts_set_section_padding(w, mux_opts->section_padding);
+
     if( mux_opts->ts_type == OBE_TS_TYPE_GENERIC || mux_opts->ts_type == OBE_TS_TYPE_DVB )
     {
         if( ts_setup_sdt( w ) < 0 )
