@@ -962,6 +962,8 @@ time_t        g_decklink_missing_video_last_time = 0;
 
 int           g_decklink_record_audio_buffers = 0;
 
+int           g_decklink_render_walltime = 0;
+
 static obe_raw_frame_t *cached = NULL;
 static void cache_video_frame(obe_raw_frame_t *frame)
 {
@@ -1359,14 +1361,16 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
     }
 #endif
 
-    if (0 && videoframe) {
+    if (g_decklink_render_walltime && videoframe) {
         /* Demonstrate V210 writes into the video packet format. */
-	/* Tested with 720p and 1080i */
+        /* Tested with 720p and 1080i */
         videoframe->GetBytes(&frame_bytes);
         struct V210_painter_s painter;
-        V210_painter_reset(&painter, (unsigned char *)frame_bytes, 1280, 720, stride, 0);
-        V210_painter_draw_ascii_at(&painter, 0, 2, "This is a test");
-        V210_painter_draw_ascii_at(&painter, 0, 3, "And so is this 1234");
+        V210_painter_reset(&painter, (unsigned char *)frame_bytes, width, height, stride, 0);
+
+        char ts[64];
+        obe_getTimestamp(ts, NULL);
+        V210_painter_draw_ascii_at(&painter, 0, 2, ts);
     }
     if (sfc && (sfc < decklink_opts_->audio_sfc_min || sfc > decklink_opts_->audio_sfc_max)) {
         if (videoframe && (videoframe->GetFlags() & bmdFrameHasNoInputSource) == 0) {

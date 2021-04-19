@@ -1208,6 +1208,7 @@ static int set_outputs( char *command, obecli_command_t *child )
 extern int g_decklink_monitor_hw_clocks;
 extern int g_decklink_histogram_reset;
 extern int g_decklink_histogram_print_secs;
+extern int g_decklink_render_walltime;
 
 /* Case 1 */
 extern int g_decklink_fake_lost_payload;
@@ -1310,6 +1311,9 @@ extern time_t g_decklink_missing_video_last_time;
         g_decklink_burnwriter_enable,
         g_decklink_burnwriter_enable == 0 ? "disabled" : "enabled");
     printf("sdi_input.burnwriter_linenr = %d\n", g_decklink_burnwriter_linenr);
+    printf("sdi_input.inject_walltime = %d [%s]\n",
+        g_decklink_render_walltime,
+        g_decklink_render_walltime == 0 ? "disabled" : "enabled");
     printf("sdi_input.inject_frame_enable = %d [%s]\n",
         g_decklink_inject_frame_enable,
         g_decklink_inject_frame_enable == 0 ? "disabled" : "enabled");
@@ -1467,6 +1471,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "sdi_input.burnwriter_linenr") == 0) {
         g_decklink_burnwriter_linenr = val;
+    } else
+    if (strcasecmp(var, "sdi_input.inject_walltime") == 0) {
+        g_decklink_render_walltime = val;
     } else
     if (strcasecmp(var, "sdi_input.fake_every_other_frame_lose_audio_payload") == 0) {
         g_decklink_fake_every_other_frame_lose_audio_payload = val;
