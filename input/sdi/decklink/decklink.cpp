@@ -963,6 +963,7 @@ time_t        g_decklink_missing_video_last_time = 0;
 int           g_decklink_record_audio_buffers = 0;
 
 int           g_decklink_render_walltime = 0;
+int           g_decklink_inject_scte104_preroll6000 = 0;
 
 static obe_raw_frame_t *cached = NULL;
 static void cache_video_frame(obe_raw_frame_t *frame)
