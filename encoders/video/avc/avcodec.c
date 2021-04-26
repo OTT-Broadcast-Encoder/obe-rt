@@ -800,6 +800,8 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 			_encode_frame(ctx, rf, frame);
 		}
 
+		/* TODO: Add the SCTE35 changes to compute codec latency, patch the SCTE35 etc. */
+
 		rf->release_data(rf);
 		rf->release_frame(rf);
 		remove_from_queue(&ctx->encoder->queue);
