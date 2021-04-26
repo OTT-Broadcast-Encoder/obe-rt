@@ -43,6 +43,7 @@
 #include "obe.h"
 #include "stream_formats.h"
 #include <common/queue.h>
+#include <common/metadata.h>
 
 /* Enable some realtime debugging commands */
 #define DO_SET_VARIABLE 1
