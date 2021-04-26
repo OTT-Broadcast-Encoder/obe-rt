@@ -27,6 +27,7 @@
 #include "common/common.h"
 #include "encoders/video/video.h"
 #include <libavutil/mathematics.h>
+#include <libklscte35/scte35.h>
 
 #include <histogram.h>
 
@@ -40,6 +41,12 @@
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
 int g_x264_nal_debug = 0;
+
+struct opaque_ctx_s
+{
+	struct avfm_s avfm;
+	struct avmetadata_s metadata;
+};
 
 #if DEV_DOWN_UP
 #include <libavutil/pixfmt.h>
@@ -354,6 +361,91 @@ static void _monitor_bps(obe_vid_enc_params_t *enc_params, int lengthBytes)
 	}
 	codec_bps_current += (lengthBytes * 8);
 }
+
+void scte35_update_pts_offset(struct avmetadata_item_s *item, int64_t offset)
+{
+	struct scte35_splice_info_section_s si = { 0 };
+
+	ssize_t len = scte35_splice_info_section_unpackFrom(&si, item->data, item->dataLengthBytes);
+	if (len < 0) {
+		printf("%s() Error unpacking SCTE35 struct, len = %lu\n", __func__, len);
+		return;
+	}
+#if 1
+	scte35_splice_info_section_print(&si);
+#endif
+	si.pts_adjustment += offset;
+#if 1
+	scte35_splice_info_section_print(&si);
+#endif
+
+	/* TODO: libklscte35 fails to repack if the buffer is less than 128 bytes. */
+	if (item->dataLengthBytes < 128) {
+		int ret = avmetadata_item_data_realloc(item, 128);
+		if (ret < 0) {
+			printf("%s() Error reallocing item buffer, ignoring.\n", __func__);
+		}
+	}
+
+	int ret = scte35_splice_info_section_packTo(&si, item->data, item->dataLengthAlloc);
+	if (ret < 0) {
+		printf("%s() Error repacking SCTE35 struct, ret = %d\n", __func__, ret);
+	}
+}
+
+static int transmit_scte35_section_to_muxer(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
+	obe_coded_frame_t *cf, int64_t frame_duration)
+{
+	obe_t *h = enc_params->h;
+
+	/* Construct a new codec frame to contain the eventual scte35 message. */
+	obe_coded_frame_t *coded_frame = new_coded_frame(item->outputStreamId, item->dataLengthBytes);
+	if (!coded_frame) {
+		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, item->dataLengthBytes);
+		return -1;
+	}
+
+	/* The codec latency, in two modes, is as follows.
+	 * TODO: Improve this else if we adjust rc-lookahead, we'll break the trigger positions.
+	 * Unpack, modify and repack the current message to accomodate our codec latency.
+	 */
+	if (h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
+		/* 1 second minus 1 frame. */
+		if (enc_params->avc_param.b_interlaced) {
+			/* 1920x1080i29.97 */
+			scte35_update_pts_offset(item, 90000 - (frame_duration  / 300));
+		} else {
+			/* 1280x720p59.94 */
+			scte35_update_pts_offset(item, 90000 - ((frame_duration  / 300) * 4));
+		}
+	} else {
+		/* FIXME: 1080p60 has a habbit or an occasional 1 frame drift. */
+	 	/* FIXME: low latency with iframes with 720p5994 often 2 frames off */
+		/* 720/1080i low latency - 2 frames of latency. */
+		scte35_update_pts_offset(item, 2 * (frame_duration / 300));
+	}
+
+	coded_frame->pts = cf->pts;
+	coded_frame->real_pts = cf->real_pts;
+	coded_frame->real_dts = cf->real_dts;
+	coded_frame->cpb_initial_arrival_time = cf->cpb_initial_arrival_time;
+	coded_frame->cpb_final_arrival_time = cf->cpb_final_arrival_time;
+	coded_frame->random_access = 1;
+	memcpy(coded_frame->data, item->data, item->dataLengthBytes);
+
+	const char *s = obe_ascii_datetime();
+	printf(MESSAGE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
+		s,
+		coded_frame->real_pts,
+		coded_frame->real_pts / 300,
+		(coded_frame->real_pts / 300) + (10 * 90000));
+	free((char *)s);
+
+	add_to_queue(&h->mux_queue, coded_frame);
+
+	return 0;
+}
+
 static void *x264_start_encoder( void *ptr )
 {
     obe_vid_enc_params_t *enc_params = ptr;
@@ -368,7 +460,6 @@ static void *x264_start_encoder( void *ptr )
     int i_nal, frame_size = 0;
     int64_t pts = 0, arrival_time = 0, frame_duration, buffer_duration;
 
-    struct avfm_s *avfm;
     float buffer_fill;
     obe_raw_frame_t *raw_frame;
     obe_coded_frame_t *coded_frame;
@@ -721,19 +812,21 @@ printf("Malloc failed\n");
 
         current_raw_frame_pts = raw_frame->pts;
 
-        avfm = malloc(sizeof(struct avfm_s));
-        if (!avfm) {
+        struct opaque_ctx_s *opaque = calloc(1, sizeof(struct opaque_ctx_s));
+        if (!opaque) {
             printf("Malloc failed\n");
             syslog(LOG_ERR, "Malloc failed\n");
             break;
         }
-        memcpy(avfm, &raw_frame->avfm, sizeof(raw_frame->avfm));
+        memcpy(&opaque->avfm, &raw_frame->avfm, sizeof(raw_frame->avfm));
+        avmetadata_clone(&opaque->metadata, &raw_frame->metadata);
+
 #if 0
         if (raw_frame->dup)
             printf("next frame is a dup\n");
         avfm_dump(avfm);
 #endif
-        pic.opaque = avfm;
+        pic.opaque = opaque;
         pic.param = NULL;
 
         /* If the AFD has changed, then change the SAR. x264 will write the SAR at the next keyframe
@@ -884,7 +977,7 @@ gettimeofday(&begin, NULL);
         frame_size = x264_encoder_encode( s, &nal, &i_nal, &pic, &pic_out );
 gettimeofday(&end, NULL);
 obe_timeval_subtract(&diff, &end, &begin);
-int us = ltn_histogram_timeval_to_us(&diff);
+//int us = ltn_histogram_timeval_to_us(&diff);
 
 #if 0
 printf("frame_size = %7d pic_type %d (%s) time %6d keyframe %d qp %d\n", frame_size,
@@ -966,9 +1059,14 @@ if (fh)
 
             cpb_removal_time = pic_out.hrd_timing.cpb_removal_time;
 
-            avfm = pic_out.opaque;
-            memcpy(&coded_frame->avfm, avfm, sizeof(*avfm));
-            coded_frame->pts = avfm->audio_pts;
+int64_t v = opaque->avfm.audio_pts;
+            opaque = pic_out.opaque;
+
+            memcpy(&coded_frame->avfm, &opaque->avfm, sizeof(struct avfm_s));
+            coded_frame->pts = opaque->avfm.audio_pts;
+printf("pts out %" PRIi64 "  pts in %" PRIi64 " diff %" PRIi64 "\n",
+  opaque->avfm.audio_pts, v, v - opaque->avfm.audio_pts);
+// MMM
 
 #if DEBUG_CODEC_TIMING
             {
@@ -1001,10 +1099,10 @@ if (fh)
              */
             int64_t new_dts = 0;
             if (h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
-                new_dts = avfm->audio_pts + 0 -
+                new_dts = opaque->avfm.audio_pts + 0 -
                     llabs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
             } else {
-                new_dts = avfm->audio_pts + 24299700 -
+                new_dts = opaque->avfm.audio_pts + 24299700 -
                     llabs(coded_frame->real_dts - coded_frame->real_pts) + (2 * frame_duration);
             }
 
@@ -1060,10 +1158,30 @@ if (fh)
             cpb_removal_time = coded_frame->real_pts; /* Only used for manually eyeballing the video output clock. */
             coded_frame->random_access = pic_out.b_keyframe;
             coded_frame->priority = IS_X264_TYPE_I( pic_out.i_type );
-            free( pic_out.opaque );
 
             if (g_x264_nal_debug & 0x04)
                 coded_frame_print(coded_frame);
+
+            if (opaque->metadata.count > 0) {
+                /* We need to process any associated metadata before we destroy the frame. */
+
+                for (int i = 0; i < opaque->metadata.count; i++) {
+                    /* Process any scte35, trash any others we don't understand. */
+
+                    struct avmetadata_item_s *e = opaque->metadata.array[i];
+                    switch (e->item_type) {
+                    case AVMETADATA_SECTION_SCTE35:
+                        transmit_scte35_section_to_muxer(enc_params, e, coded_frame, frame_duration);
+                        break;
+                    default:
+                        printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
+                    }
+
+                    avmetadata_item_free(e);
+                    opaque->metadata.array[i] = NULL;
+                }
+                avmetadata_reset(&opaque->metadata);
+            }
 
             if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY )
             {
@@ -1080,6 +1198,8 @@ if (fh)
 #endif
                 add_to_queue( &h->enc_smoothing_queue, coded_frame );
             }
+            free(pic_out.opaque);
+
         }
      }
 

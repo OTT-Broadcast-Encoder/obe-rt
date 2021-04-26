@@ -416,7 +416,8 @@ typedef struct
     /* Regardless of whether raw_frame is of type audio, or video, we need to contain exact PTS
      * hardware references, as provided by the hardware. (Units of 27MHz).
      */
-    struct avfm_s avfm;
+    struct avfm_s avfm; /* TODO: Migrate this into metadata. */
+    struct avmetadata_s metadata;
 
     void *opaque;
 

@@ -26,6 +26,7 @@
 #include "encoders/video/video.h"
 #include <libavutil/mathematics.h>
 #include <x265.h>
+#include <libklscte35/scte35.h>
 
 #define LOCAL_DEBUG 0
 #define USE_CODEC_CLOCKS 1
@@ -132,6 +133,7 @@ struct context_s
 struct userdata_s
 {
 	struct avfm_s avfm;
+	struct avmetadata_s metadata;
 };
 
 static struct userdata_s *userdata_calloc()
@@ -140,9 +142,15 @@ static struct userdata_s *userdata_calloc()
 	return ud;
 }
 
-static int userdata_set(struct userdata_s *ud, struct avfm_s *s)
+static int userdata_set_avfm(struct userdata_s *ud, struct avfm_s *s)
 {
 	memcpy(&ud->avfm, s, sizeof(struct avfm_s));
+	return 0;
+}
+
+static int userdata_set_avmetadata(struct userdata_s *ud, struct avmetadata_s *s)
+{
+	avmetadata_clone(&ud->metadata, s);
 	return 0;
 }
 
@@ -246,6 +254,59 @@ static int64_t last_pts = 0;
 		if (s->bScenecut)
 			printf("\n");
 	}
+}
+
+extern void scte35_update_pts_offset(struct avmetadata_item_s *item, int64_t offset);
+
+static int transmit_scte35_section_to_muxer(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
+	obe_coded_frame_t *cf, int64_t frame_duration)
+{
+	obe_t *h = enc_params->h;
+
+	/* Construct a new codec frame to contain the eventual scte35 message. */
+	obe_coded_frame_t *coded_frame = new_coded_frame(item->outputStreamId, item->dataLengthBytes);
+	if (!coded_frame) {
+		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, item->dataLengthBytes);
+		return -1;
+	}
+
+	/* The codec latency, in two modes, is as follows.
+	 * TODO: Improve this else if we adjust rc-lookahead, we'll break the trigger positions.
+	 * Unpack, modify and repack the current message to accomodate our codec latency.
+	 */
+	if (h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
+		/* Untested code. SCTE35 not supported in GENERIC latency mode for HEVC, Yet. */
+	}
+
+	{
+	 	/* Measured the output of the codec for 720p59.94, input and output pts match, no internal frame
+		 * latency. Hard to imagine. Also verified this by looking at the avfm.audio_pts.
+		 */
+		/* VMA doesn't support HEVC for scte analysis, so, lets assume 2 frames is good here.
+		 * its unvalidated.
+		 */
+		scte35_update_pts_offset(item, 2 * (frame_duration / 300));
+	}
+
+	coded_frame->pts = cf->pts;
+	coded_frame->real_pts = cf->real_pts;
+	coded_frame->real_dts = cf->real_dts;
+	coded_frame->cpb_initial_arrival_time = cf->cpb_initial_arrival_time;
+	coded_frame->cpb_final_arrival_time = cf->cpb_final_arrival_time;
+	coded_frame->random_access = 1;
+	memcpy(coded_frame->data, item->data, item->dataLengthBytes);
+
+	const char *s = obe_ascii_datetime();
+	printf(MESSAGE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
+		s,
+		coded_frame->real_pts,
+		coded_frame->real_pts / 300,
+		(coded_frame->real_pts / 300) + (10 * 90000));
+	free((char *)s);
+
+	add_to_queue(&h->mux_queue, coded_frame);
+
+	return 0;
 }
 
 #if SAVE_FIELDS
@@ -595,9 +656,11 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 
 		cf->pts = out_ud->avfm.audio_pts;
 		last_hw_pts = out_ud->avfm.audio_pts;
+#if 0
 		userdata_free(out_ud);
 		out_ud = NULL;
 		ctx->hevc_picture_out->userData = 0;
+#endif
 	} else {
 		//fprintf(stderr, MESSAGE_PREFIX " missing pic out userData\n");
 		cf->pts = last_hw_pts;
@@ -667,6 +730,28 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	if (g_x265_nal_debug & 0x04)
 		coded_frame_print(cf);
 
+	/* TODO: Add the SCTE35 changes to compute codec latency, patch the SCTE35 etc. */
+	if (out_ud->metadata.count > 0) {
+		/* We need to process any associated metadata before we destroy the frame. */
+
+		for (int i = 0; i < out_ud->metadata.count; i++) {
+			/* Process any scte35, trash any others we don't understand. */
+
+			struct avmetadata_item_s *e = out_ud->metadata.array[i];
+			switch (e->item_type) {
+			case AVMETADATA_SECTION_SCTE35:
+				transmit_scte35_section_to_muxer(ctx->enc_params, e, cf, g_frame_duration);
+				break;
+			default:
+				printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
+			}
+
+			avmetadata_item_free(e);
+			out_ud->metadata.array[i] = NULL;
+		}
+		avmetadata_reset(&out_ud->metadata);
+	}
+
 	if (ctx->h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || ctx->h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY) {
 		cf->arrival_time = arrival_time;
 #if SERIALIZE_CODED_FRAMES
@@ -679,6 +764,12 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 		serialize_coded_frame(cf);
 #endif
 		add_to_queue(&ctx->h->enc_smoothing_queue, cf);
+	}
+	
+	if (out_ud) {
+		userdata_free(out_ud);
+		out_ud = NULL;
+		ctx->hevc_picture_out->userData = 0;
 	}
 
 	return 0;
@@ -1073,7 +1164,8 @@ static void *x265_start_encoder( void *ptr )
 		ctx->hevc_picture_in->userData = ud;
 
 		/* Cache the upstream timing information in userdata. */
-		userdata_set(ud, &rf->avfm);
+		userdata_set_avfm(ud, &rf->avfm);
+		userdata_set_avmetadata(ud, &rf->metadata);
 
 		/* If the AFD has changed, then change the SAR. x264 will write the SAR at the next keyframe
 		 * TODO: allow user to force keyframes in order to be frame accurate.
@@ -1199,7 +1291,29 @@ printf("Restarting codec with new params ... done\n");
 #if SKIP_ENCODE
 					ret = 0;
 #else
+
+#define MEASURE_CODEC_LATENCY 0
+
+#if MEASURE_CODEC_LATENCY
+					printf("audio pts going in %" PRIi64 ", pts %" PRIi64 "\n",
+						ud->avfm.audio_pts, ctx->hevc_picture_in->pts);
+#endif
+
 					ret = x265_encoder_encode(ctx->hevc_encoder, &ctx->hevc_nals, &ctx->i_nal, ctx->hevc_picture_in, ctx->hevc_picture_out);
+
+#if MEASURE_CODEC_LATENCY
+					if (ret > 0 && ctx->hevc_picture_out) {
+						struct userdata_s *out_ud = ctx->hevc_picture_out->userData;
+						if (out_ud) {
+							printf("audio pts coming out in %" PRIi64
+								" (diff %" PRIi64 "), out pts %" PRIi64 "\n",
+								out_ud->avfm.audio_pts,
+								rf->avfm.audio_pts - out_ud->avfm.audio_pts,
+								ctx->hevc_picture_in->pts);
+						}
+					}
+#endif /* MEASURE_CODEC_LATENCY */
+
 #endif
 					if (ret > 0) {
 						x265_picture_analyze_stats(ctx, ctx->hevc_picture_out);

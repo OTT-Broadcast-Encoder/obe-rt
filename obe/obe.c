@@ -276,6 +276,9 @@ void obe_release_frame( void *ptr )
      for( int i = 0; i < raw_frame->num_user_data; i++ )
          free( raw_frame->user_data[i].data );
      free( raw_frame->user_data );
+
+     avmetadata_reset(&raw_frame->metadata);
+
      free( raw_frame );
 }
 
@@ -1882,6 +1885,7 @@ static void obe_raw_frame_video_printf(obe_raw_frame_t *rf)
 {
     printf("raw_frame %p width = %d ", rf, rf->img.width);
     printf("height = %d ", rf->img.height);
+    printf("metadataArrayCount = %d ", rf->metadata.count);
     printf("csp = %d (%s) ", rf->img.csp, rf->img.csp == AV_PIX_FMT_YUV422P10 ? "AV_PIX_FMT_YUV422P10" : "AV_PIX_FMT_YUV422");
     printf("planes[%d] = ", rf->img.planes);
     for (int i = 0; i < rf->img.planes; i++) {

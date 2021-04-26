@@ -38,6 +38,8 @@
 
 #define READ_OSD_VALUE 0
 
+#define NEW_SCTE35 1
+
 #define AUDIO_PULSE_OFFSET_MEASURMEASURE 0
 
 #define PREFIX "[decklink]: "
@@ -229,6 +231,17 @@ typedef struct
     struct ltn_histogram_s *callback_2_hdl;
     struct ltn_histogram_s *callback_3_hdl;
     struct ltn_histogram_s *callback_4_hdl;
+
+    /* The VANC callbacks may need to have their contents cached with the
+     * associated video frame. Let's build up any relevant metadata here,
+     * for each frame, then attach it to the final video raw_frame prior
+     * to submission to the downstream pipeline.
+     * At the entry and exit of VideoInputFrameArrived this list is destroyed,
+     * the timedVideoInputFrameArrived func manages it general insert/remove.
+     * for this array. The duplicated items go into the raw frame and they're
+     * managed downstream (in each video codec).
+     */
+    struct avmetadata_s metadata;
 } decklink_ctx_t;
 
 typedef struct
@@ -311,6 +324,32 @@ void kllog(const char *category, const char *format, ...)
     va_end(vl);
 
     syslog(LOG_INFO | LOG_LOCAL4, "%s", buf);
+}
+
+static void endian_flip_array(uint8_t *buf, int bufSize)
+{
+        unsigned char v;
+        for (int i = 0; i < bufSize; i += 2) {
+                v = buf[i];
+                buf[i] = buf[i + 1];
+                buf[i + 1] = v;
+        }
+}
+
+static int _vancparse(struct klvanc_context_s *ctx, uint8_t *sec, int byteCount, int lineNr)
+{
+    unsigned short *arr = (unsigned short *)malloc(byteCount / 2 * sizeof(unsigned short));
+    if (arr == NULL)
+        return -1;
+
+    for (int i = 0; i < (byteCount / 2); i++) {
+        arr[i] = sec[i * 2] << 8 | sec[i * 2 + 1];
+    }
+
+    int ret = klvanc_packet_parse(ctx, lineNr, arr, byteCount / sizeof(unsigned short));
+    free(arr);
+
+    return ret;
 }
 
 static void calculate_audio_sfc_window(decklink_opts_t *opts)
@@ -1048,6 +1087,8 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
 	ltn_histogram_interval_update(decklink_ctx->callback_hdl);
 
+	avmetadata_reset(&decklink_ctx->metadata);
+
 	ltn_histogram_sample_begin(decklink_ctx->callback_duration_hdl);
 	HRESULT hr = timedVideoInputFrameArrived(videoframe, audioframe);
 	ltn_histogram_sample_end(decklink_ctx->callback_duration_hdl);
@@ -1500,6 +1541,35 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             goto end;
         }
 
+        if (g_decklink_inject_scte104_preroll6000 > 0 && videoframe) {
+            g_decklink_inject_scte104_preroll6000 = 0;
+            printf("Injecting a scte104 preroll 6000 message\n");
+
+            /* Insert a static SCTE104 splice messages to occur 6 seconds from now. */
+            /* Pass this into the framework just like any other message we'd find
+             * on line 10, for DID 41 and SDID 07.
+             */
+            unsigned char msg[] = {
+                0x00, 0x00, 0xff, 0x03, 0xff, 0x03, 0x41, 0x02, 0x07, 0x01, 0x1f, 0x01, 0x08, 0x01, 0xff, 0x02,
+                0xff, 0x02, 0x00, 0x02, 0x1e, 0x02, 0x00, 0x02, 0x01, 0x01, 0x3b, 0x01, 0x00, 0x02, 0x01, 0x01,
+                0x00, 0x02, 0x00, 0x02, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x02, 0x0e, 0x01, 0x01, 0x01,
+                0x00, 0x02, 0x00, 0x02, 0xb1, 0x02, 0xdd, 0x02, 0x00, 0x02, 0x00, 0x02, 0x17, 0x02, 0x70, 0x01,
+                0x0b, 0x01, 0xb8, 0x02, 0x00, 0x02, 0x00, 0x02, 0x01, 0x01, 0xb3, 0x01, 0x40, 0x00, 0x40, 0x00,
+                0x40, 0x00
+            };
+            endian_flip_array(msg, sizeof(msg));
+            ret = _vancparse(decklink_ctx->vanchdl, &msg[0], sizeof(msg), 10);
+            if (ret < 0) {
+                fprintf(stderr, "%s() Unable to parse scte104 preroll 6000 packet\n", __func__);
+            }
+
+            /* Paint a message in the V210, so we know per frame when an event was received. */
+            videoframe->GetBytes(&frame_bytes);
+            struct V210_painter_s painter;
+            V210_painter_reset(&painter, (unsigned char *)frame_bytes, width, height, stride, 0);
+            V210_painter_draw_ascii_at(&painter, 0, 3, "SCTE104 - 6000ms Preroll injected");
+        }
+
 	/* TODO: When using 4k formats, we crash in the blank_line func. fixme.
 	 *       When testing 4k, I completely remove this block.
 	 */
@@ -1740,6 +1810,11 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             if (g_decklink_inject_frame_enable)
                 cache_video_frame(raw_frame);
 
+            /* Ensure we put any associated video vanc / metadata into this raw frame. */
+#if NEW_SCTE35
+            avmetadata_clone(&raw_frame->metadata, &decklink_ctx->metadata);
+#endif
+
             if( add_to_filter_queue( h, raw_frame ) < 0 )
                 goto fail;
 
@@ -1898,6 +1973,35 @@ static int findOutputStreamIdByFormat(decklink_ctx_t *decklink_ctx, enum stream_
 	return -1;
 }
  
+static int add_metadata_scte35_section(decklink_ctx_t *decklink_ctx,
+	uint8_t *section, uint32_t section_length)
+{
+	/* Put the coded frame into an raw_frame attachment and discard the coded frame. */
+	int idx = decklink_ctx->metadata.count;
+	if (idx >= MAX_RAW_FRAME_METADATA_ITEMS) {
+		printf("%s() already has %d items, unable to add additional. Skipping\n",
+			__func__, idx);
+		return -1;
+	}
+
+	decklink_ctx->metadata.array[idx] = avmetadata_item_alloc(section_length, AVMETADATA_SECTION_SCTE35);
+	if (!decklink_ctx->metadata.array[idx])
+		return -1;
+	decklink_ctx->metadata.count++;
+
+	avmetadata_item_data_write(decklink_ctx->metadata.array[idx], section, section_length);
+
+        int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
+        if (streamId < 0)
+                return 0;
+
+	decklink_ctx->metadata.array[idx]->outputStreamId = streamId;
+
+	return 0;
+}
+
+#if ! NEW_SCTE35
+
 static int transmit_scte35_section_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *section, uint32_t section_length)
 {
 	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
@@ -1917,6 +2021,7 @@ static int transmit_scte35_section_to_muxer(decklink_ctx_t *decklink_ctx, uint8_
 
 	return 0;
 }
+#endif
 
 static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
 {
@@ -1965,8 +2070,16 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, str
 		}
 
 		for (size_t i = 0; i < results.num_splices; i++) {
+#if NEW_SCTE35
+                        /* Cache the SCTE35, we'll attach it to the video frame as metadata later. */
+			add_metadata_scte35_section(decklink_ctx,
+				results.splice_entry[i],
+				results.splice_size[i]);
+#else
+                        /* Send the message right to the muxer, which isn't frame accurate. */
 			transmit_scte35_section_to_muxer(decklink_ctx, results.splice_entry[i],
 							 results.splice_size[i]);
+#endif
 			free(results.splice_entry[i]);
 		}
 	} else {
