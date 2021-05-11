@@ -364,13 +364,13 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
                 struct timeval now;
                 gettimeofday(&now, NULL);
 
-                /* FIXME/TODO:
-                 * Highly experimental, can lead to packet corruption if the offset PLUS
-                 * the position of variables 8 and 9 overwrite a following transport header.
-                 * field_set() will catch this and return error, resulting in zero values in the final SEI output.
-                 */
-                if (sei_timestamp_field_set(buf + offset, size - offset, 8, now.tv_sec) >= 0) {
-                    sei_timestamp_field_set(buf +  offset, size - offset, 9, now.tv_usec);
+                if (((offset % 188) + SEI_TIMESTAMP_PAYLOAD_LENGTH) < 188) {
+                    /* Ensure we don't pass over the end of the TS packet into the beginning of
+                     * the next packet.
+                     */
+                    if (sei_timestamp_field_set(buf + offset, size - offset, 8, now.tv_sec) >= 0) {
+                        sei_timestamp_field_set(buf +  offset, size - offset, 9, now.tv_usec);
+                    }
                 }
 
                 if (g_sei_timestamping > 2) {
