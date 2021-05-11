@@ -2151,6 +2151,10 @@ int obe_core_get_platform_model()
 			g_platform_model = 590;
 			break;
 		}
+		if (strstr(line, "i7-9700K")) {
+			g_platform_model = 70;
+			break;
+		}
 	}
 	if (fh) {
 		fclose(fh);
