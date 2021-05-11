@@ -1059,14 +1059,10 @@ if (fh)
 
             cpb_removal_time = pic_out.hrd_timing.cpb_removal_time;
 
-int64_t v = opaque->avfm.audio_pts;
             opaque = pic_out.opaque;
 
             memcpy(&coded_frame->avfm, &opaque->avfm, sizeof(struct avfm_s));
             coded_frame->pts = opaque->avfm.audio_pts;
-printf("pts out %" PRIi64 "  pts in %" PRIi64 " diff %" PRIi64 "\n",
-  opaque->avfm.audio_pts, v, v - opaque->avfm.audio_pts);
-// MMM
 
 #if DEBUG_CODEC_TIMING
             {
