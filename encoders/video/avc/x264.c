@@ -394,59 +394,6 @@ void scte35_update_pts_offset(struct avmetadata_item_s *item, int64_t offset)
 	}
 }
 
-static int transmit_scte35_section_to_muxer(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
-	obe_coded_frame_t *cf, int64_t frame_duration)
-{
-	obe_t *h = enc_params->h;
-
-	/* Construct a new codec frame to contain the eventual scte35 message. */
-	obe_coded_frame_t *coded_frame = new_coded_frame(item->outputStreamId, item->dataLengthBytes);
-	if (!coded_frame) {
-		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, item->dataLengthBytes);
-		return -1;
-	}
-
-	/* The codec latency, in two modes, is as follows.
-	 * TODO: Improve this else if we adjust rc-lookahead, we'll break the trigger positions.
-	 * Unpack, modify and repack the current message to accomodate our codec latency.
-	 */
-	if (h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
-		/* 1 second minus 1 frame. */
-		if (enc_params->avc_param.b_interlaced) {
-			/* 1920x1080i29.97 */
-			scte35_update_pts_offset(item, 90000 - (frame_duration  / 300));
-		} else {
-			/* 1280x720p59.94 */
-			scte35_update_pts_offset(item, 90000 - ((frame_duration  / 300) * 4));
-		}
-	} else {
-		/* FIXME: 1080p60 has a habbit or an occasional 1 frame drift. */
-	 	/* FIXME: low latency with iframes with 720p5994 often 2 frames off */
-		/* 720/1080i low latency - 2 frames of latency. */
-		scte35_update_pts_offset(item, 2 * (frame_duration / 300));
-	}
-
-	coded_frame->pts = cf->pts;
-	coded_frame->real_pts = cf->real_pts;
-	coded_frame->real_dts = cf->real_dts;
-	coded_frame->cpb_initial_arrival_time = cf->cpb_initial_arrival_time;
-	coded_frame->cpb_final_arrival_time = cf->cpb_final_arrival_time;
-	coded_frame->random_access = 1;
-	memcpy(coded_frame->data, item->data, item->dataLengthBytes);
-
-	const char *s = obe_ascii_datetime();
-	printf(MESSAGE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
-		s,
-		coded_frame->real_pts,
-		coded_frame->real_pts / 300,
-		(coded_frame->real_pts / 300) + (10 * 90000));
-	free((char *)s);
-
-	add_to_queue(&h->mux_queue, coded_frame);
-
-	return 0;
-}
-
 /* Use some helper loic to parse a VANC SCTE104 message, convert to SCTE35 and ship it to the muxer
  * With the correct timestamps.
  */

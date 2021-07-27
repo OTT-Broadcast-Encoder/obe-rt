@@ -256,59 +256,6 @@ static int64_t last_pts = 0;
 	}
 }
 
-extern void scte35_update_pts_offset(struct avmetadata_item_s *item, int64_t offset);
-
-static int transmit_scte35_section_to_muxer(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
-	obe_coded_frame_t *cf, int64_t frame_duration)
-{
-	obe_t *h = enc_params->h;
-
-	/* Construct a new codec frame to contain the eventual scte35 message. */
-	obe_coded_frame_t *coded_frame = new_coded_frame(item->outputStreamId, item->dataLengthBytes);
-	if (!coded_frame) {
-		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, item->dataLengthBytes);
-		return -1;
-	}
-
-	/* The codec latency, in two modes, is as follows.
-	 * TODO: Improve this else if we adjust rc-lookahead, we'll break the trigger positions.
-	 * Unpack, modify and repack the current message to accomodate our codec latency.
-	 */
-	if (h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
-		/* Untested code. SCTE35 not supported in GENERIC latency mode for HEVC, Yet. */
-	}
-
-	{
-	 	/* Measured the output of the codec for 720p59.94, input and output pts match, no internal frame
-		 * latency. Hard to imagine. Also verified this by looking at the avfm.audio_pts.
-		 */
-		/* VMA doesn't support HEVC for scte analysis, so, lets assume 2 frames is good here.
-		 * its unvalidated.
-		 */
-		scte35_update_pts_offset(item, 2 * (frame_duration / 300));
-	}
-
-	coded_frame->pts = cf->pts;
-	coded_frame->real_pts = cf->real_pts;
-	coded_frame->real_dts = cf->real_dts;
-	coded_frame->cpb_initial_arrival_time = cf->cpb_initial_arrival_time;
-	coded_frame->cpb_final_arrival_time = cf->cpb_final_arrival_time;
-	coded_frame->random_access = 1;
-	memcpy(coded_frame->data, item->data, item->dataLengthBytes);
-
-	const char *s = obe_ascii_datetime();
-	printf(MESSAGE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
-		s,
-		coded_frame->real_pts,
-		coded_frame->real_pts / 300,
-		(coded_frame->real_pts / 300) + (10 * 90000));
-	free((char *)s);
-
-	add_to_queue(&h->mux_queue, coded_frame);
-
-	return 0;
-}
-
 #if SAVE_FIELDS
 static void x265_picture_save(x265_picture *pic)
 {
