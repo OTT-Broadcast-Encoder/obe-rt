@@ -739,9 +739,13 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 
 			struct avmetadata_item_s *e = out_ud->metadata.array[i];
 			switch (e->item_type) {
+			/* TODO: Add support for AVMETADATA_VANC_SCTE104 */
+#if 0
+/* Deprecated */
 			case AVMETADATA_SECTION_SCTE35:
 				transmit_scte35_section_to_muxer(ctx->enc_params, e, cf, g_frame_duration);
 				break;
+#endif
 			default:
 				printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
 			}
