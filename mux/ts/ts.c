@@ -489,6 +489,8 @@ void *open_muxer( void *ptr )
         return NULL;
     }
 
+    ts_set_scte35_enable(w, h->enable_scte35);
+
     const char *tswriter_filename = getenv("OBE_LIBMPEGTS_WRITER_FILENAME");
     if (tswriter_filename) {
         printf(PREFIX "Warning -- Dumping all TSWRITER payload to '%s'\n", tswriter_filename);
