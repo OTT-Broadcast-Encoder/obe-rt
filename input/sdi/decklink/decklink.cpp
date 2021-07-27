@@ -38,8 +38,6 @@
 
 #define READ_OSD_VALUE 0
 
-#define NEW_SCTE35 1
-
 #define AUDIO_PULSE_OFFSET_MEASURMEASURE 0
 
 #define PREFIX "[decklink]: "
@@ -241,7 +239,7 @@ typedef struct
      * for this array. The duplicated items go into the raw frame and they're
      * managed downstream (in each video codec).
      */
-    struct avmetadata_s metadata;
+    struct avmetadata_s metadataVANC;
 } decklink_ctx_t;
 
 typedef struct
@@ -259,7 +257,6 @@ typedef struct
 #define OPTION_ENABLED(opt) (decklink_opts->enable_##opt)
 #define OPTION_ENABLED_(opt) (decklink_opts_->enable_##opt)
     int enable_smpte2038;
-    int enable_scte35;
     int enable_vanc_cache;
     int enable_bitstream_audio;
     int enable_patch1;
@@ -1087,7 +1084,7 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived( IDeckLinkVideoInputFram
 
 	ltn_histogram_interval_update(decklink_ctx->callback_hdl);
 
-	avmetadata_reset(&decklink_ctx->metadata);
+	avmetadata_reset(&decklink_ctx->metadataVANC);
 
 	ltn_histogram_sample_begin(decklink_ctx->callback_duration_hdl);
 	HRESULT hr = timedVideoInputFrameArrived(videoframe, audioframe);
@@ -1811,9 +1808,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
                 cache_video_frame(raw_frame);
 
             /* Ensure we put any associated video vanc / metadata into this raw frame. */
-#if NEW_SCTE35
-            avmetadata_clone(&raw_frame->metadata, &decklink_ctx->metadata);
-#endif
+            avmetadata_clone(&raw_frame->metadata, &decklink_ctx->metadataVANC);
 
             if( add_to_filter_queue( h, raw_frame ) < 0 )
                 goto fail;
@@ -1972,56 +1967,37 @@ static int findOutputStreamIdByFormat(decklink_ctx_t *decklink_ctx, enum stream_
 
 	return -1;
 }
- 
-static int add_metadata_scte35_section(decklink_ctx_t *decklink_ctx,
-	uint8_t *section, uint32_t section_length)
+
+/* We're given some VANC data, craete a SCTE104 metadata entry for it
+ * and we'll send it to the encoder later, by an atachment to the video frame.
+ */
+static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
+	struct avmetadata_s *md,
+	uint8_t *section, uint32_t section_length, int lineNr)
 {
 	/* Put the coded frame into an raw_frame attachment and discard the coded frame. */
-	int idx = decklink_ctx->metadata.count;
+	int idx = md->count;
 	if (idx >= MAX_RAW_FRAME_METADATA_ITEMS) {
 		printf("%s() already has %d items, unable to add additional. Skipping\n",
 			__func__, idx);
 		return -1;
 	}
 
-	decklink_ctx->metadata.array[idx] = avmetadata_item_alloc(section_length, AVMETADATA_SECTION_SCTE35);
-	if (!decklink_ctx->metadata.array[idx])
+	md->array[idx] = avmetadata_item_alloc(section_length, AVMETADATA_VANC_SCTE104);
+	if (!md->array[idx])
 		return -1;
-	decklink_ctx->metadata.count++;
+	md->count++;
 
-	avmetadata_item_data_write(decklink_ctx->metadata.array[idx], section, section_length);
+	avmetadata_item_data_write(md->array[idx], section, section_length);
+	avmetadata_item_data_set_linenr(md->array[idx], lineNr);
 
         int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
         if (streamId < 0)
                 return 0;
-
-	decklink_ctx->metadata.array[idx]->outputStreamId = streamId;
-
-	return 0;
-}
-
-#if ! NEW_SCTE35
-
-static int transmit_scte35_section_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *section, uint32_t section_length)
-{
-	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
-	if (streamId < 0)
-		return 0;
-
-	/* Now send the constructed frame to the mux */
-	obe_coded_frame_t *coded_frame = new_coded_frame(streamId, section_length);
-	if (!coded_frame) {
-		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, section_length);
-		return -1;
-	}
-	coded_frame->pts = decklink_ctx->stream_time;
-	coded_frame->random_access = 1; /* ? */
-	memcpy(coded_frame->data, section, section_length);
-	add_to_queue(&decklink_ctx->h->mux_queue, coded_frame);
+	avmetadata_item_data_set_outputstreamid(md->array[idx], streamId);
 
 	return 0;
 }
-#endif
 
 static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
 {
@@ -2058,33 +2034,11 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, str
 		return 0;
 	}
 
-	struct klvanc_single_operation_message *m = &pkt->so_msg;
-
-	if (m->opID == 0xFFFF /* Multiple Operation Message */) {
-		struct splice_entries results;
-		/* Note, we add 10 second to the PTS to compensate for TS_START added by libmpegts */
-		int r = scte35_generate_from_scte104(pkt, &results,
-						     decklink_ctx->stream_time / 300 + (10 * 90000));
-		if (r != 0) {
-			fprintf(stderr, "Generation of SCTE-35 sections failed\n");
-		}
-
-		for (size_t i = 0; i < results.num_splices; i++) {
-#if NEW_SCTE35
-                        /* Cache the SCTE35, we'll attach it to the video frame as metadata later. */
-			add_metadata_scte35_section(decklink_ctx,
-				results.splice_entry[i],
-				results.splice_size[i]);
-#else
-                        /* Send the message right to the muxer, which isn't frame accurate. */
-			transmit_scte35_section_to_muxer(decklink_ctx, results.splice_entry[i],
-							 results.splice_size[i]);
-#endif
-			free(results.splice_entry[i]);
-		}
-	} else {
-		/* Unsupported single_operation_message type */
-	}
+	/* Append all the original VANC to the metadata object, we'll process it later. */
+	add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
+		(uint8_t *)&pkt->hdr.raw[0],
+		pkt->hdr.rawLengthWords * 2,
+		pkt->hdr.lineNr);
 
 	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
 		static time_t lastErrTime = 0;
@@ -2095,8 +2049,8 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, str
 			char t[64];
 			sprintf(t, "%s", ctime(&now));
 			t[ strlen(t) - 1] = 0;
-			syslog(LOG_INFO, "[decklink] SCTE104 frames present");
-			fprintf(stdout, "[decklink] SCTE104 frames present  @ %s", t);
+			syslog(LOG_INFO, "[decklink] SCTE104 frames present on SDI");
+			fprintf(stdout, "[decklink] SCTE104 frames present on SDI  @ %s", t);
 			printf("\n");
 			fflush(stdout);
 
@@ -2259,7 +2213,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         klsyslog_and_stdout(LOG_INFO, "Enabling option 1080p60");
     }
 
-    if (OPTION_ENABLED(scte35)) {
+    if (decklink_ctx->h->enable_scte35) {
         klsyslog_and_stdout(LOG_INFO, "Enabling option SCTE35");
     } else
 	callbacks.scte_104 = NULL;
@@ -2667,7 +2621,6 @@ static void *probe_stream( void *ptr )
     decklink_opts->audio_conn = user_opts->audio_connection;
     decklink_opts->video_format = user_opts->video_format;
     decklink_opts->enable_smpte2038 = user_opts->enable_smpte2038;
-    decklink_opts->enable_scte35 = user_opts->enable_scte35;
     decklink_opts->enable_vanc_cache = user_opts->enable_vanc_cache;
     decklink_opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
     decklink_opts->enable_patch1 = user_opts->enable_patch1;
@@ -2778,7 +2731,7 @@ static void *probe_stream( void *ptr )
      * We use this to pass DVB table sections direct to the muxer,
      * for SCTE35, and other sections in the future.
      */
-    if (OPTION_ENABLED(scte35))
+    if (decklink_ctx->h->enable_scte35)
     {
         ALLOC_STREAM(cur_stream);
 
@@ -2899,7 +2852,6 @@ static void *open_input( void *ptr )
     decklink_opts->video_format = user_opts->video_format;
     //decklink_opts->video_format = INPUT_VIDEO_FORMAT_PAL;
     decklink_opts->enable_smpte2038 = user_opts->enable_smpte2038;
-    decklink_opts->enable_scte35 = user_opts->enable_scte35;
     decklink_opts->enable_vanc_cache = user_opts->enable_vanc_cache;
     decklink_opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
     decklink_opts->enable_patch1 = user_opts->enable_patch1;

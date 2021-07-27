@@ -644,6 +644,8 @@ static int set_input( char *command, obecli_command_t *child )
         cli.input.enable_bitstream_audio = obe_otoi( bitstream_audio, cli.input.enable_bitstream_audio );
         cli.input.enable_smpte2038 = obe_otoi( smpte2038, cli.input.enable_smpte2038 );
         cli.input.enable_scte35 = obe_otoi( scte35, cli.input.enable_scte35 );
+        cli.h->enable_scte35 = cli.input.enable_scte35; /* Put this on the core cache, no just in the input content. */
+
         cli.input.enable_vanc_cache = obe_otoi( vanc_cache, cli.input.enable_vanc_cache );
         cli.input.enable_los_exit_ms = obe_otoi( los_exit_ms, cli.input.enable_los_exit_ms );
         cli.input.card_idx = obe_otoi( card_idx, cli.input.card_idx );

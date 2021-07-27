@@ -25,6 +25,7 @@
 #define NEW_X264_1080i 0
 
 #include "common/common.h"
+#include "common/vancprocessor.h"
 #include "encoders/video/video.h"
 #include <libavutil/mathematics.h>
 #include <libklscte35/scte35.h>
@@ -443,6 +444,35 @@ static int transmit_scte35_section_to_muxer(obe_vid_enc_params_t *enc_params, st
 
 	add_to_queue(&h->mux_queue, coded_frame);
 
+	return 0;
+}
+
+/* Use some helper loic to parse a VANC SCTE104 message, convert to SCTE35 and ship it to the muxer
+ * With the correct timestamps.
+ */
+static int helper_vancprocessor_scte104(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
+	obe_coded_frame_t *cf, int64_t frame_duration)
+{
+	unsigned short  arrLengthWords = item->dataLengthBytes / 2;
+	unsigned short *arr = (unsigned short *)item->data;
+
+	/* DO THIS IN A GENERIC WAY SO EVERY CODEC BENEFITS.
+	 *
+	 * Allocate a vanc parser with a 104 callback.
+	 * Feed the raw into helper
+	 *   helper will:
+	 *    * process each section
+	 *    * add each item to the mux seperately.
+	 * free any allocs
+	 * destroy the vanc parser.
+	 */
+
+	/* TODO: Replicate this minimal approach into X265. */
+	struct vanc_processor_s *v;
+	vancprocessor_alloc(&v, &enc_params->h->mux_queue, item->outputStreamId, cf);
+	vancprocessor_write(v, arrLengthWords, arr, item->lineNr);
+	vancprocessor_free(v);
+	
 	return 0;
 }
 
@@ -1166,9 +1196,15 @@ if (fh)
 
                     struct avmetadata_item_s *e = opaque->metadata.array[i];
                     switch (e->item_type) {
+                    case AVMETADATA_VANC_SCTE104:
+                        helper_vancprocessor_scte104(enc_params, e, coded_frame, frame_duration);
+                        break;
+#if 0
+/* Deprecated */
                     case AVMETADATA_SECTION_SCTE35:
                         transmit_scte35_section_to_muxer(enc_params, e, coded_frame, frame_duration);
                         break;
+#endif
                     default:
                         printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
                     }

@@ -625,6 +625,12 @@ struct obe_t
     uint8_t sw_major;
     uint8_t sw_minor;
     uint8_t sw_patch;
+
+    /* SCTE35 visibility needs to be at the core
+     * so that various disconnect components can be
+     * correctly enabled or disabled. The Mux and the Decklink input.
+     */
+    int enable_scte35;
 };
 
 typedef struct
