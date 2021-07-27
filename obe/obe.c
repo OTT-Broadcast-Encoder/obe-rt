@@ -1002,6 +1002,12 @@ int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t
         param->vui.i_transfer  = 6; // BT.601-6
         param->vui.i_colmatrix = 6; // BT.601-6
         param->i_keyint_max = param->i_fps_num == 60 ? 59 : 29;
+    } else if (param->i_fps_num == 24 && param->i_fps_den == 1)
+    {
+        /* 1080p24 */
+        /* colorprim, transfer and matrix for 709 will be set below. */
+        param->vui.i_vidformat = 2; // NTSC
+        param->i_keyint_max = param->i_fps_num;
     }
     else
     {
