@@ -35,6 +35,18 @@ void avmetadata_clone(struct avmetadata_s *dst, struct avmetadata_s *src)
 	}
 }
 
+int avmetadata_count_by_type(struct avmetadata_s *src, enum avmetadata_item_type_e item_type)
+{
+	int c = 0;
+
+	for (int i = 0; i < src->count; i++) {
+		if (src->array[i]->item_type == item_type)
+			c++;
+	}
+
+	return c;
+}
+
 struct avmetadata_item_s *avmetadata_item_alloc(int lengthBytes, enum avmetadata_item_type_e item_type)
 {
 	struct avmetadata_item_s *dst = malloc(lengthBytes);
@@ -68,6 +80,7 @@ struct avmetadata_item_s *avmetadata_item_clone(struct avmetadata_item_s *src)
 	case AVMETADATA_SECTION_SCTE35:
 	default:
 		dst->outputStreamId = src->outputStreamId;
+		dst->lineNr = src->lineNr;
 		dst->dataLengthBytes = src->dataLengthBytes;
 		memcpy(dst->data, src->data, src->dataLengthAlloc);
 	}
@@ -138,5 +151,27 @@ int avmetadata_item_data_realloc(struct avmetadata_item_s *src, int lengthBytes)
 	src->dataLengthAlloc = lengthBytes;
 
 	return 0;
+}
+
+int avmetadata_item_data_set_linenr(struct avmetadata_item_s *src, int lineNr)
+{
+	src->lineNr = lineNr;
+	return 0;
+}
+
+int avmetadata_item_data_get_linenr(struct avmetadata_item_s *src)
+{
+	return src->lineNr;
+}
+
+int avmetadata_item_data_set_outputstreamid(struct avmetadata_item_s *src, int outputStreamId)
+{
+	src->outputStreamId = outputStreamId;
+	return 0;
+}
+
+int avmetadata_item_data_get_outputstreamid(struct avmetadata_item_s *src)
+{
+	return src->outputStreamId;
 }
 
