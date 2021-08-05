@@ -2657,6 +2657,12 @@ static void *runtime_statistics_thread(void *p)
 			}
 		}
 
+		/* Load averages */
+		double la[3] = { 0.0, 0.0, 0.0 };
+		if (getloadavg(&la[0], 3) == 3) {
+			sprintf(APPEND(line),",load1=%.02f,load5=%.02f,load15=%.02f", la[0], la[1], la[2]);
+		}
+
 		char msg[256];
 		sprintf(msg, "ts=%s%s\n", ts, line);
 
