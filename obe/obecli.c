@@ -168,7 +168,7 @@ static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrou
                                       "pcr-period", "pat-period", "service-name", "provider-name", "scte35-pid", "smpte2038-pid",
                                       "section-padding", NULL };
 static const char * ts_types[]    = { "generic", "dvb", "cablelabs", "atsc", "isdb", NULL };
-static const char * output_opts[] = { "type", "target", NULL };
+static const char * output_opts[] = { "type", "target", "trim", NULL };
 
 const static int allowed_resolutions[17][2] =
 {
@@ -202,6 +202,17 @@ const static uint64_t channel_layouts[] =
     AV_CH_LAYOUT_5POINT0_BACK,
     AV_CH_LAYOUT_5POINT1_BACK,
  };
+
+int64_t sanitizeParamTrim(int64_t val)
+{
+       if (val < 0)
+               return 0;
+
+       if (val > 2000)
+               return 2000;
+       else
+               return val;
+}
 
 static char *getSoftwareVersion()
 {
@@ -1286,6 +1297,7 @@ extern int64_t g_mux_smoother_last_item_count;
 extern int64_t g_mux_smoother_last_total_item_size;
 extern int64_t g_mux_smoother_fifo_pcr_size;
 extern int64_t g_mux_smoother_fifo_data_size;
+extern int64_t g_mux_smoother_trim_ms;
 
 /* UDP Packet output */
 extern int g_udp_output_drop_next_video_packet;
@@ -1422,6 +1434,7 @@ extern time_t g_decklink_missing_video_last_time;
     printf("udp_output.bps                     = %d\n",
         g_udp_output_bps);
     printf("udp_output.transport_payload_size  = %d\n", obe_core_get_payload_size());
+    printf("udp_output.trim_ms                 = %" PRIi64 "\n", g_mux_smoother_trim_ms);
     printf("core.runtime_statistics_to_file    = %d\n",
         g_core_runtime_statistics_to_file);
     printf("core.runtime_terminate_after_seconds = %d\n",
@@ -1532,6 +1545,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "udp_output.latency_alert_ms") == 0) {
         g_udp_output_latency_alert_ms = val;
+    } else
+    if (strcasecmp(var, "udp_output.trim_ms") == 0) {
+        g_mux_smoother_trim_ms = sanitizeParamTrim(val);
     } else
     if (strcasecmp(var, "codec.x265.monitor_bps") == 0) {
         g_x265_monitor_bps = val;
@@ -1669,6 +1685,10 @@ static int set_output( char *command, obecli_command_t *child )
 
         char *type = obe_get_option( output_opts[0], opts );
         char *target = obe_get_option( output_opts[1], opts );
+        char *trim = obe_get_option( output_opts[2], opts );
+        if (trim) {
+            g_mux_smoother_trim_ms = sanitizeParamTrim(atoi(trim));
+        }
 
         FAIL_IF_ERROR( type && ( check_enum_value( type, output_modules ) < 0 ),
                       "Invalid Output Type\n" );

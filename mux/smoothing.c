@@ -31,6 +31,7 @@ int64_t g_mux_smoother_last_item_count = 0;
 int64_t g_mux_smoother_last_total_item_size = 0;
 int64_t g_mux_smoother_fifo_pcr_size = 0;
 int64_t g_mux_smoother_fifo_data_size = 0;
+int64_t g_mux_smoother_trim_ms = 0;
 
 #define LOCAL_DEBUG 0
 
@@ -42,6 +43,10 @@ static void *mux_start_smoothing( void *ptr )
     obe_muxed_data_t **muxed_data = NULL, *start_data, *end_data;
     AVFifoBuffer *fifo_data = NULL, *fifo_pcr = NULL;
     AVBufferRef **output_buffers = NULL;
+    int trim_ms_pending = 0;
+
+    if (g_mux_smoother_trim_ms)
+        trim_ms_pending = 1;
 
     struct sched_param param = {0};
     param.sched_priority = 99;
@@ -101,6 +106,12 @@ static void *mux_start_smoothing( void *ptr )
             break;
         }
 
+        if (trim_ms_pending) {
+            /* Delay the first packet write by N ms and thus induce latency in the output. */
+            usleep(g_mux_smoother_trim_ms * 1000);
+            trim_ms_pending = 0;
+        }
+
         num_muxed_data = h->mux_smoothing_queue.size;
         g_mux_smoother_last_item_count = num_muxed_data;
 
@@ -108,6 +119,11 @@ static void *mux_start_smoothing( void *ptr )
         pthread_mutex_lock( &h->drop_mutex );
         if( h->mux_drop )
         {
+            if (g_mux_smoother_trim_ms) {
+                /* Under LOS conditions, ensure we're still inducing trim. */
+                trim_ms_pending = 1;
+            }
+
             syslog( LOG_INFO, "Mux smoothing buffer reset\n" );
 #if LOCAL_DEBUG
             printf("[Mux-Smoother] smoothing buffer reset\n" );
