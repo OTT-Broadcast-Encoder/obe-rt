@@ -658,6 +658,19 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
 
         upstream_signal_lost = 0;
 
+        /* Safety: Abort if the encoder backlog exceeds unreasonable levels (30-60 seconds).
+         * Take a hard exit and make sure we signal to syslog.
+         * 1800 frames of 1280x720p is approx 20% of 8GB RAM.
+         * 1800 is 60fps 30 seconds, it would be 60 seconds for 30fps.
+         * TODO: Implement in HEVC.
+         */
+        if (encoder->queue.size > 1800) {
+            klsyslog_and_stdout(LOG_ERR,
+                "LTN Encoder service abnormality: encoder queue backlog (%d), hard exit occuring.\n",
+                encoder->queue.size);
+            exit(1);
+        }
+
         /* Reset the speedcontrol buffer if the source has dropped frames. Otherwise speedcontrol
          * stays in an underflow state and is locked to the fastest preset */
         pthread_mutex_lock( &h->drop_mutex );
