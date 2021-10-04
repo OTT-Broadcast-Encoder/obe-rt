@@ -724,6 +724,13 @@ static void dumpAudio(uint16_t *ptr, int fc, int num_channels)
 static int prbs_inited = 0;
 #endif
 
+static int64_t queryAudioClock(IDeckLinkAudioInputPacket *audioframe)
+{
+    BMDTimeValue time;
+    audioframe->GetPacketTime(&time, OBE_CLOCK);
+    return time;
+}
+
 static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_opts_, IDeckLinkAudioInputPacket *audioframe, int64_t videoPTS)
 {
     obe_raw_frame_t *raw_frame = NULL;
@@ -805,16 +812,14 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
                     return -1;
                 }
 
-                BMDTimeValue packet_time;
-                audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
-                raw_frame->pts = packet_time;
+                raw_frame->pts = queryAudioClock(audioframe);
 
                 avfm_init(&raw_frame->avfm, AVFM_AUDIO_PCM);
                 avfm_set_hw_status_mask(&raw_frame->avfm,
                     decklink_ctx->isHalfDuplex ? AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF :
                         AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_FULL);
                 avfm_set_pts_video(&raw_frame->avfm, videoPTS + clock_offset);
-                avfm_set_pts_audio(&raw_frame->avfm, packet_time + clock_offset);
+                avfm_set_pts_audio(&raw_frame->avfm, raw_frame->pts + clock_offset);
                 avfm_set_hw_received_time(&raw_frame->avfm);
                 avfm_set_video_interval_clk(&raw_frame->avfm, decklink_ctx->vframe_duration);
                 //raw_frame->avfm.hw_audio_correction_clk = clock_offset;
@@ -851,16 +856,14 @@ static int processAudio(decklink_ctx_t *decklink_ctx, decklink_opts_t *decklink_
 
                 raw_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_NONE;
 
-                BMDTimeValue packet_time;
-                audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
-                raw_frame->pts = packet_time;
+                raw_frame->pts = queryAudioClock(audioframe);
 
                 avfm_init(&raw_frame->avfm, AVFM_AUDIO_A52);
                 avfm_set_hw_status_mask(&raw_frame->avfm,
                     decklink_ctx->isHalfDuplex ? AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF :
                         AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_FULL);
                 avfm_set_pts_video(&raw_frame->avfm, videoPTS + clock_offset);
-                avfm_set_pts_audio(&raw_frame->avfm, packet_time + clock_offset);
+                avfm_set_pts_audio(&raw_frame->avfm, raw_frame->pts + clock_offset);
                 avfm_set_hw_received_time(&raw_frame->avfm);
                 avfm_set_video_interval_clk(&raw_frame->avfm, decklink_ctx->vframe_duration);
                 //raw_frame->avfm.hw_audio_correction_clk = clock_offset;
@@ -1039,9 +1042,6 @@ HRESULT DeckLinkCaptureDelegate::noVideoInputFrameArrived(IDeckLinkVideoInputFra
 	obe_raw_frame_t *raw_frame = obe_raw_frame_copy(cached);
 	raw_frame->pts = decklink_ctx->stream_time;
 
-	BMDTimeValue packet_time;
-	audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
-
 	avfm_set_pts_video(&raw_frame->avfm, decklink_ctx->stream_time + clock_offset);
 
 	/* Normally we put the audio and the video clocks into the timing
@@ -1202,7 +1202,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 
     if (audioframe) {
         sfc = audioframe->GetSampleFrameCount();
-        audioframe->GetPacketTime(&packet_time, OBE_CLOCK);
+        packet_time = queryAudioClock(audioframe);
 
         if (g_decklink_record_audio_buffers) {
             g_decklink_record_audio_buffers--;
