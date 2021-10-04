@@ -719,6 +719,7 @@ extern "C" {
 #endif
 
 int obe_getTimestamp(char *s, time_t *when);
+void klsyslog_and_stdout(int level, const char *format, ...);
 
 #ifdef __cplusplus
 };
