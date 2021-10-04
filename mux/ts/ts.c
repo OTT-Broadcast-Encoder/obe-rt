@@ -953,6 +953,19 @@ void *open_muxer( void *ptr )
             fprintf(stderr, "ts_write_frames failed\n");
         }        
 
+        /* Safety: Abort if the mux queue appears to have stalled for 30 or more seconds.
+         * 2200 is 30 seconds of NL with 8xstereo audio,
+         * where the mux is queueing approx 75 frames per second and they're
+         * not being dequeued. Take a hard exit and make sure we signal to syslog
+         * that an abnormal situation has occured.
+         */
+        if (ts_query_num_buffered_frames(w) > 2200) {
+            klsyslog_and_stdout(LOG_ERR,
+                "LTN Encoder service abnormality: mux queue stalled (%d), hard exit occuring.\n",
+                ts_query_num_buffered_frames(w));
+            exit(1);
+        }
+
         if (g_mux_ts_monitor_bps) {
             static int lenbps_old = 0;
             static int len_current = 0;
