@@ -727,7 +727,22 @@ static int prbs_inited = 0;
 static int64_t queryAudioClock(IDeckLinkAudioInputPacket *audioframe)
 {
     BMDTimeValue time;
+#if 1
     audioframe->GetPacketTime(&time, OBE_CLOCK);
+#else
+    /* Avoid an issues in the BM SDK where the result
+     * of the call, time, goes negative after 82.37 days.
+     * if the clock is 27 * 1e6.
+     */
+    audioframe->GetPacketTime(&time, OBE_CLOCK / 100LL);
+    time *= 100LL;
+
+#if 0
+    /* Accelerate the issue, so the clocks fail/wrap in just over a minute. */
+    audioframe->GetPacketTime(&time, OBE_CLOCK * 100000LL);
+    time /= 100000LL;
+#endif
+#endif
     return time;
 }
 
