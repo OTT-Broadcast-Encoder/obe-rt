@@ -789,6 +789,23 @@ static void *start_filter_video( void *ptr )
 #if PERFORMANCE_PROFILE
         gettimeofday(&tsframeBegin, NULL);
 #endif
+
+        /* Pre-existing NALS don't get processed, just pass the frame down the workflow. */
+        if (raw_frame->alloc_img.csp == AV_PIX_FMT_QSV) {
+            //printf(PREFIX "detected VEGA nals frame, %p\n", raw_frame);
+            remove_from_queue(&filter->queue);
+            add_to_encode_queue(h, raw_frame, 0);
+#if PERFORMANCE_PROFILE
+        gettimeofday(&tsframeEnd, NULL);
+        obe_timeval_subtract(&tsframeDiff, &tsframeEnd, &tsframeBegin);
+        int64_t t = obe_timediff_to_usecs(&tsframeDiff);
+        printf(PREFIX " per frame total processing %" PRIi64" usecs\n", t);
+#endif
+            continue;
+        }
+
+
+
         /* TODO: scale 8-bit to 10-bit
          * TODO: convert from 4:2:0 to 4:2:2 */
 
