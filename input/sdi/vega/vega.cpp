@@ -59,6 +59,7 @@
 /* include vega330x_encoder */
 #include <VEGA330X_types.h>
 #include <VEGA330X_encoder.h>
+#include <vega330x_config.h>
 
 /* include sdk/vega_api */
 #include <VEGA3301_cap_types.h>
@@ -80,7 +81,7 @@ extern "C"
   */
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
-#define VEGA_VERSION STR(1) "." STR(0) "." STR(0) "." STR(0)
+#define VEGA_VERSION STR(0) "." STR(VEGA330X_BUILD)
 
 #define MAX_AUDIO_CHANNELS 8
 #define MAX_AUDIO_PAIRS (MAX_AUDIO_CHANNELS / 2)
