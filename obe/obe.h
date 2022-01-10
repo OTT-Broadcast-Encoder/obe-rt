@@ -94,8 +94,13 @@ enum input_video_format_e
 
     INPUT_VIDEO_FORMAT_2160P_25, /* NB: 4kp25 */
     INPUT_VIDEO_FORMAT_2160P_2997, /* NB: 4kp29 */
+    INPUT_VIDEO_FORMAT_2160P_30, /* NB: 4kp30 */
     INPUT_VIDEO_FORMAT_2160P_50, /* NB: 4kp50 */
     INPUT_VIDEO_FORMAT_2160P_5994, /* NB: 4kp59 */
+    INPUT_VIDEO_FORMAT_2160P_60, /* NB: 4kp60 */
+
+    INPUT_VIDEO_FORMAT_HEVC_NALS,
+
 };
 
 enum input_type_e
@@ -109,6 +114,7 @@ enum input_type_e
     INPUT_DEVICE_DEKTEC,
     INPUT_DEVICE_NDI,
     INPUT_DEVICE_AVFOUNDATION,
+    INPUT_DEVICE_VEGA,
 //    INPUT_DEVICE_ASI,
 };
 
