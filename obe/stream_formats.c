@@ -36,6 +36,7 @@ const char *stream_format_name(enum stream_formats_e id)
 	case VIDEO_AVC: return "VIDEO_AVC";
 	case VIDEO_UNCOMPRESSED: return "VIDEO_UNCOMPRESSED";
 	case VIDEO_HEVC_X265: return "VIDEO_HEVC_X265";
+	case VIDEO_HEVC_VEGA: return "VIDEO_HEVC_VEGA";
 	case VIDEO_AVC_CPU_AVCODEC: return "VIDEO_AVC_CPU_AVCODEC";
 	case VIDEO_AVC_GPU_VAAPI_AVCODEC: return "VIDEO_AVC_GPU_VAAPI_AVCODEC";
 	case VIDEO_HEVC_GPU_VAAPI_AVCODEC: return "VIDEO_HEVC_GPU_VAAPI_AVCODEC";
