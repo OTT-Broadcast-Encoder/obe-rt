@@ -38,6 +38,8 @@
 #include <libswresample/swresample.h>
 #include <libmpegts.h>
 
+#include <encoders/video/sei-timestamp.h>
+
 #include "obe.h"
 #include "obecli.h"
 #include "common/common.h"
@@ -45,6 +47,9 @@
 
 #if HAVE_DTAPI_H
 extern char *dektec_sdk_version;
+#endif
+#if HAVE_VEGA330X_H
+extern char *vega_sdk_version;
 #endif
 
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
@@ -106,6 +111,13 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 #endif
 #if defined(__APPLE__)
 								"avfoundation",
+#else
+								"avfoundation-no-available",
+#endif
+#if HAVE_VEGA330X_H
+                                                                "vega",
+#else
+                                                                "vega-not-available",
 #endif
 								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
@@ -765,6 +777,14 @@ static int set_stream( char *command, obecli_command_t *child )
             if (video_codec) {
                 if (strcasecmp(video_codec, "AVC") == 0)
                     video_codec_id = 0; /* AVC */
+#if HAVE_VEGA330X_H
+                else
+                if (strcasecmp(video_codec, "HEVC_VEGA") == 0) {
+                    video_codec_id = 9; /* HEVC */
+                    /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
+                    g_sei_timestamping = 1;
+                }
+#endif
 #if HAVE_X265_H
                 else
                 if (strcasecmp(video_codec, "HEVC") == 0)
@@ -2365,6 +2385,13 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+    printf("Supports Vega: %s\n",
+#if HAVE_VEGA330X_H
+        "true"
+#else
+        "false"
+#endif
+    );
 
     printf("Supports RAW VIA NDISDK: %s\n",
 #if HAVE_PROCESSING_NDI_LIB_H
@@ -2386,6 +2413,9 @@ static void _usage(const char *prog, int exitcode)
     printf("Decklink SDK %s\n", BLACKMAGIC_DECKLINK_API_VERSION_STRING);
 #if HAVE_DTAPI_H
     printf("DekTec SDK %s\n", dektec_sdk_version);
+#endif
+#if HAVE_VEGA330X_H
+    printf("Vega SDK %s\n", vega_sdk_version);
 #endif
 
     printf("\n");
