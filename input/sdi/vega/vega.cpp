@@ -987,16 +987,16 @@ static void *vega_probe_stream(void *ptr)
 		pthread_mutex_unlock( &h->device_list_mutex );
 
 		if (i == 0) {
-			streams[i]->stream_type = STREAM_TYPE_VIDEO;
+			streams[i]->stream_type   = STREAM_TYPE_VIDEO;
 			streams[i]->stream_format = VIDEO_HEVC_VEGA;
-			streams[i]->width  = opts->width;
-			streams[i]->height = opts->height;
-			streams[i]->timebase_num = opts->timebase_num;
-			streams[i]->timebase_den = opts->timebase_den;
-			streams[i]->csp    = AV_PIX_FMT_QSV; /* Special tag. We're providing NALS not raw video. */
-			streams[i]->interlaced = opts->interlaced;
-			streams[i]->tff = 1; /* NTSC is bff in baseband but coded as tff */
-			streams[i]->sar_num = streams[i]->sar_den = 1; /* The user can choose this when encoding */
+			streams[i]->width         = opts->width;
+			streams[i]->height        = opts->height;
+			streams[i]->timebase_num  = opts->timebase_num;
+			streams[i]->timebase_den  = opts->timebase_den;
+			streams[i]->csp           = AV_PIX_FMT_QSV; /* Special tag. We're providing NALS not raw video. */
+			streams[i]->interlaced    = opts->interlaced;
+			streams[i]->tff           = 1; /* NTSC is bff in baseband but coded as tff */
+			streams[i]->sar_num       = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
 		else if( i >= 1 ) {
 			/* TODO: various assumptions about audio being 48KHz need resolved.
