@@ -323,6 +323,7 @@ struct avfm_s {
     int64_t audio_pts; /* 27MHz */
     int64_t audio_pts_corrected; /* 27MHz */
     int64_t video_pts; /* 27MHz */
+    int64_t video_dts; /* 27MHz */
     struct timeval hw_received_tv; /* Wall clock time the frame was received from the hardware. */
     int64_t av_drift; /* 27MHz - Calculation of audio_pts minus video_pts */
 
@@ -333,6 +334,7 @@ struct avfm_s {
      *   0   Blackmagic specific. Is the port operating in Full (0) or Half duplex mode (1).
      */
 #define AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX (0 << 0)
+#define AVFM_HW_STATUS__MASK_VEGA              (1 << 1)
 #define AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_FULL (0 << AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX)
 #define AVFM_HW_STATUS__BLACKMAGIC_DUPLEX_HALF (1 << AVFM_HW_STATUS__MASK_BLACKMAGIC_DUPLEX)
     uint64_t hw_status_flags; /* Bitmask flags indicating hardware status, sample status or such. */
@@ -352,6 +354,10 @@ __inline__ void avfm_init(struct avfm_s *s, enum avfm_frame_type_e frame_type) {
 __inline__ void avfm_set_pts_video(struct avfm_s *s, int64_t pts) {
     s->video_pts = pts;
     s->av_drift = s->audio_pts - s->video_pts;
+}
+
+__inline__ void avfm_set_dts_video(struct avfm_s *s, int64_t dts) {
+    s->video_dts = dts;
 }
 
 __inline__ void avfm_set_pts_audio(struct avfm_s *s, int64_t pts) {
