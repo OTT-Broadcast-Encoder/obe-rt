@@ -142,7 +142,7 @@ typedef struct
 
         API_VEGA330X_INIT_PARAM_T init_params;
         API_VEGA3301_CAP_INIT_PARAM_T ch_init_param;
-        int64_t cur_pts;
+        int64_t framecount;
 
         int bLastFrame;
 
@@ -442,11 +442,11 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
         img.pu8Addr     = st_frame_info->u8pDataBuf;
         img.u32Size     = st_frame_info->u32BufSize;
-        img.pts         = ctx->cur_pts++;
+        img.pts         = ctx->framecount++;
         img.eTimeBase   = API_VEGA330X_TIMEBASE_90KHZ;
         img.eTimeBase   = API_VEGA330X_TIMEBASE_SECOND;
         img.bLastFrame  = ctx->bLastFrame;
-        img.eFormat = API_VEGA330X_IMAGE_FORMAT_NV16;
+        img.eFormat     = API_VEGA330X_IMAGE_FORMAT_NV16;
 
         if (g_sei_timestamping) {
                 /* Create the SEI for the LTN latency tracking. */
@@ -467,7 +467,7 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         return;
                 }
 
-                uint32_t framecount = ctx->cur_pts;
+                uint32_t framecount = ctx->framecount;
                 sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, framecount);
                 sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, tv.tv_sec);  /* Rx'd from hw/ */
                 sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, tv.tv_usec);
@@ -614,6 +614,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         printf("\tImage Fmt: NV16\n");
                         break;
                 }
+
                 switch (st_dev_info.eAudioLayouts) {
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_MONO:
                         printf("\tAudio layouts: mono\n");
@@ -663,7 +664,7 @@ static int open_device(vega_opts_t *opts, int probe)
                 else
                         printf("\tchannel is unlocked\n");
 
-                switch(input_src_info.eSourceSdiResolution) {
+                switch (input_src_info.eSourceSdiResolution) {
                 case API_VEGA3301_CAP_RESOLUTION_720x480:
                         printf("\tResolution: 720x480\n");
                         break;
@@ -684,7 +685,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         break;
                 }
 
-                switch(input_src_info.eSourceSdiChromaFmt) {
+                switch (input_src_info.eSourceSdiChromaFmt) {
                 case API_VEGA3301_CAP_CHROMA_FORMAT_420:
                         printf("\tChroma Fmt: 420\n");
                         break;
@@ -699,7 +700,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         break;
                 }
 
-                switch(input_src_info.eSourceSdiSignalLevel) {
+                switch (input_src_info.eSourceSdiSignalLevel) {
                 case API_VEGA3301_CAP_SDI_LEVEL_B:
                         printf("\tSDI signal: level B\n");
                         break;
