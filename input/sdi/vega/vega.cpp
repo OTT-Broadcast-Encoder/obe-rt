@@ -9,6 +9,15 @@
  * Does AFD get handled correctly?
  * What does LOS look like? (especially, blue video but no audio?).
  * 
+ * Is the audio from SDI bitstream capable?
+ * 
+ * Can I write into the NV12 pixels pre-encode?
+ * 
+ * Encode some actual 10bit video, check we're not losing 10-to-8 in the encode because
+ * of the defined colorspace.
+ * 
+ * Test interlaced formats.
+ * 
  */
 
 /*****************************************************************************
@@ -36,15 +45,13 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <iostream>
-#include <inttypes.h>
-#include <limits.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <inttypes.h>
+#include <iostream>
+#include <limits.h>
+#include <fcntl.h>
 #include <semaphore.h>
 #include <time.h>
 #include <encoders/video/sei-timestamp.h>
@@ -68,7 +75,7 @@ extern "C"
 
 #define CAP_DBG_LEVEL API_VEGA3301_CAP_DBG_LEVEL_0
 
-/* TODO: Version numbers and such all borken.
+/* TODO: Version numbers and such all broken.
  * Return these from the SDK itself.
   */
 #define STR_HELPER(x) #x
@@ -84,14 +91,14 @@ const char *vega_sdk_version = VEGA_VERSION;
 
 struct obe_to_vega_video
 {
-    int progressive;
+    int progressive;            /* Boolean - Progressive or interlaced. */
     int obe_name;
-    int width;
+    int width;                  /* Visual pixel width / height */
     int height;
-    int vegaVideoStandard;
-    int timebase_num;
-    int timebase_den;
-    int vegaFramerate;
+    int vegaVideoStandard;      /* SDK specific enum */
+    int timebase_num;           /* Eg.  1001 */
+    int timebase_den;           /* Eg. 60000 */
+    int vegaFramerate;          /* SDK specific enum */
 };
 
 const static struct obe_to_vega_video video_format_tab[] =
@@ -146,26 +153,23 @@ typedef struct
     vega_ctx_t ctx;
 
     /* Input */
-    API_VEGA330X_BOARD_E brd_idx;
-    int card_idx;
+    API_VEGA330X_BOARD_E brd_idx;       /* Board instance # */
+    int card_idx;                       /* Port index # */
 
-    int video_format;
-    int num_channels;
+    int video_format;                   /* Eg. INPUT_VIDEO_FORMAT_720P_5994 */
+    int num_audio_channels;             /* MAX_AUDIO_CHANNELS */
 
-    /* True if we're problem, else false during normal streaming. */
-    int probe;
-    int detectedVideoStandard;
+    int probe;                          /* Boolean. True if the hardware is currently in probe mode. */
 
-    /* Output */
-    int probe_success;
+    int probe_success;                  /* Boolean. Signal to the outer OBE core that probing is done. */
 
-    int width;
-    int height;
-    int timebase_num;
-    int timebase_den;
+    int width;                          /* Eg. 1280 */
+    int height;                         /* Eg. 720 */
+    int timebase_num;                   /* Eg.  1001 */
+    int timebase_den;                   /* Eg. 60000 */
 
-    int interlaced;
-    int tff;
+    int interlaced;                     /* Boolean */
+    //int tff;                            /* Boolean */
 } vega_opts_t;
 
 /* Convert VEGAS PCR (SCR format) to a single time base reference. */
@@ -798,8 +802,7 @@ static int open_device(vega_opts_t *opts, int probe)
                 input_src_info.eSourceSdiFrameRate
         );
 	if (std == NULL) {
-		fprintf(stderr, MODULE_PREFIX "No detected standard for vega type 0x%x, aborting\n",
-			opts->detectedVideoStandard);
+		fprintf(stderr, MODULE_PREFIX "No detected standard for vega aborting\n");
 		exit(0);
 	}
 
@@ -943,7 +946,7 @@ static void *vega_probe_stream(void *ptr)
 	}
 
 	/* TODO: support multi-channel */
-	opts->num_channels = 8; /* Four pairs */
+	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
 	opts->probe = 1;
@@ -1046,9 +1049,9 @@ static void *vega_open_input(void *ptr)
 
 	pthread_cleanup_push(close_thread, (void *)opts);
 
-	opts->num_channels = MAX_AUDIO_CHANNELS;
-	opts->card_idx     = user_opts->card_idx;
-	opts->video_format = user_opts->video_format;
+	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
+	opts->card_idx           = user_opts->card_idx;
+	opts->video_format       = user_opts->video_format;
 
 	ctx         = &opts->ctx;
 	ctx->device = device;
