@@ -2,8 +2,8 @@ AUTOMAKE_OPTIONS = foreign
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 
 VERSION_MAJOR = 3
-VERSION_MINOR = 7
-VERSION_PATCH = 1
+VERSION_MINOR = 8
+VERSION_PATCH = 0
 
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 
@@ -84,6 +84,9 @@ endif
 if DEKTECLIB
 obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif
+if VEGALIB
+obecli_SOURCES += ../input/sdi/vega/vega.cpp
+endif
 
 if AVFOUNDATION
 obecli_SOURCES += ../input/avfoundation/avf_capture.m
@@ -110,6 +113,7 @@ if LIBVA
 obecli_SOURCES += ../encoders/video/avc/vaapi.c
 obecli_SOURCES += ../encoders/video/hevc/vaapi-hevc.c
 endif
+obecli_SOURCES += ../encoders/video/hevc/vega-passthru.c
 obecli_SOURCES += ../encoders/video/sei-timestamp.c
 obecli_SOURCES += ../common/network/udp/udp.c
 obecli_SOURCES += ../common/linsys/util.c
