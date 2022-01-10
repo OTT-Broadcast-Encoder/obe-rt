@@ -201,7 +201,7 @@ typedef struct
     int     planes;    /* number of planes */
     uint8_t *plane[4]; /* pointers for each plane */
     int     stride[4]; /* strides for each plane */
-    int     format;    /* image format */
+    int     format;    /* image format Eg: INPUT_VIDEO_FORMAT_1080I_5994 */
     int     first_line; /* first line of image (SD from SDI only) */
 } obe_image_t;
 #define PRINT_OBE_IMAGE(i, prefix) { \
