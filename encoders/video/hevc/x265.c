@@ -678,7 +678,7 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 		coded_frame_print(cf);
 
 	/* TODO: Add the SCTE35 changes to compute codec latency, patch the SCTE35 etc. */
-	if (out_ud->metadata.count > 0) {
+	if (out_ud && out_ud->metadata.count > 0) {
 		/* We need to process any associated metadata before we destroy the frame. */
 
 		for (int i = 0; i < out_ud->metadata.count; i++) {
