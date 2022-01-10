@@ -182,16 +182,11 @@ static const obecli_input_name_t input_names[] =
 // TODO: Is this dup define correct?
     { INPUT_DEVICE_DECKLINK, "Linsys SDI", "Linear Systems (DVEO) SDI card input", "internal" },
     { INPUT_DEVICE_V4L2    , "V4L2", "Video4Linux2 Raw Frame Device", "internal" },
-#if HAVE_BLUEDRIVER_P_H
     { INPUT_DEVICE_BLUEFISH, "BlueFish", "BlueFish Epoch Raw Frame Device", "internal" },
-#endif
     { INPUT_DEVICE_V210    , "V210", "V210 Raw Frame Device", "internal" },
-#if HAVE_PROCESSING_NDI_LIB_H
     { INPUT_DEVICE_NDI,      "NDI",  "NDI Raw Frame Device", "internal" },
-#endif
-#if HAVE_DTAPI_H
     { INPUT_DEVICE_DEKTEC,   "DekTec", "Dektec DTA-2172 Dual Port Device", "internal" },
-#endif
+    { INPUT_DEVICE_VEGA,     "vega", "Vega 3301 Quad Port Device", "internal" },
     { 0, 0, 0 },
 };
 
