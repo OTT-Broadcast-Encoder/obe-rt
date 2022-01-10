@@ -573,121 +573,97 @@ static int open_device(vega_opts_t *opts, int probe)
         }
 
 	if (probe == 1) {
-                if(st_dev_info.eInputSource == API_VEGA3301_CAP_INPUT_SOURCE_SDI)
+                if (st_dev_info.eInputSource == API_VEGA3301_CAP_INPUT_SOURCE_SDI)
                         printf("\tinput source: SDI\n");
-                else if(st_dev_info.eInputSource == API_VEGA3301_CAP_INPUT_SOURCE_HDMI)
+                else if (st_dev_info.eInputSource == API_VEGA3301_CAP_INPUT_SOURCE_HDMI)
                         printf("\tinput source: HDMI\n");
                 else
                         printf("\tinput source: DisplayPort\n");
 
-                if(st_dev_info.eInputMode == API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD)
+                if (st_dev_info.eInputMode == API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD)
                         printf("\tinput mode: 1 Channel UltraHD\n");
                 else
                         printf("\tinput mode: 4 Channel FullHD\n");
 
-                switch(st_dev_info.eImageFmt)
-                {
+                switch (st_dev_info.eImageFmt) {
                 case API_VEGA3301_CAP_IMAGE_FORMAT_NV12:
                         printf("\tImage Fmt: NV12\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_NV16:
                         printf("\tImage Fmt: NV16\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_YV12:
                         printf("\tImage Fmt: YV12\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_I420:
                         printf("\tImage Fmt: I420\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_YV16:
                         printf("\tImage Fmt: YV16\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_YUY2:
                         printf("\tImage Fmt: YUY2\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_P010:
                         printf("\tImage Fmt: P010\n");
                         break;
-
                 case API_VEGA3301_CAP_IMAGE_FORMAT_P210:
                         printf("\tImage Fmt: P210\n");
                         break;
-
                 default:
                         printf("\tImage Fmt: NV16\n");
                         break;
                 }
-                switch(st_dev_info.eAudioLayouts)
-                {
+                switch (st_dev_info.eAudioLayouts) {
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_MONO:
                         printf("\tAudio layouts: mono\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_STEREO:
                         printf("\tAudio layouts: stereo\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_2P1:
                         printf("\tAudio layouts: 2.1 channel\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_3P0:
                         printf("\tAudio layouts: 3.0 channel\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_QUAD:
                         printf("\tAudio layouts: quad\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_QUAD_SIDE:
                         printf("\tAudio layouts: quad side\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_3P1:
                         printf("\tAudio layouts: 3.1 channel\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_5P0:
                         printf("\tAudio layouts: 5.0 channel \n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_5P0_SIDE:
                         printf("\tAudio layouts: 5.0 channel side\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_5P1:
                         printf("\tAudio layouts: 5.1 channel\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_5P1_SIDE:
                         printf("\tAudio layouts: 5.1 channel side\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_7P0:
                         printf("\tAudio layouts: 7.0 channel\n");
                         break;
-
                 case API_VEGA3301_CAP_AUDIO_LAYOUT_7P1:
                         printf("\tAudio layouts: 7.1 channel\n");
                         break;
-
                 default:
                         break;
                 }
 
-                if(input_src_info.eSourceSdiLocked == API_VEGA3301_CAP_SRC_STATUS_LOCKED)
+                if (input_src_info.eSourceSdiLocked == API_VEGA3301_CAP_SRC_STATUS_LOCKED)
                         printf("\tchannel is locked\n");
                 else
                         printf("\tchannel is unlocked\n");
 
-                switch(input_src_info.eSourceSdiResolution)
-                {
+                switch(input_src_info.eSourceSdiResolution) {
                 case API_VEGA3301_CAP_RESOLUTION_720x480:
                         printf("\tResolution: 720x480\n");
                         break;
@@ -707,8 +683,8 @@ static int open_device(vega_opts_t *opts, int probe)
                         printf("\tResolution: unknown\n");
                         break;
                 }
-                switch(input_src_info.eSourceSdiChromaFmt)
-                {
+
+                switch(input_src_info.eSourceSdiChromaFmt) {
                 case API_VEGA3301_CAP_CHROMA_FORMAT_420:
                         printf("\tChroma Fmt: 420\n");
                         break;
@@ -723,8 +699,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         break;
                 }
 
-                switch(input_src_info.eSourceSdiSignalLevel)
-                {
+                switch(input_src_info.eSourceSdiSignalLevel) {
                 case API_VEGA3301_CAP_SDI_LEVEL_B:
                         printf("\tSDI signal: level B\n");
                         break;
@@ -744,8 +719,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         printf("\tSDI scan type: progressive\n");
                 }
 
-                switch(input_src_info.eSourceSdiBitDepth)
-                {
+                switch (input_src_info.eSourceSdiBitDepth) {
                 case API_VEGA3301_CAP_BIT_DEPTH_12:
                         printf("\tBit Depth: 12 bits\n");
                         break;
@@ -760,8 +734,7 @@ static int open_device(vega_opts_t *opts, int probe)
                         break;
                 }
 
-                switch(input_src_info.eSourceSdiFrameRate)
-                {
+                switch (input_src_info.eSourceSdiFrameRate) {
                 case API_VEGA3301_CAP_FPS_24:
                         printf("\tFrame per sec: 24\n");
                         break;
@@ -787,7 +760,6 @@ static int open_device(vega_opts_t *opts, int probe)
                         printf("\tFrame per sec: unknown\n");
                         break;
                 }
-
 
 	} // if probe == 1
 
