@@ -300,7 +300,7 @@ static int configureCodec(vega_opts_t *opts)
 		return -1;
         }
         opts->codec.resolution = (API_VEGA330X_RESOLUTION_E)fmt->vegaVideoStandard;
-        opts->codec.interlaced = fmt->progressive ? 0 : 1;
+        opts->codec.interlaced = p->b_interlaced;
 
         if (lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder framerate %d, %d\n", p->i_fps_num, p->i_fps_den);
