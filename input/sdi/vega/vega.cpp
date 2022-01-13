@@ -86,6 +86,9 @@ extern "C"
 #include "common/common.h"
 #include "common/lavc.h"
 #include "input/input.h"
+#include <libavcodec/avcodec.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
 }
 
 #define MODULE_PREFIX "[vega]: "
@@ -113,7 +116,7 @@ const char *lookupVegaInputSourceName(int v);
 const char *lookupVegaInputModeName(int v);
 const char *lookupVegaBitDepthName(int v);
 const char *lookupVegaChromaName(int v);
-const char *lookupVegaResolutionName(int v);
+const char *lookupVegaEncodingResolutionName(int v);
 
 struct obe_to_vega_video
 {
@@ -121,7 +124,8 @@ struct obe_to_vega_video
     int obe_name;
     int width;                  /* Visual pixel width / height */
     int height;
-    int vegaVideoStandard;      /* SDK specific enum */
+    int vegaCaptureResolution;  /* SDK specific enum */
+    int vegaEncodingResolution;
     int timebase_num;           /* Eg.  1001 */
     int timebase_den;           /* Eg. 60000 */
     int vegaFramerate;          /* SDK specific enum */
@@ -129,37 +133,37 @@ struct obe_to_vega_video
 
 const static struct obe_to_vega_video video_format_tab[] =
 {
-    { 0, INPUT_VIDEO_FORMAT_PAL,          720,  576,  API_VEGA3301_CAP_RESOLUTION_720x576,     1,    25, API_VEGA3301_CAP_FPS_25 },
-    { 0, INPUT_VIDEO_FORMAT_NTSC,         720,  480,  API_VEGA3301_CAP_RESOLUTION_720x480,  1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    { 0, INPUT_VIDEO_FORMAT_PAL,          720,  576,  API_VEGA3301_CAP_RESOLUTION_720x576,   API_VEGA330X_RESOLUTION_720x576,      1,    25, API_VEGA3301_CAP_FPS_25 },
+    { 0, INPUT_VIDEO_FORMAT_NTSC,         720,  480,  API_VEGA3301_CAP_RESOLUTION_720x480,   API_VEGA330X_RESOLUTION_720x480,   1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
     //
-    { 1, INPUT_VIDEO_FORMAT_720P_50,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
-    { 1, INPUT_VIDEO_FORMAT_720P_5994,   1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
-    { 1, INPUT_VIDEO_FORMAT_720P_60,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
+    { 1, INPUT_VIDEO_FORMAT_720P_50,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_720P_5994,   1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    { 1, INPUT_VIDEO_FORMAT_720P_60,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1000, 60000, API_VEGA3301_CAP_FPS_60 },
     //
-    { 0, INPUT_VIDEO_FORMAT_1080I_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
-    { 0, INPUT_VIDEO_FORMAT_1080I_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    { 0, INPUT_VIDEO_FORMAT_1080I_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 0, INPUT_VIDEO_FORMAT_1080I_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
     //
-    { 1, INPUT_VIDEO_FORMAT_1080P_24,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 24000, API_VEGA3301_CAP_FPS_24 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_25,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_2997,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_29_97 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_30,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
-    { 1, INPUT_VIDEO_FORMAT_1080P_60,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_24,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 24000, API_VEGA3301_CAP_FPS_24 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_25,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_2997,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_30,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_60,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
     //
-    { 1, INPUT_VIDEO_FORMAT_2160P_25,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
-    { 1, INPUT_VIDEO_FORMAT_2160P_2997,  3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, 1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
-    { 1, INPUT_VIDEO_FORMAT_2160P_30,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
-    { 1, INPUT_VIDEO_FORMAT_2160P_50,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
-    { 1, INPUT_VIDEO_FORMAT_2160P_60,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_25,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_2997,  3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_30,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_50,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_60,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
 };
 
 /* For a given vegas format and framerate, return a record with translations into OBE speak. */
-static const struct obe_to_vega_video *lookupVegaStandard(int std, int framerate)
+static const struct obe_to_vega_video *lookupVegaCaptureResolution(int std, int framerate)
 {
 	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
 		const struct obe_to_vega_video *fmt = &video_format_tab[i];
-		if (fmt->vegaVideoStandard == std && fmt->vegaFramerate == framerate) {
+		if (fmt->vegaCaptureResolution == std && fmt->vegaFramerate == framerate) {
 			return fmt;
 		}
 	}
@@ -204,6 +208,9 @@ typedef struct
 
         int bLastFrame;
 
+        /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
+        struct SwrContext *avr;
+
 } vega_ctx_t;
 
 typedef struct
@@ -237,7 +244,7 @@ typedef struct
             API_VEGA330X_B_FRAME_NUM_E      bframes;
             int width;
             int height;
-            API_VEGA330X_RESOLUTION_E       resolution;
+            API_VEGA330X_RESOLUTION_E       encodingResolution;
             API_VEGA330X_FPS_E              fps;
             API_VEGA330X_CHROMA_FORMAT_E    chromaFormat;
             API_VEGA330X_BIT_DEPTH_E        bitDepth;
@@ -285,7 +292,7 @@ static int configureCodec(vega_opts_t *opts)
 
         opts->codec.inputMode    = API_VEGA3301_CAP_INPUT_MODE_4CHN_FHD;
         opts->codec.inputSource  = API_VEGA3301_CAP_INPUT_SOURCE_SDI;
-        opts->codec.sdiLevel     = API_VEGA3301_CAP_SDI_LEVEL_B;
+        opts->codec.sdiLevel     = API_VEGA3301_CAP_SDI_LEVEL_A;
         opts->codec.audioLayout  = API_VEGA3301_CAP_AUDIO_LAYOUT_7P1;
         opts->codec.pixelFormat  = API_VEGA3301_CAP_IMAGE_FORMAT_NV16;
         opts->codec.bitrate_kbps = p->rc.i_bitrate;
@@ -299,7 +306,7 @@ static int configureCodec(vega_opts_t *opts)
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters for specific width, height and framerate\n");
 		return -1;
         }
-        opts->codec.resolution = (API_VEGA330X_RESOLUTION_E)fmt->vegaVideoStandard;
+        opts->codec.encodingResolution = (API_VEGA330X_RESOLUTION_E)fmt->vegaEncodingResolution;
         opts->codec.interlaced = p->b_interlaced;
 
         if (lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
@@ -307,10 +314,13 @@ static int configureCodec(vega_opts_t *opts)
 		return -1;
         }
 
+//p->i_csp |= X264_CSP_HIGH_DEPTH;
+
         if ((p->i_csp & X264_CSP_I420) && ((p->i_csp & X264_CSP_HIGH_DEPTH) == 0)) {
                 opts->codec.chromaFormat = API_VEGA330X_CHROMA_FORMAT_420;
                 opts->codec.bitDepth     = API_VEGA330X_BIT_DEPTH_8;
                 opts->codec.pixelFormat  = API_VEGA3301_CAP_IMAGE_FORMAT_NV12;
+                // OK
         } else
         if ((p->i_csp & X264_CSP_I420) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
                 opts->codec.chromaFormat = API_VEGA330X_CHROMA_FORMAT_420;
@@ -321,6 +331,7 @@ static int configureCodec(vega_opts_t *opts)
                 opts->codec.chromaFormat = API_VEGA330X_CHROMA_FORMAT_422;
                 opts->codec.bitDepth     = API_VEGA330X_BIT_DEPTH_8;
                 opts->codec.pixelFormat  = API_VEGA3301_CAP_IMAGE_FORMAT_NV16;
+                // NOT ok according to VLC
         } else
         if ((p->i_csp & X264_CSP_I422) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
                 opts->codec.chromaFormat = API_VEGA330X_CHROMA_FORMAT_422;
@@ -341,7 +352,7 @@ static int configureCodec(vega_opts_t *opts)
         printf(MODULE_PREFIX "encoder.bframes      = %d\n", opts->codec.bframes);
         printf(MODULE_PREFIX "encoder.width        = %d\n", opts->codec.width);
         printf(MODULE_PREFIX "encoder.height       = %d\n", opts->codec.height);
-        printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.resolution, lookupVegaResolutionName(opts->codec.resolution));
+        printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.encodingResolution, lookupVegaEncodingResolutionName(opts->codec.encodingResolution));
         printf(MODULE_PREFIX "encoder.fps          = %d\n", opts->codec.fps);
         printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaChromaName(opts->codec.chromaFormat));
         printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
@@ -370,17 +381,29 @@ static void deliver_audio_frame(vega_opts_t *opts, unsigned char *plane, int siz
 
 	rf->audio_frame.num_samples  = sampleCount;
 	rf->audio_frame.num_channels = MAX_AUDIO_CHANNELS;
-	rf->audio_frame.sample_fmt   = AV_SAMPLE_FMT_S16P;
+	rf->audio_frame.sample_fmt   = AV_SAMPLE_FMT_S32P; /* Destination format */
 	rf->audio_frame.linesize     = rf->audio_frame.num_channels * sizeof(uint16_t);
 
 	if (av_samples_alloc(rf->audio_frame.audio_data, &rf->audio_frame.linesize, rf->audio_frame.num_channels,
                               rf->audio_frame.num_samples, (AVSampleFormat)rf->audio_frame.sample_fmt, 0) < 0)
 	{
 		fprintf(stderr, MODULE_PREFIX "av_samples_alloc failed\n");
+                free(rf);
 		return;
 	}
 
-	memcpy(rf->audio_frame.audio_data[0], plane, sizeBytes);
+        /* Convert input samples from S16 interleaved (native from the h/w) into S32P planer. */
+        if (swr_convert(ctx->avr,
+                rf->audio_frame.audio_data,
+                rf->audio_frame.num_samples,
+                (const uint8_t**)&plane,
+                rf->audio_frame.num_samples) < 0)
+        {
+                fprintf(stderr, MODULE_PREFIX "Sample format conversion failed\n");
+                /* TODO: Free the audio plane? */
+                free(rf);
+                return;
+        }
 
 	avfm_init(&rf->avfm, AVFM_AUDIO_PCM);
 
@@ -593,6 +616,12 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         img.eTimeBase   = API_VEGA330X_TIMEBASE_90KHZ;
         img.eTimeBase   = API_VEGA330X_TIMEBASE_SECOND;
         img.bLastFrame  = ctx->bLastFrame;
+        img.eFormat     = API_VEGA330X_IMAGE_FORMAT_NV12;
+        //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420;
+        //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420P010;
+        //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV422P010;
+        //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420P10LE;
+        //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV422P10LE;
         img.eFormat     = API_VEGA330X_IMAGE_FORMAT_NV16;
 
         if (g_sei_timestamping) {
@@ -649,7 +678,7 @@ static void callback__process_capture(API_VEGA330X_PICT_INFO_T *pPicInfo, const 
 
 static void close_device(vega_opts_t *opts)
 {
-	//vega_ctx_t *ctx = &opts->ctx;
+	vega_ctx_t *ctx = &opts->ctx;
 
 	printf(MODULE_PREFIX "Closing device#%d port#%d\n", opts->brd_idx, opts->card_idx);
 
@@ -679,6 +708,9 @@ static void close_device(vega_opts_t *opts)
 
 	VEGA330X_ENC_Exit(opts->brd_idx, (API_VEGA330X_CHN_E)opts->card_idx);
 	VEGA3301_CAP_Exit(opts->brd_idx, (API_VEGA3301_CAP_CHN_E)opts->card_idx);
+
+        if (ctx->avr)
+                swr_free(&ctx->avr);
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
@@ -917,7 +949,7 @@ static int open_device(vega_opts_t *opts, int probe)
 	}
 
 	/* We need to understand how much VANC we're going to be receiving. */
-	const struct obe_to_vega_video *std = lookupVegaStandard(
+	const struct obe_to_vega_video *std = lookupVegaCaptureResolution(
                 input_src_info.eSourceSdiResolution,
                 input_src_info.eSourceSdiFrameRate
         );
@@ -939,12 +971,34 @@ static int open_device(vega_opts_t *opts, int probe)
 		opts->timebase_den, opts->timebase_num);
 
 	if (probe == 0) {
+
+                ctx->avr = swr_alloc();
+                if (!ctx->avr) {
+                        fprintf(stderr, MODULE_PREFIX "Could not alloc libswresample context\n");
+                        return -1;
+                }
+
+                /* Give libswresample a made up channel map.
+                 * Convert S16 interleaved to S32P planar.
+                 */
+                av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_audio_channels) - 1, 0 );
+                av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
+                av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
+                av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_audio_channels) - 1, 0 );
+                av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
+                av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );
+
+                if (swr_init(ctx->avr) < 0) {
+                        fprintf(stderr, MODULE_PREFIX "couldn't setup sample rate conversion\n");
+                        return -1;
+                }
+
                 ctx->init_params.eInputMode       = API_VEGA330X_INPUT_MODE_DATA;
                 ctx->init_params.eRobustMode      = API_VEGA330X_VIF_ROBUST_MODE_BLUE_SCREEN;
                 ctx->init_params.eProfile         = API_VEGA330X_HEVC_MAIN422_10_PROFILE;
                 ctx->init_params.eLevel           = API_VEGA330X_HEVC_LEVEL_50;
                 ctx->init_params.eTier            = API_VEGA330X_HEVC_MAIN_TIER;
-                ctx->init_params.eResolution      = opts->codec.resolution;
+                ctx->init_params.eResolution      = opts->codec.encodingResolution;
                 ctx->init_params.bInterlace       = opts->codec.interlaced;
                 ctx->init_params.eAspectRatioIdc  = API_VEGA330X_HEVC_ASPECT_RATIO_IDC_1;
                 ctx->init_params.eChromaFmt       = opts->codec.chromaFormat;
@@ -1122,7 +1176,7 @@ static void *vega_probe_stream(void *ptr)
 			streams[i]->stream_type    = STREAM_TYPE_AUDIO;
 			streams[i]->stream_format  = AUDIO_PCM;
 			streams[i]->num_channels   = 2;
-			streams[i]->sample_format  = AV_SAMPLE_FMT_S16;
+			streams[i]->sample_format  = AV_SAMPLE_FMT_S32P;
 			streams[i]->sample_rate    = 48000;
 			streams[i]->sdi_audio_pair = i;
 		}

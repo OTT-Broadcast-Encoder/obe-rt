@@ -44,14 +44,14 @@
 #include <VEGA3301_cap_types.h>
 #include <VEGA3301_capture.h>
 
-const char *lookupVegaResolutionName(int v)
+const char *lookupVegaEncodingResolutionName(int v)
 {
         switch (v) {
-        case API_VEGA3301_CAP_RESOLUTION_720x480:       return "API_VEGA3301_CAP_RESOLUTION_720x480";
-        case API_VEGA3301_CAP_RESOLUTION_720x576:       return "API_VEGA3301_CAP_RESOLUTION_720x576";
-        case API_VEGA3301_CAP_RESOLUTION_1280x720:      return "API_VEGA3301_CAP_RESOLUTION_1280x720";
-        case API_VEGA3301_CAP_RESOLUTION_1920x1080:     return "API_VEGA3301_CAP_RESOLUTION_1920x1080";
-        case API_VEGA3301_CAP_RESOLUTION_3840x2160:     return "API_VEGA3301_CAP_RESOLUTION_3840x2160";
+        case API_VEGA330X_RESOLUTION_720x480:           return "API_VEGA330X_RESOLUTION_720x480";
+        case API_VEGA330X_RESOLUTION_720x576:           return "API_VEGA330X_RESOLUTION_720x576";
+        case API_VEGA330X_RESOLUTION_1280x720:          return "API_VEGA330X_RESOLUTION_1280x720";
+        case API_VEGA330X_RESOLUTION_1920x1080:         return "API_VEGA330X_RESOLUTION_1920x1080";
+        case API_VEGA330X_RESOLUTION_3840x2160:         return "API_VEGA330X_RESOLUTION_3840x2160";
         default:                                        return "UNDEFINED";
         }
 }
