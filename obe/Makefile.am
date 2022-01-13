@@ -86,6 +86,7 @@ obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif
 if VEGALIB
 obecli_SOURCES += ../input/sdi/vega/vega.cpp
+obecli_SOURCES += ../input/sdi/vega/vega-misc.cpp
 endif
 
 if AVFOUNDATION

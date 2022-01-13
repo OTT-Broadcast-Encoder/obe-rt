@@ -106,6 +106,15 @@ using namespace std;
 
 const char *vega_sdk_version = VEGA_VERSION;
 
+const char *vega_lookupFrameType(API_VEGA330X_FRAME_TYPE_E type);
+const char *lookupVegaSDILevelName(int v);
+const char *lookupVegaPixelFormatName(int v);
+const char *lookupVegaInputSourceName(int v);
+const char *lookupVegaInputModeName(int v);
+const char *lookupVegaBitDepthName(int v);
+const char *lookupVegaChromaName(int v);
+const char *lookupVegaResolutionName(int v);
+
 struct obe_to_vega_video
 {
     int progressive;            /* Boolean - Progressive or interlaced. */
@@ -215,6 +224,7 @@ typedef struct
 
     /* configuration for the codec. */
     struct {
+            int                             interlaced;
             int bitrate_kbps;
             API_VEGA330X_GOP_SIZE_E         gop_size;
             API_VEGA330X_B_FRAME_NUM_E      bframes;
@@ -232,81 +242,6 @@ typedef struct
     } codec;
 
 } vega_opts_t;
-
-static const char *lookupVegaResolutionName(int v)
-{
-        switch (v) {
-        case API_VEGA3301_CAP_RESOLUTION_720x480:       return "API_VEGA3301_CAP_RESOLUTION_720x480";
-        case API_VEGA3301_CAP_RESOLUTION_720x576:       return "API_VEGA3301_CAP_RESOLUTION_720x576";
-        case API_VEGA3301_CAP_RESOLUTION_1280x720:      return "API_VEGA3301_CAP_RESOLUTION_1280x720";
-        case API_VEGA3301_CAP_RESOLUTION_1920x1080:     return "API_VEGA3301_CAP_RESOLUTION_1920x1080";
-        case API_VEGA3301_CAP_RESOLUTION_3840x2160:     return "API_VEGA3301_CAP_RESOLUTION_3840x2160";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaChromaName(int v)
-{
-        switch (v) {
-        case API_VEGA330X_CHROMA_FORMAT_MONO:           return "API_VEGA330X_CHROMA_FORMAT_MONO";
-        case API_VEGA330X_CHROMA_FORMAT_420:            return "API_VEGA330X_CHROMA_FORMAT_420";
-        case API_VEGA330X_CHROMA_FORMAT_422:            return "API_VEGA330X_CHROMA_FORMAT_422";
-        case API_VEGA330X_CHROMA_FORMAT_422_TO_420:     return "API_VEGA330X_CHROMA_FORMAT_422_TO_420";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaBitDepthName(int v)
-{
-        switch (v) {
-        case API_VEGA330X_BIT_DEPTH_8:                  return "API_VEGA330X_BIT_DEPTH_8";
-        case API_VEGA330X_BIT_DEPTH_10:                 return "API_VEGA330X_BIT_DEPTH_10";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaInputModeName(int v)
-{
-        switch (v) {
-        case API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD:     return "API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD";
-        case API_VEGA3301_CAP_INPUT_MODE_4CHN_FHD:      return "API_VEGA3301_CAP_INPUT_MODE_4CHN_FHD";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaInputSourceName(int v)
-{
-        switch (v) {
-        case API_VEGA3301_CAP_INPUT_SOURCE_SDI:         return "API_VEGA3301_CAP_INPUT_SOURCE_SDI";
-        case API_VEGA3301_CAP_INPUT_SOURCE_HDMI:        return "API_VEGA3301_CAP_INPUT_SOURCE_HDMI";
-        case API_VEGA3301_CAP_INPUT_SOURCE_DP2:         return "API_VEGA3301_CAP_INPUT_SOURCE_DP2";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaSDILevelName(int v)
-{
-        switch (v) {
-        case API_VEGA3301_CAP_SDI_LEVEL_A:              return "API_VEGA3301_CAP_SDI_LEVEL_A";
-        case API_VEGA3301_CAP_SDI_LEVEL_B:              return "API_VEGA3301_CAP_SDI_LEVEL_B";
-        default:                                        return "UNDEFINED";
-        }
-}
-
-static const char *lookupVegaPixelFormatName(int v)
-{
-        switch (v) {
-        case API_VEGA3301_CAP_IMAGE_FORMAT_P210:        return "API_VEGA3301_CAP_IMAGE_FORMAT_P210";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_P010:        return "API_VEGA3301_CAP_IMAGE_FORMAT_P010";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_NV12:        return "API_VEGA3301_CAP_IMAGE_FORMAT_NV12";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_NV16:        return "API_VEGA3301_CAP_IMAGE_FORMAT_NV16";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_YV12:        return "API_VEGA3301_CAP_IMAGE_FORMAT_YV12";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_I420:        return "API_VEGA3301_CAP_IMAGE_FORMAT_I420";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_YV16:        return "API_VEGA3301_CAP_IMAGE_FORMAT_YV16";
-        case API_VEGA3301_CAP_IMAGE_FORMAT_YUY2:        return "API_VEGA3301_CAP_IMAGE_FORMAT_YUY2";
-        default:                                        return "UNDEFINED";
-        }
-}
 
 /* Convert VEGAS PCR (SCR format) to a single time base reference. */
 static int64_t convertSCR_to_PCR(uint64_t pcr)
@@ -327,17 +262,6 @@ static int64_t convertSCR_to_PCR(uint64_t pcr)
         /* Upper 9 bits already 27MHz */
         clk += ((pcr >> 39) & 0x1ff);
         return clk;
-}
-
-const char *vega_lookupFrameType(API_VEGA330X_FRAME_TYPE_E type)
-{
-        switch (type) {
-        case API_VEGA330X_FRAME_TYPE_I: return "I";
-        case API_VEGA330X_FRAME_TYPE_P: return "P";
-        case API_VEGA330X_FRAME_TYPE_B: return "B";
-        default:
-                return "U";
-        }
 }
 
 static int configureCodec(vega_opts_t *opts)
@@ -369,6 +293,7 @@ static int configureCodec(vega_opts_t *opts)
 		return -1;
         }
         opts->codec.resolution = (API_VEGA330X_RESOLUTION_E)fmt->vegaVideoStandard;
+        opts->codec.interlaced = fmt->progressive ? 0 : 1;
 
         if (lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder framerate %d, %d\n", p->i_fps_num, p->i_fps_den);
@@ -414,6 +339,7 @@ static int configureCodec(vega_opts_t *opts)
         printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaChromaName(opts->codec.chromaFormat));
         printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
         printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, lookupVegaPixelFormatName(opts->codec.pixelFormat));
+        printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
 
         return 0; /* Success */
 }
@@ -1012,6 +938,7 @@ static int open_device(vega_opts_t *opts, int probe)
                 ctx->init_params.eLevel           = API_VEGA330X_HEVC_LEVEL_50;
                 ctx->init_params.eTier            = API_VEGA330X_HEVC_MAIN_TIER;
                 ctx->init_params.eResolution      = opts->codec.resolution;
+                ctx->init_params.bInterlace       = opts->codec.interlaced;
                 ctx->init_params.eAspectRatioIdc  = API_VEGA330X_HEVC_ASPECT_RATIO_IDC_1;
                 ctx->init_params.eChromaFmt       = opts->codec.chromaFormat;
                 ctx->init_params.eBitDepth        = opts->codec.bitDepth;
