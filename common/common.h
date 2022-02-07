@@ -534,12 +534,15 @@ typedef struct
 
 typedef struct
 {
+    time_t ts;
+
     int len;
     uint8_t *data;
 
     /* MPEG-TS */
     int64_t *pcr_list;
 } obe_muxed_data_t;
+void obe_muxed_data_print(obe_muxed_data_t *ptr, int nr);
 
 struct obe_t
 {

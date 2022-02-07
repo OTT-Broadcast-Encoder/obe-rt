@@ -1318,6 +1318,7 @@ extern int64_t g_mux_smoother_last_total_item_size;
 extern int64_t g_mux_smoother_fifo_pcr_size;
 extern int64_t g_mux_smoother_fifo_data_size;
 extern int64_t g_mux_smoother_trim_ms;
+extern int64_t g_mux_smoother_dump;
 
 /* UDP Packet output */
 extern int g_udp_output_drop_next_video_packet;
@@ -1441,6 +1442,8 @@ extern time_t g_decklink_missing_video_last_time;
         g_mux_smoother_fifo_pcr_size);
     printf("mux_smoother.fifo_data_size        = %" PRIi64 " (bytes)\n",
         g_mux_smoother_fifo_data_size);
+    printf("mux_smoother.dump                  = %" PRIi64 "\n",
+        g_mux_smoother_dump);
     printf("udp_output.drop_next_video_packet  = %d\n",
         g_udp_output_drop_next_video_packet);
     printf("udp_output.drop_next_audio_packet  = %d\n",
@@ -1624,6 +1627,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "core.runtime_terminate_after_seconds") == 0) {
         g_core_runtime_terminate_after_seconds = val;
+    } else
+    if (strcasecmp(var, "mux_smoother.dump") == 0) {
+        g_mux_smoother_dump = val;
     } else
     if (strcasecmp(var, "ts_mux.monitor_bps") == 0) {
         g_mux_ts_monitor_bps = val;

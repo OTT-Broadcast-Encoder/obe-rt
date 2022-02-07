@@ -289,6 +289,7 @@ obe_muxed_data_t *new_muxed_data( int len )
     if( !muxed_data )
         return NULL;
 
+    muxed_data->ts = time(NULL);
     muxed_data->len = len;
     muxed_data->data = malloc( len );
     if( !muxed_data->data )
@@ -2230,3 +2231,25 @@ int obe_core_get_payload_packets()
 {
 	return obe_core_get_payload_size() / 188;
 }
+
+void obe_muxed_data_print(obe_muxed_data_t *ptr, int nr)
+{
+	printf("%03d: len %3d : PCRs", nr, ptr->len);
+	int items = ptr->len / 188;
+	if (items < 8) {
+		for (int i = 0; i < items; i++) {
+			printf(" %" PRIi64, ptr->pcr_list[i]);
+		}
+	} else {
+		for (int i = 0; i < items; i++) {
+			if ((i < 3) || (i > items - 4)) {
+				printf(" %" PRIi64, ptr->pcr_list[i]);
+			}
+			if (i == 4) {
+				printf(" ...");
+			}
+		}
+	}
+	printf(": %s", ctime(&ptr->ts));
+}
+

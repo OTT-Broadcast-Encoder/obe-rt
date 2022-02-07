@@ -32,6 +32,9 @@ int64_t g_mux_smoother_last_total_item_size = 0;
 int64_t g_mux_smoother_fifo_pcr_size = 0;
 int64_t g_mux_smoother_fifo_data_size = 0;
 int64_t g_mux_smoother_trim_ms = 0;
+int64_t g_mux_smoother_dump = 0;
+
+#define MODULE_PREFIX "[mux-smoother]: "
 
 #define LOCAL_DEBUG 0
 
@@ -104,6 +107,17 @@ static void *mux_start_smoothing( void *ptr )
         {
             pthread_mutex_unlock( &h->mux_smoothing_queue.mutex );
             break;
+        }
+
+        if (g_mux_smoother_dump) {
+            g_mux_smoother_dump = 0;
+
+            printf(MODULE_PREFIX "Dumping:\n");
+            for (int i = 0; i < h->mux_smoothing_queue.size; i++) {
+                obe_muxed_data_t *s = h->mux_smoothing_queue.queue[i];
+                obe_muxed_data_print(s, i);
+            }
+
         }
 
         if (trim_ms_pending) {
