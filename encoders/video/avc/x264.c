@@ -993,6 +993,14 @@ printf("frame_size = %7d pic_type %d (%s) time %6d keyframe %d qp %d\n", frame_s
                     /* Add the time exit from compressor seconds/useconds. */
                     sei_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 6, tv.tv_sec);
                     sei_timestamp_field_set(&nal[m].p_payload[offset], nal[m].i_payload - offset, 7, tv.tv_usec);
+
+#if 0
+                    /* Obtain total codec time and histogram it. */
+                    int64_t ms = sei_timestamp_query_codec_latency_ms(&nal[m].p_payload[offset], nal[m].i_payload - offset);
+                    if (ms > 22 ) {
+                        //printf("encoded frame: %" PRIi64 "\n", ms);
+                    }
+#endif
                 }
             }
         }
