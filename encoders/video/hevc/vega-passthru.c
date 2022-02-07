@@ -1,7 +1,7 @@
 /*****************************************************************************
  * vega.c : vega encoding passthru functions
  *****************************************************************************
- * Copyright (C) 20122 LiveTimeNet Inc. All Rights Reserved.
+ * Copyright (C) 2022 LiveTimeNet Inc. All Rights Reserved.
  *
  * Authors: Steven Toth <stoth@ltnglobal.com>
  *
