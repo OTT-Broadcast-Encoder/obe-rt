@@ -727,7 +727,7 @@ static int prbs_inited = 0;
 static int64_t queryAudioClock(IDeckLinkAudioInputPacket *audioframe)
 {
     BMDTimeValue time;
-#if 1
+#if 0
     audioframe->GetPacketTime(&time, OBE_CLOCK);
 #else
     /* Avoid an issues in the BM SDK where the result
