@@ -392,7 +392,7 @@ end:
 
     if( tl_opts )
         twolame_close( &tl_opts );
-    free( enc_params );
+    aud_enc_params_free(enc_params);
 
     return NULL;
 }

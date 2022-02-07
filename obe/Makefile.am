@@ -101,6 +101,7 @@ obecli_SOURCES += ../filters/video/video.c
 obecli_SOURCES += ../filters/video/convert_jpeg.c
 obecli_SOURCES += ../filters/video/analyze_fp.cpp
 obecli_SOURCES += ../encoders/encoder_smoothing.c
+obecli_SOURCES += ../encoders/audio/audio_enc_params.c
 obecli_SOURCES += ../encoders/audio/lavc/lavc.c
 obecli_SOURCES += ../encoders/audio/mp2/twolame.c
 obecli_SOURCES += ../encoders/audio/ac3bitstream/ac3bitstream.c

@@ -292,7 +292,7 @@ static void *start_encoder_ac3bitstream(void *ptr)
 	if (smpte337_detector2)
 		smpte337_detector2_free(smpte337_detector2);
 
-	free(enc_params);
+	aud_enc_params_free(enc_params);
 
 	return NULL;
 }

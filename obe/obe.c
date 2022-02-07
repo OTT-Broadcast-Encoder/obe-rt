@@ -1565,7 +1565,7 @@ int obe_start( obe_t *h )
 #if 0
                 ostream->sdi_audio_pair = input_stream->sdi_audio_pair;
 #endif
-                aud_enc_params = calloc(1, sizeof(*aud_enc_params));
+                aud_enc_params = aud_enc_params_alloc();
                 if(!aud_enc_params) {
                     fprintf(stderr, "Malloc failed\n");
                     goto fail;
@@ -1588,7 +1588,7 @@ int obe_start( obe_t *h )
                 num_samples = ostream->stream_format == AUDIO_MP2 ? MP2_NUM_SAMPLES :
                               ostream->stream_format == AUDIO_AAC ? AAC_NUM_SAMPLES : AC3_NUM_SAMPLES;
 
-                aud_enc_params = calloc( 1, sizeof(*aud_enc_params) );
+                aud_enc_params = aud_enc_params_alloc();
                 if( !aud_enc_params )
                 {
                     fprintf( stderr, "Malloc failed \n" );

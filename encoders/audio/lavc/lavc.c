@@ -527,7 +527,7 @@ finish:
         av_free( codec );
     }
 
-    free(ctx->enc_params);
+    aud_enc_params_free(ctx->enc_params);
 
     return NULL;
 }
