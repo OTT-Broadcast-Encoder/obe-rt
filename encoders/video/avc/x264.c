@@ -1200,8 +1200,8 @@ if (fh)
             }
             free(pic_out.opaque);
 
-        }
-     }
+        } /* if frame_size */
+     } /* While(1) Main loop */
 
 end:
     if( s )
