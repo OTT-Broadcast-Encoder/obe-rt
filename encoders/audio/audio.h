@@ -46,7 +46,12 @@ typedef struct
      */
     int use_fifo_head_timing;
 
+    int dialnorm; /* ac3 specific. Default is -31 */
+
 } obe_aud_enc_params_t;
+
+obe_aud_enc_params_t *aud_enc_params_alloc();
+void aud_enc_params_free(obe_aud_enc_params_t *aep);
 
 extern const obe_aud_enc_func_t twolame_encoder;
 extern const obe_aud_enc_func_t lavc_encoder;
