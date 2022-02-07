@@ -35,14 +35,7 @@
 #include <semaphore.h>
 #include <time.h>
 
-/* include vega330x_encoder */
-#include <VEGA330X_types.h>
-#include <VEGA330X_encoder.h>
-#include <vega330x_config.h>
-
-/* include sdk/vega_api */
-#include <VEGA3301_cap_types.h>
-#include <VEGA3301_capture.h>
+#include "vega.h"
 
 const char *lookupVegaEncodingResolutionName(int v)
 {
@@ -128,6 +121,71 @@ const char *vega_lookupFrameType(API_VEGA330X_FRAME_TYPE_E type)
         default:
                 return "U";
         }
+}
+
+const static struct obe_to_vega_video video_format_tab[] =
+{
+    { 0, INPUT_VIDEO_FORMAT_PAL,          720,  576,  API_VEGA3301_CAP_RESOLUTION_720x576,   API_VEGA330X_RESOLUTION_720x576,      1,    25, API_VEGA3301_CAP_FPS_25 },
+    { 0, INPUT_VIDEO_FORMAT_NTSC,         720,  480,  API_VEGA3301_CAP_RESOLUTION_720x480,   API_VEGA330X_RESOLUTION_720x480,   1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    //
+    { 1, INPUT_VIDEO_FORMAT_720P_50,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_720P_5994,   1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    { 1, INPUT_VIDEO_FORMAT_720P_60,     1280,  720,  API_VEGA3301_CAP_RESOLUTION_1280x720,  API_VEGA330X_RESOLUTION_1280x720,  1000, 60000, API_VEGA3301_CAP_FPS_60 },
+    //
+    { 0, INPUT_VIDEO_FORMAT_1080I_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 0, INPUT_VIDEO_FORMAT_1080I_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    //
+    { 1, INPUT_VIDEO_FORMAT_1080P_24,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 24000, API_VEGA3301_CAP_FPS_24 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_25,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_2997,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_30,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_50,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_5994,  1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1001, 60000, API_VEGA3301_CAP_FPS_59_94 },
+    { 1, INPUT_VIDEO_FORMAT_1080P_60,    1920, 1080,  API_VEGA3301_CAP_RESOLUTION_1920x1080, API_VEGA330X_RESOLUTION_1920x1080, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
+    //
+    { 1, INPUT_VIDEO_FORMAT_2160P_25,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 25000, API_VEGA3301_CAP_FPS_25 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_2997,  3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1001, 30000, API_VEGA3301_CAP_FPS_29_97 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_30,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 30000, API_VEGA3301_CAP_FPS_30 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_50,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 50000, API_VEGA3301_CAP_FPS_50 },
+    { 1, INPUT_VIDEO_FORMAT_2160P_60,    3840, 2160,  API_VEGA3301_CAP_RESOLUTION_3840x2160, API_VEGA330X_RESOLUTION_1920x1080, 1000, 60000, API_VEGA3301_CAP_FPS_60 },
+};
+
+/* For a given vegas format and framerate, return a record with translations into OBE speak. */
+const struct obe_to_vega_video *lookupVegaCaptureResolution(int std, int framerate, int interlaced)
+{
+	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
+		const struct obe_to_vega_video *fmt = &video_format_tab[i];
+		if (fmt->vegaCaptureResolution == std && fmt->vegaFramerate == framerate && fmt->progressive == !interlaced) {
+			return fmt;
+		}
+	}
+
+	return NULL;
+}
+
+const struct obe_to_vega_video *lookupVegaStandardByResolution(int width, int height, int framerate)
+{
+	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
+		const struct obe_to_vega_video *fmt = &video_format_tab[i];
+		if (fmt->width == width && fmt->height == height && fmt->vegaFramerate == framerate) {
+			return fmt;
+		}
+	}
+
+	return NULL;
+}
+
+int lookupVegaFramerate(int num, int den, API_VEGA330X_FPS_E *fps)
+{
+	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
+		const struct obe_to_vega_video *fmt = &video_format_tab[i];
+		if (fmt->timebase_num == num && fmt->timebase_den == den) {
+			*fps = (API_VEGA330X_FPS_E)fmt->vegaFramerate;
+                        return 0; /* Success */
+		}
+	}
+
+	return -1; /* Error */
 }
 
 #endif /* #if HAVE_VEGA330X_H */
