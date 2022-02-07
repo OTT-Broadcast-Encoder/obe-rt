@@ -202,6 +202,7 @@ typedef struct
     int num_channels; /* set if channel layout is 0 */
     int sample_rate;
     int sdi_audio_pair; /* 1-8 */
+    int dialnorm; /* 0 to -31 - AC3 specific */
 
     /* Raw Audio */
     int sample_format;

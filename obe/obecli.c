@@ -174,6 +174,7 @@ static const char * stream_opts[] = { "action", "format",
                                       "audio-offset", /* 43 */
                                       "video-codec", /* 44 */
                                       "tuning-name", /* 45 */
+                                      "dialnorm", /* 46 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
@@ -772,6 +773,7 @@ static int set_stream( char *command, obecli_command_t *child )
             const char *audio_offset = obe_get_option( stream_opts[43], opts );
             const char *video_codec = obe_get_option( stream_opts[44], opts );
             const char *tuning_name  = obe_get_option( stream_opts[45], opts );
+            const char *dialnorm  = obe_get_option( stream_opts[46], opts );
 
             int video_codec_id = 0; /* AVC */
             if (video_codec) {
@@ -1033,6 +1035,12 @@ extern char g_video_encoder_tuning_name[64];
                 FAIL_IF_ERROR( mono_channel && check_enum_value( mono_channel, mono_channels ) < 0,
                               "Invalid Mono channel selection\n" );
 
+                int i_dialnorm = -31;
+                if (dialnorm) {
+                    i_dialnorm = atoi(dialnorm);
+                }
+                FAIL_IF_ERROR(((i_dialnorm < -31) || (i_dialnorm > 0)), "Invalid Dialnorm\n");
+
                 if( action )
                     parse_enum_value( action, stream_actions, &cli.output_streams[output_stream_id].stream_action );
                 if( format )
@@ -1074,6 +1082,7 @@ extern char g_video_encoder_tuning_name[64];
                         parse_enum_value( aac_encap, aac_encapsulations, &cli.output_streams[output_stream_id].aac_opts.latm_output );
                 }
 
+                cli.output_streams[output_stream_id].audio_metadata.dialnorm = i_dialnorm;
                 cli.output_streams[output_stream_id].bitrate = obe_otoi( bitrate, default_bitrate );
                 cli.output_streams[output_stream_id].sdi_audio_pair = obe_otoi( sdi_audio_pair, cli.output_streams[output_stream_id].sdi_audio_pair );
                 if( channel_map )
