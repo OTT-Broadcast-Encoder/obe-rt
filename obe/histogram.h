@@ -225,7 +225,13 @@ static __inline__ int ltn_histogram_interval_update_with_value(struct ltn_histog
 		return -1;
 	}
 
+	struct timeval now;
+	gettimeofday(&now, NULL);
+
+	ctx->intervalLast = now; /* Implicit struct copy. */
+
 	struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, diffMs);
+	bucket->lastUpdate = now; /* Implicit struct copy. */
 	bucket->count++;
 
 	return diffMs;
