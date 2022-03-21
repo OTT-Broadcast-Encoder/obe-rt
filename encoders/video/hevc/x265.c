@@ -1218,7 +1218,7 @@ printf("Restarting codec with new params ... done\n");
 					}
 #endif /* MEASURE_CODEC_LATENCY */
 
-#endif
+#endif /* SKIP_ENCODE */
 					if (ret > 0) {
 						x265_picture_analyze_stats(ctx, ctx->hevc_picture_out);
 					}
