@@ -28,21 +28,21 @@ static int transmit_scte35_section_to_muxer(struct vanc_processor_s *ctx, uint8_
 	coded_frame->random_access            = 1;
 	memcpy(coded_frame->data, section, section_length);
 
-        const char *s = obe_ascii_datetime();
+	const char *s = obe_ascii_datetime();
 
-	/* TODO: TOne this down in future builds */
-        printf(MODULE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
-                s,
-                coded_frame->real_pts,
-                coded_frame->real_pts / 300,
-                (coded_frame->real_pts / 300) + (10 * 90000));
+	/* TODO: Tone this down in future builds */
+	printf(MODULE_PREFIX "%s - Sending SCTE35 with PCR %" PRIi64 " / PTS %" PRIi64 " / Mux-PTS is %" PRIi64 "\n",
+			s,
+			coded_frame->real_pts,
+			coded_frame->real_pts / 300,
+			(coded_frame->real_pts / 300) + (10 * 90000));
 
-        printf(MODULE_PREFIX "%s -                                   / DTS %" PRIi64 " / Mux-DTS is %" PRIi64 "\n",
-                s,
-                coded_frame->real_dts / 300,
-                (coded_frame->real_dts / 300) + (10 * 90000));
+	printf(MODULE_PREFIX "%s -                                   / DTS %" PRIi64 " / Mux-DTS is %" PRIi64 "\n",
+			s,
+			coded_frame->real_dts / 300,
+			(coded_frame->real_dts / 300) + (10 * 90000));
 
-        free((char *)s);
+	free((char *)s);
 
 	add_to_queue(ctx->mux_queue, coded_frame);
 
