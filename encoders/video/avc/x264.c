@@ -265,6 +265,7 @@ static int x264_image_compare(x264_image_t *a, x264_image_t *b)
 }
 #endif
 
+#if 0
 static void x264_picture_free(x264_picture_t *pic)
 {
 	free(pic->img.plane[0]);
@@ -307,6 +308,7 @@ static x264_picture_t *x264_picture_copy(x264_picture_t *pic)
 
 	return p;
 }
+#endif
 
 static void _monitor_bps(obe_vid_enc_params_t *enc_params, int lengthBytes)
 {
