@@ -789,8 +789,11 @@ static int set_stream( char *command, obecli_command_t *child )
 #endif
 #if HAVE_X265_H
                 else
-                if (strcasecmp(video_codec, "HEVC") == 0)
+                if (strcasecmp(video_codec, "HEVC") == 0) {
                     video_codec_id = 1; /* HEVC */
+                    /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
+                    g_sei_timestamping = 1;
+                }
 #endif
 #if HAVE_VA_VA_H
                 else
