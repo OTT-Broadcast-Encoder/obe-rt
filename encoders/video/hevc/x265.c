@@ -1249,6 +1249,9 @@ printf("Restarting codec with new params ... done\n");
 				continue;
 			}
 
+			/* Send the compressed nals down the workflow.
+			 * Also, take care of any associated picture metadata.
+			 */
 			if (ret > 0) {
 				_process_nals(ctx, arrival_time);
 			} /* if nal_bytes > 0 */
