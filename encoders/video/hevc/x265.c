@@ -133,21 +133,6 @@ struct context_s
 	uint64_t      raw_frame_count;
 };
 
-#if 0
-static const char *sliceTypeLookup(uint32_t type)
-{
-	switch(type) {
-	case X265_TYPE_AUTO: return "X265_TYPE_AUTO";
-	case X265_TYPE_IDR:  return "X265_TYPE_IDR";
-	case X265_TYPE_I:    return "X265_TYPE_I";
-	case X265_TYPE_P:    return "X265_TYPE_P";
-	case X265_TYPE_BREF: return "X265_TYPE_BREF";
-	case X265_TYPE_B:    return "X265_TYPE_B";
-	default:             return "UNKNOWN";
-	}
-}
-#endif
-
 /* TODO: Duplicated from video.c */
 typedef struct
 {
