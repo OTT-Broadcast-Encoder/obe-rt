@@ -66,6 +66,9 @@ static int vancprocessor_cb_SCTE_104(void *callback_context, struct klvanc_conte
 
 	if (m->opID == 0xFFFF /* Multiple Operation Message */) {
 		struct splice_entries results;
+		/* Take the PTS from the coded frame, output from our codec, build a SCTE35 message
+		 * for that timestamp. Send it to the muxer.
+		 */
 		/* Note, we add 10 second to the PTS to compensate for TS_START added by libmpegts */
 		int r = scte35_generate_from_scte104(pkt, &results,
 						     (ctx->cf->real_pts / 300) + (10 * 90000));
@@ -92,6 +95,9 @@ static struct klvanc_callbacks_s callbacks =
 	.scte_104 = vancprocessor_cb_SCTE_104,
 };
 
+/* Setup a KLVanc parsing context, to accept some SCTE104 input
+ * We'll use this to convert to SCTE35.
+ */
 int vancprocessor_alloc(struct vanc_processor_s **p, obe_queue_t *mux_queue, int outputStreamId, obe_coded_frame_t *cf)
 {
 #if LOCAL_DEBUG
@@ -137,6 +143,9 @@ void vancprocessor_free(struct vanc_processor_s *ctx)
 	free(ctx);
 }
 
+/* Take VANC messages, that are pre-filter before here, for SCTE104.
+ * Push them into the parser and collect the SCTE35 in our callback above.
+ */
 int vancprocessor_write(struct vanc_processor_s *ctx, unsigned short arrayLengthWords, unsigned short *array, int lineNr)
 {
 #if LOCAL_DEBUG
