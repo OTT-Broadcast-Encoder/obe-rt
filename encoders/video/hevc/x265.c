@@ -24,6 +24,7 @@
 
 #include "common/common.h"
 #include "encoders/video/video.h"
+#include "encoders/codec_metadata.h"
 #include <libavutil/mathematics.h>
 #include <x265.h>
 #include <libklscte35/scte35.h>
@@ -36,6 +37,8 @@
 #define SKIP_ENCODE 0
 
 #define MESSAGE_PREFIX "[x265]:"
+
+extern int helper_vancprocessor_scte104(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item, obe_coded_frame_t *cf);
 
 int g_x265_nal_debug = 0;
 int g_x265_monitor_bps = 0;
@@ -129,35 +132,6 @@ struct context_s
 
 	uint64_t      raw_frame_count;
 };
-
-struct userdata_s
-{
-	struct avfm_s avfm;
-	struct avmetadata_s metadata;
-};
-
-static struct userdata_s *userdata_calloc()
-{
-	struct userdata_s *ud = calloc(1, sizeof(*ud));
-	return ud;
-}
-
-static int userdata_set_avfm(struct userdata_s *ud, struct avfm_s *s)
-{
-	memcpy(&ud->avfm, s, sizeof(struct avfm_s));
-	return 0;
-}
-
-static int userdata_set_avmetadata(struct userdata_s *ud, struct avmetadata_s *s)
-{
-	avmetadata_clone(&ud->metadata, s);
-	return 0;
-}
-
-static void userdata_free(struct userdata_s *ud)
-{
-	free(ud);
-}
 
 #if 0
 static const char *sliceTypeLookup(uint32_t type)
@@ -429,7 +403,7 @@ printf("plane%d num_interleaved %d width %d height %d\n", i, num_interleaved, wi
 /* Convert a obe_raw_frame_t into a x264_picture_t struct.
  * Incoming frame is colorspace YUV420P.
  */
-static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struct userdata_s *ud, obe_raw_frame_t *rf)
+static int convert_obe_to_x265_pic(struct context_s *ctx, x265_picture *p, struct opaque_ctx_s *ud, obe_raw_frame_t *rf)
 {
 	obe_image_t *img = &rf->img;
 	int count = 0, idx = 0;
@@ -596,18 +570,13 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	}
 
 	static int64_t last_hw_pts = 0;
-	struct userdata_s *out_ud = ctx->hevc_picture_out->userData; 
+	struct opaque_ctx_s *out_ud = ctx->hevc_picture_out->userData; 
 	if (out_ud) {
 		/* Make sure we push the original hardware timing into the new frame. */
 		memcpy(&cf->avfm, &out_ud->avfm, sizeof(struct avfm_s));
 
 		cf->pts = out_ud->avfm.audio_pts;
 		last_hw_pts = out_ud->avfm.audio_pts;
-#if 0
-		userdata_free(out_ud);
-		out_ud = NULL;
-		ctx->hevc_picture_out->userData = 0;
-#endif
 	} else {
 		//fprintf(stderr, MESSAGE_PREFIX " missing pic out userData\n");
 		cf->pts = last_hw_pts;
@@ -677,7 +646,9 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	if (g_x265_nal_debug & 0x04)
 		coded_frame_print(cf);
 
-	/* TODO: Add the SCTE35 changes to compute codec latency, patch the SCTE35 etc. */
+	/* Process any attached metadata.
+	 * Eg. Handle the SCTE104 to 35 conversion, with the right timing, batsed on video codec latency.
+	 */
 	if (out_ud && out_ud->metadata.count > 0) {
 		/* We need to process any associated metadata before we destroy the frame. */
 
@@ -686,13 +657,9 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 
 			struct avmetadata_item_s *e = out_ud->metadata.array[i];
 			switch (e->item_type) {
-			/* TODO: Add support for AVMETADATA_VANC_SCTE104 */
-#if 0
-/* Deprecated */
-			case AVMETADATA_SECTION_SCTE35:
-				transmit_scte35_section_to_muxer(ctx->enc_params, e, cf, g_frame_duration);
+            case AVMETADATA_VANC_SCTE104:
+				helper_vancprocessor_scte104(ctx->enc_params, e, cf);
 				break;
-#endif
 			default:
 				printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
 			}
@@ -718,7 +685,7 @@ static int dispatch_payload(struct context_s *ctx, const unsigned char *buf, int
 	}
 	
 	if (out_ud) {
-		userdata_free(out_ud);
+		codec_metadata_free(out_ud);
 		out_ud = NULL;
 		ctx->hevc_picture_out->userData = 0;
 	}
@@ -1102,7 +1069,12 @@ static void *x265_start_encoder( void *ptr )
 		//printf(MESSAGE_PREFIX " popped a raw frame[%" PRIu64 "] -- pts %" PRIi64 "\n", ctx->raw_frame_count, rf->avfm.audio_pts);
 #endif
 
-		struct userdata_s *ud = userdata_calloc();
+		/* Allocate an opaque struct, add metadata to this and attached
+		 * this to the frame we're passing to the codec.
+		 * We'll extract the metadata when the frame returns form the codec.
+		 * for SCTE and other processing.
+		 */
+		struct opaque_ctx_s *ud = codec_metadata_alloc();
 
 		/* convert obe_frame_t into x264 friendly struct.
 		 * Bundle up and incoming SEI etc, into the userdata context
@@ -1115,8 +1087,8 @@ static void *x265_start_encoder( void *ptr )
 		ctx->hevc_picture_in->userData = ud;
 
 		/* Cache the upstream timing information in userdata. */
-		userdata_set_avfm(ud, &rf->avfm);
-		userdata_set_avmetadata(ud, &rf->metadata);
+		codec_metadata_set_avfm(ud, &rf->avfm);
+		codec_metadata_set_avmetadata(ud, &rf->metadata);
 
 		/* If the AFD has changed, then change the SAR. x264 will write the SAR at the next keyframe
 		 * TODO: allow user to force keyframes in order to be frame accurate.
