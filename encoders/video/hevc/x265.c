@@ -1038,10 +1038,6 @@ static void *x265_start_encoder( void *ptr )
 			pthread_mutex_lock(&ctx->h->enc_smoothing_queue.mutex);
 			ctx->h->enc_smoothing_buffer_complete = 0;
 			pthread_mutex_unlock(&ctx->h->enc_smoothing_queue.mutex);
-#if 0
-			fprintf(stderr, MESSAGE_PREFIX " Speedcontrol reset\n");
-			x264_speedcontrol_sync( s, enc_params->avc_param.sc.i_buffer_size, enc_params->avc_param.sc.f_buffer_init, 0 );
-#endif
 			ctx->h->video_encoder_drop = 0;
 		}
 		pthread_mutex_unlock(&ctx->h->drop_mutex);
