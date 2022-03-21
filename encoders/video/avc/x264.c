@@ -27,6 +27,7 @@
 #include "common/common.h"
 #include "common/vancprocessor.h"
 #include "encoders/video/video.h"
+#include "encoders/codec_metadata.h"
 #include <libavutil/mathematics.h>
 #include <libklscte35/scte35.h>
 
@@ -42,12 +43,6 @@
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
 int g_x264_nal_debug = 0;
-
-struct opaque_ctx_s
-{
-	struct avfm_s avfm;
-	struct avmetadata_s metadata;
-};
 
 #if DEV_DOWN_UP
 #include <libavutil/pixfmt.h>
@@ -397,8 +392,7 @@ void scte35_update_pts_offset(struct avmetadata_item_s *item, int64_t offset)
 /* Use some helper loic to parse a VANC SCTE104 message, convert to SCTE35 and ship it to the muxer
  * With the correct timestamps.
  */
-static int helper_vancprocessor_scte104(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item,
-	obe_coded_frame_t *cf, int64_t frame_duration)
+int helper_vancprocessor_scte104(obe_vid_enc_params_t *enc_params, struct avmetadata_item_s *item, obe_coded_frame_t *cf)
 {
 	unsigned short  arrLengthWords = item->dataLengthBytes / 2;
 	unsigned short *arr = (unsigned short *)item->data;
@@ -414,7 +408,6 @@ static int helper_vancprocessor_scte104(obe_vid_enc_params_t *enc_params, struct
 	 * destroy the vanc parser.
 	 */
 
-	/* TODO: Replicate this minimal approach into X265. */
 	struct vanc_processor_s *v;
 	vancprocessor_alloc(&v, &enc_params->h->mux_queue, item->outputStreamId, cf);
 	vancprocessor_write(v, arrLengthWords, arr, item->lineNr);
@@ -792,7 +785,7 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
         /* convert obe_frame_t into x264 friendly struct */
         if( convert_obe_to_x264_pic( &pic, raw_frame ) < 0 )
         {
-printf("Malloc failed\n");
+            printf("Malloc failed\n");
             syslog( LOG_ERR, "Malloc failed\n" );
             break;
         }
@@ -802,14 +795,18 @@ printf("Malloc failed\n");
 
         current_raw_frame_pts = raw_frame->pts;
 
-        struct opaque_ctx_s *opaque = calloc(1, sizeof(struct opaque_ctx_s));
+        /* Allocate an opaque struct that we'll attach to a frame and pass to the
+         * codec. The opaque will be returned to us later.
+         * We'll hold timing and scte metadata in the opaque.
+         */
+        struct opaque_ctx_s *opaque = codec_metadata_alloc();
         if (!opaque) {
             printf("Malloc failed\n");
             syslog(LOG_ERR, "Malloc failed\n");
             break;
         }
-        memcpy(&opaque->avfm, &raw_frame->avfm, sizeof(raw_frame->avfm));
-        avmetadata_clone(&opaque->metadata, &raw_frame->metadata);
+        codec_metadata_set_avfm(opaque, &raw_frame->avfm);
+        codec_metadata_set_avmetadata(opaque, &raw_frame->metadata);
 
 #if 0
         if (raw_frame->dup)
@@ -1165,14 +1162,8 @@ if (fh)
                     struct avmetadata_item_s *e = opaque->metadata.array[i];
                     switch (e->item_type) {
                     case AVMETADATA_VANC_SCTE104:
-                        helper_vancprocessor_scte104(enc_params, e, coded_frame, frame_duration);
+                        helper_vancprocessor_scte104(enc_params, e, coded_frame);
                         break;
-#if 0
-/* Deprecated */
-                    case AVMETADATA_SECTION_SCTE35:
-                        transmit_scte35_section_to_muxer(enc_params, e, coded_frame, frame_duration);
-                        break;
-#endif
                     default:
                         printf("%s() warning, no handling of item type 0x%x\n", __func__, e->item_type);
                     }
@@ -1198,7 +1189,7 @@ if (fh)
 #endif
                 add_to_queue( &h->enc_smoothing_queue, coded_frame );
             }
-            free(pic_out.opaque);
+            codec_metadata_free(pic_out.opaque);
 
         } /* if frame_size */
      } /* While(1) Main loop */
