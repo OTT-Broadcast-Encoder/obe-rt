@@ -1218,7 +1218,7 @@ printf("Restarting codec with new params ... done\n");
 #define MEASURE_CODEC_LATENCY 0
 
 #if MEASURE_CODEC_LATENCY
-					printf("audio pts going in %" PRIi64 ", pts %" PRIi64 "\n",
+					printf("x264 avfm/audio pts going in %" PRIi64 ", pts %" PRIi64 "\n",
 						ud->avfm.audio_pts, ctx->hevc_picture_in->pts);
 #endif
 
@@ -1228,7 +1228,7 @@ printf("Restarting codec with new params ... done\n");
 					if (ret > 0 && ctx->hevc_picture_out) {
 						struct userdata_s *out_ud = ctx->hevc_picture_out->userData;
 						if (out_ud) {
-							printf("audio pts coming out in %" PRIi64
+							printf("x264 avfm/audio pts coming out in %" PRIi64
 								" (diff %" PRIi64 "), out pts %" PRIi64 "\n",
 								out_ud->avfm.audio_pts,
 								rf->avfm.audio_pts - out_ud->avfm.audio_pts,
