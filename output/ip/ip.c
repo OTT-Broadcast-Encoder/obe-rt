@@ -182,9 +182,15 @@ static void close_output( void *handle )
 #if DO_SET_VARIABLE
 int g_udp_output_drop_next_video_packet = 0;
 int g_udp_output_drop_next_audio_packet = 0;
+int g_udp_output_drop_next_pat_packet = 0;
+int g_udp_output_drop_next_pmt_packet = 0;
 int g_udp_output_drop_next_packet = 0;
+int g_udp_output_mangle_next_pmt_packet = 0;
+int g_udp_output_scramble_next_video_packet = 0;
 int g_udp_output_stall_packet_ms = 0;
 int g_udp_output_latency_alert_ms = 0;
+int g_udp_output_tei_next_packet = 0;
+int g_udp_output_bad_sync_next_packet = 0;
 #endif
 
 static void *open_output( void *ptr )
@@ -285,26 +291,124 @@ static void *open_output( void *ptr )
                    av_buffer_unref( &muxed_data[i] );
                    continue;
                 }
+                if (g_udp_output_bad_sync_next_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        printf("Setting bad sync on packet %d\n", g_udp_output_bad_sync_next_packet--);
+                        /* Mangle the header, flip the pid so the decoder can't decode it. */
+                        *(q + 0) = 0x46;
+                        if (g_udp_output_bad_sync_next_packet <= 0) {
+                            g_udp_output_bad_sync_next_packet = 0;
+                            break;
+                        }
+                    }
+                }
+                if (g_udp_output_tei_next_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        printf("Setting TEI on packet %d\n", g_udp_output_tei_next_packet--);
+                        /* Mangle the header, flip the pid so the decoder can't decode it. */
+                        *(q + 1) |= 0x80;
+                        if (g_udp_output_tei_next_packet <= 0) {
+                            g_udp_output_tei_next_packet = 0;
+                            break;
+                        }
+                    }
+                }
+                if (g_udp_output_drop_next_pat_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0) {
+                            printf("Dropping pat packet %d, pid = 0x%04x\n", g_udp_output_drop_next_pat_packet, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 1) |= 0xc0;
+                            *(q + 2) |= 0x40;
+                            g_udp_output_drop_next_pat_packet--;
+                        }
+                    }
+                }
+                if (g_udp_output_drop_next_pmt_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0x30) {
+                            printf("Dropping pmt packet %d, pid = 0x%04x\n", g_udp_output_drop_next_pmt_packet, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 1) |= 0xc0;
+                            *(q + 2) |= 0x40;
+                            g_udp_output_drop_next_pmt_packet--;
+                        }
+                    }
+                }
+                if (g_udp_output_mangle_next_pmt_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0x30) {
+                            printf("Mangle pmt packet %d, pid = 0x%04x\n", g_udp_output_mangle_next_pmt_packet--, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 9) = 0xff;
+                            if (g_udp_output_mangle_next_pmt_packet <= 0) {
+                                g_udp_output_mangle_next_pmt_packet = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (g_udp_output_scramble_next_video_packet) {
+                    unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0x31) {
+                            printf("Scramble video packet %d, pid = 0x%04x\n", g_udp_output_scramble_next_video_packet--, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 3) |= 0xc0; /* Set scramble to not-scrambled */
+                            if (g_udp_output_scramble_next_video_packet <= 0) {
+                                g_udp_output_scramble_next_video_packet = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
                 if (g_udp_output_drop_next_video_packet) {
                     unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
-                    int packetpid = (*(p + 1) << 8 | *(p + 2)) & 0x1fff;
-                    if (packetpid == 0x31) {
-                       printf("Dropping packet %d, pid = 0x%04x\n", g_udp_output_drop_next_video_packet, packetpid);
-                       /* Mangle the header, flip the pid so the decoder can't decode it. */
-                       *(p + 1) |= 0xc0;
-                       *(p + 2) |= 0x40;
-                       g_udp_output_drop_next_video_packet--;
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0x31) {
+                            printf("Dropping video packet %d, pid = 0x%04x\n", g_udp_output_drop_next_video_packet--, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 1) |= 0xc0;
+                            *(q + 2) |= 0x40;
+                            if (g_udp_output_drop_next_video_packet <= 0) {
+                                g_udp_output_drop_next_video_packet = 0;
+                                break;
+                            }
+                        }
                     }
                 }
                 if (g_udp_output_drop_next_audio_packet) {
                     unsigned char *p = &muxed_data[i]->data[7*sizeof(int64_t)];
-                    int packetpid = (*(p + 1) << 8 | *(p + 2)) & 0x1fff;
-                    if (packetpid == 0x32) {
-                       printf("Dropping packet %d, pid = 0x%04x\n", g_udp_output_drop_next_audio_packet, packetpid);
-                       /* Mangle the header, flip the pid so the decoder can't decode it. */
-                       *(p + 1) |= 0xc0;
-                       *(p + 2) |= 0x40;
-                       g_udp_output_drop_next_audio_packet--;
+                    for (int j = 0; j < 7; j++) {
+                        unsigned char *q = p + (j * 188);
+                        int packetpid = (*(q + 1) << 8 | *(q + 2)) & 0x1fff;
+                        if (packetpid == 0x32) {
+                            printf("Dropping audio packet %d, pid = 0x%04x\n", g_udp_output_drop_next_audio_packet--, packetpid);
+                            /* Mangle the header, flip the pid so the decoder can't decode it. */
+                            *(q + 1) |= 0xc0;
+                            *(q + 2) |= 0x40;
+                            if (g_udp_output_drop_next_audio_packet <= 0) {
+                                g_udp_output_drop_next_audio_packet = 0;
+                                break;
+                            }
+                        }
                     }
                 }
 #endif

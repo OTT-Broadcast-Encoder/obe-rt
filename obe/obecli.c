@@ -1336,6 +1336,12 @@ extern int64_t g_mux_smoother_dump;
 extern int g_udp_output_drop_next_video_packet;
 extern int g_udp_output_drop_next_audio_packet;
 extern int g_udp_output_drop_next_packet;
+extern int g_udp_output_drop_next_pat_packet;
+extern int g_udp_output_drop_next_pmt_packet;
+extern int g_udp_output_mangle_next_pmt_packet;
+extern int g_udp_output_scramble_next_video_packet;
+extern int g_udp_output_tei_next_packet;
+extern int g_udp_output_bad_sync_next_packet;
 extern int g_udp_output_stall_packet_ms;
 extern int g_udp_output_latency_alert_ms;
 extern int g_udp_output_bps;
@@ -1462,6 +1468,18 @@ extern time_t g_decklink_missing_video_last_time;
         g_udp_output_drop_next_audio_packet);
     printf("udp_output.drop_next_packet        = %d\n",
         g_udp_output_drop_next_packet);
+    printf("udp_output.drop_next_pat_packet    = %d\n",
+        g_udp_output_drop_next_pat_packet);
+    printf("udp_output.drop_next_pmt_packet    = %d\n",
+        g_udp_output_drop_next_pmt_packet);
+    printf("udp_output.mangle_next_pmt_packet  = %d\n",
+        g_udp_output_mangle_next_pmt_packet);
+    printf("udp_output.scramble_next_video_packet = %d\n",
+        g_udp_output_scramble_next_video_packet);
+    printf("udp_output.tei_next_packet         = %d\n",
+        g_udp_output_tei_next_packet);
+    printf("udp_output.bad_sync_next_packet    = %d\n",
+        g_udp_output_bad_sync_next_packet);
     printf("udp_output.stall_packet_ms         = %d\n",
         g_udp_output_stall_packet_ms);
     printf("udp_output.latency_alert_ms        = %d\n",
@@ -1574,6 +1592,27 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "udp_output.drop_next_packet") == 0) {
         g_udp_output_drop_next_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_pat_packet") == 0) {
+        g_udp_output_drop_next_pat_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_pmt_packet") == 0) {
+        g_udp_output_drop_next_pmt_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.drop_next_pmt_packet") == 0) {
+        g_udp_output_drop_next_pmt_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.mangle_next_pmt_packet") == 0) {
+        g_udp_output_mangle_next_pmt_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.scramble_next_video_packet") == 0) {
+        g_udp_output_scramble_next_video_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.tei_next_packet") == 0) {
+        g_udp_output_tei_next_packet = val;
+    } else
+    if (strcasecmp(var, "udp_output.bad_sync_next_packet") == 0) {
+        g_udp_output_bad_sync_next_packet = val;
     } else
     if (strcasecmp(var, "udp_output.stall_packet_ms") == 0) {
         g_udp_output_stall_packet_ms = val;
