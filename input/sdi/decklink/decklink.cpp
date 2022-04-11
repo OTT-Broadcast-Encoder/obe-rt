@@ -381,7 +381,7 @@ static void convert_colorspace_and_parse_vanc(decklink_ctx_t *decklink_ctx, stru
 	 * ptr instead of passing vbiBufferPtr.
 	 * decoded_words should be atleast 2 * uiWidth.
 	 */
-	uint16_t decoded_words[16384];
+	uint16_t decoded_words[LIBKLVANC_PACKET_MAX_PAYLOAD];
 
 	/* On output each pixel will be decomposed into three 16-bit words (one for Y, U, V) */
 	assert(uiWidth * 6 < sizeof(decoded_words));
