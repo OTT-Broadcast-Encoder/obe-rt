@@ -335,7 +335,7 @@ static void endian_flip_array(uint8_t *buf, int bufSize)
 
 static int _vancparse(struct klvanc_context_s *ctx, uint8_t *sec, int byteCount, int lineNr)
 {
-    unsigned short *arr = (unsigned short *)malloc(byteCount / 2 * sizeof(unsigned short));
+    unsigned short *arr = (unsigned short *)calloc(1, LIBKLVANC_PACKET_MAX_PAYLOAD * sizeof(unsigned short));
     if (arr == NULL)
         return -1;
 
