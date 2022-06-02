@@ -162,7 +162,7 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
 
     if (g_audio_cf_debug && ctx->encoder->output_stream_id == 1) {
         double interval = coded_frame->pts - ctx->lastOutputFramePTS;
-        printf(MODULE "strm %d output pts %13" PRIi64 " size %6d bytes, pts-interval %6.0fticks/%6.2fms\n",
+        printf(MODULE "strm %d output pts %13" PRIi64 " size %6d bytes, pts-interval %6.0fticks /%6.2fms\n",
             ctx->encoder->output_stream_id,
             coded_frame->pts,
             ctx->total_size_bytes,
