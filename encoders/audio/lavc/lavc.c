@@ -54,6 +54,9 @@ struct context_s
 
     int num_frames;
     int total_size_bytes;
+#if AUDIO_DEBUG_ENABLE
+    uint64_t cfQD;
+#endif
 };
 
 typedef struct
@@ -181,6 +184,38 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
     }
 
     ctx->lastOutputFramePTS = coded_frame->pts;
+#if AUDIO_DEBUG_ENABLE
+    ctx->cfQD++;
+
+        /* write post-resamples payload to disk for debug */
+        if (g_audio_cf_debug & 0x80) {
+            char fn[128];
+            sprintf(fn, "/storage/ltn/stoth/audio-debug-cf---%02x-strm-%d-framenr-%012" PRIu64 ".raw",
+                g_audio_cf_debug,
+                ctx->encoder->output_stream_id,
+                ctx->cfQD);
+            printf("Creating %s\n", fn);
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                coded_frame_serializer_write(fh, coded_frame);
+                fclose(fh);
+            }
+        }
+        if (g_audio_cf_debug & 0x80) {
+            char fn[128];
+            sprintf(fn, "/storage/ltn/stoth/audio-debug-comp-%02x-strm-%d-framenr-%012" PRIu64 ".raw",
+                g_audio_cf_debug,
+                ctx->encoder->output_stream_id,
+                ctx->cfQD);
+            printf("Creating %s\n", fn);
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                fwrite(coded_frame->data, 1, coded_frame->len, fh);
+                fclose(fh);
+            }
+        }
+#endif
+
     add_to_queue(&ctx->h->mux_queue, coded_frame);
 
     ctx->cur_pts += ctx->pts_increment;
@@ -208,7 +243,9 @@ static void *aac_start_encoder(void *ptr)
     char is_latm[2];
     uint8_t *audio_planes[8] = { NULL };
     int dst_linesize = -1;
-
+#if AUDIO_DEBUG_ENABLE
+    uint64_t audioFramesDQ = 0;
+#endif
     codec = avcodec_alloc_context3(NULL);
     if (!codec) {
         fprintf(stderr, MODULE "avcodec_alloc_context3 failed\n");
@@ -382,6 +419,9 @@ static void *aac_start_encoder(void *ptr)
         }
 
         raw_frame = ctx->encoder->queue.queue[0];
+#if AUDIO_DEBUG_ENABLE
+        audioFramesDQ++;
+#endif
 #if LOCAL_DEBUG
         if (ctx->encoder->output_stream_id == 1) {
             printf("\n");
@@ -432,6 +472,28 @@ static void *aac_start_encoder(void *ptr)
         }
 
 //printf("swr_convert(avr, planes, %d, data, %d)\n", raw_frame->audio_frame.num_samples, raw_frame->audio_frame.num_samples);
+#if AUDIO_DEBUG_ENABLE
+        /* write pre-resample payload to disk for debug */
+        if (g_audio_cf_debug & 0x80) {
+            char fn[128];
+            sprintf(fn, "/storage/ltn/stoth/audio-debug-pre--%02x-strm-%d-framenr-%012" PRIu64 "-ch%d-samples%d.raw",
+                g_audio_cf_debug,
+                ctx->encoder->output_stream_id,
+                audioFramesDQ,
+                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                raw_frame->audio_frame.num_samples);
+            printf("Creating %s\n", fn);
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                for (int i = 0; i < 8; i++) {
+                    if (audio_planes[i]) {
+                        fwrite(raw_frame->audio_frame.audio_data[i], 4, raw_frame->audio_frame.num_samples, fh);
+                    }
+                }
+                fclose(fh);
+            }
+        }
+#endif
         int count;
         count = swr_convert(avr,
                 (uint8_t **)audio_planes,
@@ -444,6 +506,29 @@ static void *aac_start_encoder(void *ptr)
             syslog(LOG_ERR, MODULE "Sample format conversion failed\n");
             break;
         }
+
+#if AUDIO_DEBUG_ENABLE
+        /* write post-resamples payload to disk for debug */
+        if (g_audio_cf_debug & 0x80) {
+            char fn[128];
+            sprintf(fn, "/storage/ltn/stoth/audio-debug-post-%02x-strm-%d-framenr-%012" PRIu64 "-ch%d-samples%d.raw",
+                g_audio_cf_debug,
+                ctx->encoder->output_stream_id,
+                audioFramesDQ,
+                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                raw_frame->audio_frame.num_samples);
+            printf("Creating %s\n", fn);
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                for (int i = 0; i < 8; i++) {
+                    if (audio_planes[i]) {
+                        fwrite(audio_planes[i], 4, raw_frame->audio_frame.num_samples, fh);
+                    }
+                }
+                fclose(fh);
+            }
+        }
+#endif
 
         /* Push the converted samples into the audio pcm fifo. */
         ret = av_audio_fifo_write(ctx->audio_pcm_fifo, (void **)audio_planes, raw_frame->audio_frame.num_samples);

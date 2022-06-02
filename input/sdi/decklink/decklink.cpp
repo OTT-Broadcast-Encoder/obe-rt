@@ -1225,7 +1225,11 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             static int aidx = 0;
             char fn[256];
             int len = sfc * decklink_opts_->num_channels * (32 / 8);
+#if AUDIO_DEBUG_ENABLE
+            sprintf(fn, "/storage/ltn/stoth/cardindex%d-audio%03d-srf%d.raw", decklink_opts_->card_idx, aidx++, sfc);
+#else
             sprintf(fn, "/tmp/cardindex%d-audio%03d-srf%d.raw", decklink_opts_->card_idx, aidx++, sfc);
+#endif
             FILE *fh = fopen(fn, "wb");
             if (fh) {
                 void *p;

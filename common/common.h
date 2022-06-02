@@ -24,6 +24,11 @@
 #ifndef OBE_COMMON_H
 #define OBE_COMMON_H
 
+#define AUDIO_DEBUG_ENABLE 0
+#if AUDIO_DEBUG_ENABLE
+#pragma message "Remove before flight - AUDIO_DEBUG_ENABLE is active"
+#endif
+
 #include <libavutil/pixfmt.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/common.h>
