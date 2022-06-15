@@ -90,7 +90,7 @@
 
 using namespace std;
 
-const char *vega_sdk_version = VEGA_VERSION;
+const char *vega3301_sdk_version = VEGA_VERSION;
 
 extern int g_decklink_monitor_hw_clocks;
 

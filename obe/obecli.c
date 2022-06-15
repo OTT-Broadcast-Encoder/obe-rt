@@ -2478,7 +2478,7 @@ static void _usage(const char *prog, int exitcode)
     printf("DekTec SDK %s\n", dektec_sdk_version);
 #endif
 #if HAVE_VEGA330X_H
-    printf("Vega 3301 SDK %s\n", vega_sdk_version);
+    printf("Vega 3301 SDK %s\n", vega3301_sdk_version);
 #endif
 
     printf("\n");
