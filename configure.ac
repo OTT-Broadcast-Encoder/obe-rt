@@ -97,11 +97,12 @@ if test "x$HEADER_NDILIB" == "xyes" ; then
 fi
 AM_CONDITIONAL(NDILIB, test x"$HEADER_NDILIB" == x"yes")
 
-AC_CHECK_HEADERS([vega330x.h], HEADER_VEGALIB="yes")
-if test "x$HEADER_VEGALIB" == "xyes" ; then
+# VEGA 3301 support
+AC_CHECK_HEADERS([vega330x.h], HEADER_VEGA3301LIB="yes")
+if test "x$HEADER_VEGA3301LIB" == "xyes" ; then
     LDFLAGS+=" -lvega3301_capture -lvega3301_fpga_lib -lvega330x_venc -lrt "
 fi
-AM_CONDITIONAL(VEGALIB, test x"$HEADER_VEGALIB" == x"yes")
+AM_CONDITIONAL(VEGA3301LIB, test x"$HEADER_VEGA3301LIB" == x"yes")
 
 AC_CHECK_HEADERS([BlueDriver_p.h], HEADER_BLUEFISH444="yes")
 #if test "x$HEADER_LIBX265" == "xyes" ; then

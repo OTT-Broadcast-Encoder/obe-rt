@@ -84,7 +84,7 @@ endif
 if DEKTECLIB
 obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif
-if VEGALIB
+if VEGA3301LIB
 obecli_SOURCES += ../input/sdi/vega/vega-3301.cpp
 obecli_SOURCES += ../input/sdi/vega/vega-3301-misc.cpp
 endif
