@@ -72,7 +72,7 @@
 #include <time.h>
 #include <encoders/video/sei-timestamp.h>
 
-#include "vega.h"
+#include "vega-3301.h"
 
 #define MODULE_PREFIX "[vega]: "
 
