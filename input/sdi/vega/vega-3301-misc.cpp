@@ -35,7 +35,7 @@
 #include <semaphore.h>
 #include <time.h>
 
-#include "vega.h"
+#include "vega-3301.h"
 
 const char *lookupVegaEncodingResolutionName(int v)
 {
