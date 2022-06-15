@@ -104,6 +104,13 @@ if test "x$HEADER_VEGA3301LIB" == "xyes" ; then
 fi
 AM_CONDITIONAL(VEGA3301LIB, test x"$HEADER_VEGA3301LIB" == x"yes")
 
+# VEGA 3311
+AC_CHECK_HEADERS([VEGA3311_cap_types.h], HEADER_VEGA3311LIB="yes")
+if test "x$HEADER_VEGA3311LIB" == "xyes" ; then
+    LDFLAGS+=" -lvega3311_capture -lvega_bqb_venc -lvega3311_fpga_drv -lm30_common -lrt "
+fi
+AM_CONDITIONAL(VEGA3311LIB, test x"$HEADER_VEGA3311LIB" == x"yes")
+
 AC_CHECK_HEADERS([BlueDriver_p.h], HEADER_BLUEFISH444="yes")
 #if test "x$HEADER_LIBX265" == "xyes" ; then
 #    LDFLAGS+=" -lx265 "

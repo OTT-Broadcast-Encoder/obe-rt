@@ -766,8 +766,12 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
         input = dektec_input;
 #endif
 #if HAVE_VEGA330X_H
-    else if (input_device->input_type == INPUT_DEVICE_VEGA)
-        input = vega_input;
+    else if (input_device->input_type == INPUT_DEVICE_VEGA3301)
+        input = vega3301_input;
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+    else if (input_device->input_type == INPUT_DEVICE_VEGA3311)
+        input = vega3311_input;
 #endif
     else if (input_device->input_type == INPUT_DEVICE_V210)
         input = v210_input;
@@ -843,8 +847,12 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
         printf( "Probing device: DekTec input %i. ", input_device->card_idx);
 #endif
 #if HAVE_VEGA330X_H
-    else if (input_device->input_type == INPUT_DEVICE_VEGA)
-        printf( "Probing device: Vega input %i. ", input_device->card_idx);
+    else if (input_device->input_type == INPUT_DEVICE_VEGA3301)
+        printf( "Probing device: Vega3301 input %i. ", input_device->card_idx);
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+    else if (input_device->input_type == INPUT_DEVICE_VEGA3311)
+        printf( "Probing device: Vega3311 input %i. ", input_device->card_idx);
 #endif
     else if (input_device->input_type == INPUT_DEVICE_V210)
         printf( "Probing device: YUV card %i. ", input_device->card_idx);
@@ -1216,8 +1224,12 @@ int obe_start( obe_t *h )
         input = dektec_input;
 #endif
 #if HAVE_VEGA330X_H
-    else if (h->devices[0]->device_type == INPUT_DEVICE_VEGA)
-        input = vega_input;
+    else if (h->devices[0]->device_type == INPUT_DEVICE_VEGA3301)
+        input = vega3301_input;
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+    else if (h->devices[0]->device_type == INPUT_DEVICE_VEGA3311)
+        input = vega3311_input;
 #endif
     else if( h->devices[0]->device_type == INPUT_DEVICE_V210)
         input = v210_input;
@@ -1312,7 +1324,7 @@ int obe_start( obe_t *h )
                 ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x264-encoder");
             }
 #if HAVE_VEGA330X_H
-            else if (ostream->stream_format == VIDEO_HEVC_VEGA)
+            else if (ostream->stream_format == VIDEO_HEVC_VEGA3301)
             {
                 x264_param_t *x264_param = &ostream->avc_param;
                 if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
@@ -1334,7 +1346,36 @@ int obe_start( obe_t *h )
                 memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
                 if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, vega_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
                 {
-                    fprintf( stderr, "Couldn't create vega encode thread\n" );
+                    fprintf( stderr, "Couldn't create vega3301 encode thread\n" );
+                    goto fail;
+                }
+                ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vega-encoder");
+            }
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+            else if (ostream->stream_format == VIDEO_HEVC_VEGA3311)
+            {
+                x264_param_t *x264_param = &ostream->avc_param;
+                if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )
+                {
+                    /* This doesn't need to be particularly accurate since x264 calculates the correct value internally */
+                    x264_param->rc.i_vbv_buffer_size = (double)x264_param->rc.i_vbv_max_bitrate * x264_param->i_fps_den / x264_param->i_fps_num;
+                }
+
+                vid_enc_params = calloc( 1, sizeof(*vid_enc_params) );
+                if( !vid_enc_params )
+                {
+                    fprintf( stderr, "Malloc failed\n" );
+                    goto fail;
+                }
+                vid_enc_params->h = h;
+                vid_enc_params->encoder = h->encoders[h->num_encoders];
+                h->encoders[h->num_encoders]->is_video = 1;
+
+                memcpy(&vid_enc_params->avc_param, &ostream->avc_param, sizeof(x264_param_t));
+                if (pthread_create(&h->encoders[h->num_encoders]->encoder_thread, NULL, vega_obe_encoder.start_encoder, (void*)vid_enc_params) < 0)
+                {
+                    fprintf( stderr, "Couldn't create vega3311 encode thread\n" );
                     goto fail;
                 }
                 ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-vega-encoder");

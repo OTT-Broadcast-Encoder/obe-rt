@@ -181,7 +181,7 @@ static int configureCodec(vega_opts_t *opts)
         vega_ctx_t *ctx = &opts->ctx;
 
         obe_output_stream_t *os = obe_core_get_output_stream_by_index(ctx->h, 0);
-        if (os->stream_format != VIDEO_HEVC_VEGA) {
+        if (os->stream_format != VIDEO_HEVC_VEGA3301) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters\n");
 		return -1;
         }
@@ -983,7 +983,7 @@ static void *vega_probe_stream(void *ptr)
 
 		if (i == 0) {
 			streams[i]->stream_type   = STREAM_TYPE_VIDEO;
-			streams[i]->stream_format = VIDEO_HEVC_VEGA;
+			streams[i]->stream_format = VIDEO_HEVC_VEGA3301;
 			streams[i]->width         = opts->width;
 			streams[i]->height        = opts->height;
 			streams[i]->timebase_num  = opts->timebase_num;
@@ -1012,7 +1012,7 @@ static void *vega_probe_stream(void *ptr)
 
 	device->num_input_streams = num_streams;
 	memcpy(device->input_streams, streams, device->num_input_streams * sizeof(obe_int_input_stream_t**));
-	device->device_type = INPUT_DEVICE_VEGA;
+	device->device_type = INPUT_DEVICE_VEGA3301;
 	memcpy(&device->user_opts, user_opts, sizeof(*user_opts));
 
 	/* add device */
@@ -1067,6 +1067,6 @@ static void *vega_open_input(void *ptr)
 	return NULL;
 }
 
-const obe_input_func_t vega_input = { vega_probe_stream, vega_open_input };
+const obe_input_func_t vega3301_input = { vega_probe_stream, vega_open_input };
 
 #endif /* #if HAVE_VEGA330X_H */

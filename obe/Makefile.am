@@ -88,6 +88,10 @@ if VEGA3301LIB
 obecli_SOURCES += ../input/sdi/vega/vega-3301.cpp
 obecli_SOURCES += ../input/sdi/vega/vega-3301-misc.cpp
 endif
+if VEGA3311LIB
+obecli_SOURCES += ../input/sdi/vega/vega-3311.cpp
+obecli_SOURCES += ../input/sdi/vega/vega-3311-misc.cpp
+endif
 
 if AVFOUNDATION
 obecli_SOURCES += ../input/avfoundation/avf_capture.m

@@ -186,7 +186,8 @@ static const obecli_input_name_t input_names[] =
     { INPUT_DEVICE_V210    , "V210", "V210 Raw Frame Device", "internal" },
     { INPUT_DEVICE_NDI,      "NDI",  "NDI Raw Frame Device", "internal" },
     { INPUT_DEVICE_DEKTEC,   "DekTec", "Dektec DTA-2172 Dual Port Device", "internal" },
-    { INPUT_DEVICE_VEGA,     "vega", "Vega 3301 Quad Port Device", "internal" },
+    { INPUT_DEVICE_VEGA3301, "vega3301", "Vega 3301 Quad Port Device", "internal" },
+    { INPUT_DEVICE_VEGA3311, "vega3311", "Vega 3311 Quad Port Device", "internal" },
     { 0, 0, 0 },
 };
 
@@ -202,7 +203,8 @@ static const obecli_format_name_t format_names[] =
     { VIDEO_HEVC_CPU_AVCODEC, "HEVC",      "High Efficiency Video Coding", "HEVC decoder","avcodec CPU encoder" },
     { VIDEO_HEVC_VAAPI, "HEVC",     "High Efficiency Video Coding", "VAAPI HEVC decoder","vaapi encoder" },
     { VIDEO_HEVC_GPU_NVENC_AVCODEC, "HEVC",     "High Efficiency Video Coding", "NVENC HEVC decoder","nvenc encoder" },
-    { VIDEO_HEVC_VEGA,  "HEVC",      "High Efficiency Video Coding", "Vega decoder", "Vega encoder" },
+    { VIDEO_HEVC_VEGA3301,  "HEVC",      "High Efficiency Video Coding", "Vega3301 decoder", "Vega3301 encoder" },
+    { VIDEO_HEVC_VEGA3311,  "HEVC",      "High Efficiency Video Coding", "Vega3311 decoder", "Vega3311 encoder" },
     { VIDEO_MPEG2,  "MPEG-2",    "MPEG-2 Video",          "FFmpeg MPEG-2 decoder",     "N/A" },
     { AUDIO_PCM,    "PCM",       "PCM (raw audio)",       "N/A",                       "N/A" },
     { AUDIO_MP2,    "MP2",       "MPEG-1 Layer II Audio", "FFmpeg MP2 audio decoder",  "twolame encoder" },

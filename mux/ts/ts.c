@@ -291,7 +291,8 @@ static const int mpegts_stream_info[][3] =
     { VIDEO_AVC,   LIBMPEGTS_VIDEO_AVC,      LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_MPEG2, LIBMPEGTS_VIDEO_MPEG2,    LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_HEVC_X265,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
-    { VIDEO_HEVC_VEGA,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_VEGA3301,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
+    { VIDEO_HEVC_VEGA3311,  LIBMPEGTS_VIDEO_HEVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_AVC_VAAPI,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_AVC_CPU_AVCODEC,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
     { VIDEO_AVC_GPU_VAAPI_AVCODEC,  LIBMPEGTS_VIDEO_AVC,     LIBMPEGTS_STREAM_ID_MPEGVIDEO },
@@ -580,7 +581,7 @@ void *open_muxer( void *ptr )
         }
 
         if (stream_format == VIDEO_AVC || stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_AVC_VAAPI || stream_format == VIDEO_HEVC_VAAPI || stream_format == VIDEO_AVC_GPU_VAAPI_AVCODEC || stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC ||
-            stream_format == VIDEO_AVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC || stream_format == VIDEO_HEVC_VEGA)
+            stream_format == VIDEO_AVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC || stream_format == VIDEO_HEVC_VEGA3301 || stream_format == VIDEO_HEVC_VEGA3311)
         {
             encoder_wait( h, output_stream->output_stream_id );
 
@@ -680,7 +681,7 @@ void *open_muxer( void *ptr )
                 goto end;
             }
         }
-        else if (stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC || stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC || stream_format == VIDEO_HEVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_VEGA)
+        else if (stream_format == VIDEO_HEVC_X265 || stream_format == VIDEO_HEVC_GPU_VAAPI_AVCODEC || stream_format == VIDEO_HEVC_GPU_NVENC_AVCODEC || stream_format == VIDEO_HEVC_CPU_AVCODEC || stream_format == VIDEO_HEVC_VEGA3301 || stream_format == VIDEO_HEVC_VEGA3311)
         {
             if (ts_setup_mpegvideo_stream(w, stream->pid, 51, HEVC_PROFILE_MAIN, 0, 0, 0) < 0) {
                 fprintf(stderr, "[ts] Could not setup HEVC video stream\n");

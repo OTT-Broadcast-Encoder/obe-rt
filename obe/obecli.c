@@ -49,7 +49,10 @@
 extern char *dektec_sdk_version;
 #endif
 #if HAVE_VEGA330X_H
-extern char *vega_sdk_version;
+extern char *vega3301_sdk_version;
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+extern char *vega3311_sdk_version;
 #endif
 
 #define FAIL_IF_ERROR( cond, ... ) FAIL_IF_ERR( cond, "obecli", __VA_ARGS__ )
@@ -115,9 +118,14 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 								"avfoundation-no-available",
 #endif
 #if HAVE_VEGA330X_H
-                                                                "vega",
+                                                                "vega3301",
 #else
-                                                                "vega-not-available",
+                                                                "vega3301-not-available",
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+                                                                "vega3311",
+#else
+                                                                "vega3311-not-available",
 #endif
 								0 };
 static const char * const input_video_formats[]      = { "pal", "ntsc", "720p50", "720p59.94", "720p60", "1080i50", "1080i59.94", "1080i60",
@@ -781,8 +789,16 @@ static int set_stream( char *command, obecli_command_t *child )
                     video_codec_id = 0; /* AVC */
 #if HAVE_VEGA330X_H
                 else
-                if (strcasecmp(video_codec, "HEVC_VEGA") == 0) {
+                if (strcasecmp(video_codec, "HEVC_VEGA3301") == 0) {
                     video_codec_id = 9; /* HEVC */
+                    /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
+                    g_sei_timestamping = 1;
+                }
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+                else
+                if (strcasecmp(video_codec, "HEVC_VEGA3311") == 0) {
+                    video_codec_id = 10; /* HEVC */
                     /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
                     g_sei_timestamping = 1;
                 }
@@ -2455,6 +2471,13 @@ static void _usage(const char *prog, int exitcode)
         "false"
 #endif
     );
+    printf("Supports      Vega 3311: %s\n",
+#if HAVE_VEGA3311_CAP_TYPES_H
+        "true"
+#else
+        "false"
+#endif
+    );
 
     printf("Supports RAW VIA NDISDK: %s\n",
 #if HAVE_PROCESSING_NDI_LIB_H
@@ -2479,6 +2502,9 @@ static void _usage(const char *prog, int exitcode)
 #endif
 #if HAVE_VEGA330X_H
     printf("Vega 3301 SDK %s\n", vega3301_sdk_version);
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+    printf("Vega 3311 SDK %s\n", vega3311_sdk_version);
 #endif
 
     printf("\n");

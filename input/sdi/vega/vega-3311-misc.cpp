@@ -187,4 +187,4 @@ int lookupVegaFramerate(int num, int den, API_VEGA_BQB_FPS_E *fps)
 	return -1; /* Error */
 }
 
-#endif /* #if HAVE_VEGA330X_H */
+#endif /* #if HAVE_VEGA3311_CAP_TYPES_H */

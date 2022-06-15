@@ -45,7 +45,10 @@ typedef struct
 
 //extern const obe_input_func_t lavf_input;
 #if HAVE_VEGA330X_H
-extern const obe_input_func_t vega_input;
+extern const obe_input_func_t vega3301_input;
+#endif
+#if HAVE_VEGA3311_CAP_TYPES_H
+extern const obe_input_func_t vega3311_input;
 #endif
 #if HAVE_DECKLINK
 extern const obe_input_func_t decklink_input;

@@ -38,6 +38,8 @@
  * Can I write into the NV12 pixels pre-encode? (video injection).
  * Enable V210 burnwriter codes pre-encode.
  * 
+ * Increase/test 8 additional audio channels on the 3311.
+ * 
  */
 
 /*****************************************************************************
@@ -156,33 +158,12 @@ typedef struct
 
 } vega_opts_t;
 
-/* Convert VEGAS PCR (SCR format) to a single time base reference. */
-static int64_t convertSCR_to_PCR(uint64_t pcr)
-{
-        /* See VEGA3301_capture.h
-                Syntax                | Bit index | Size
-                --------------------- | --------- | ---------
-                PCR base (90KHz)      | 0         | 33
-                Reserved              | 33        | 6
-                PCR extension (27MHz) | 39        | 9
-         */
-        int64_t clk = 0;
-
-        /* Gather 90Khz base and convert to 27MHz */
-        clk = pcr & (uint64_t)0x1ffffffff;
-        clk *= 300;
-
-        /* Upper 9 bits already 27MHz */
-        clk += ((pcr >> 39) & 0x1ff);
-        return clk;
-}
-
 static int configureCodec(vega_opts_t *opts)
 {
         vega_ctx_t *ctx = &opts->ctx;
 
         obe_output_stream_t *os = obe_core_get_output_stream_by_index(ctx->h, 0);
-        if (os->stream_format != VIDEO_HEVC_VEGA) {
+        if (os->stream_format != VIDEO_HEVC_VEGA3311) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters\n");
 		return -1;
         }
@@ -1015,7 +996,7 @@ static void *vega_probe_stream(void *ptr)
 
 		if (i == 0) {
 			streams[i]->stream_type   = STREAM_TYPE_VIDEO;
-			streams[i]->stream_format = VIDEO_HEVC_VEGA;
+			streams[i]->stream_format = VIDEO_HEVC_VEGA3311;
 			streams[i]->width         = opts->width;
 			streams[i]->height        = opts->height;
 			streams[i]->timebase_num  = opts->timebase_num;
@@ -1044,7 +1025,7 @@ static void *vega_probe_stream(void *ptr)
 
 	device->num_input_streams = num_streams;
 	memcpy(device->input_streams, streams, device->num_input_streams * sizeof(obe_int_input_stream_t**));
-	device->device_type = INPUT_DEVICE_VEGA;
+	device->device_type = INPUT_DEVICE_VEGA3311;
 	memcpy(&device->user_opts, user_opts, sizeof(*user_opts));
 
 	/* add device */
@@ -1099,6 +1080,6 @@ static void *vega_open_input(void *ptr)
 	return NULL;
 }
 
-const obe_input_func_t vega_input = { vega_probe_stream, vega_open_input };
+const obe_input_func_t vega3311_input = { vega_probe_stream, vega_open_input };
 
-#endif /* #if HAVE_VEGA330X_H */
+#endif /* #if HAVE_VEGA3311_CAP_TYPES_H */
