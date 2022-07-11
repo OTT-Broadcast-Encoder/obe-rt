@@ -1,0 +1,12 @@
+
+CFLAGS  = --std=c99 -Wall
+
+all:	audio-deinterleaver
+
+audio-deinterleaver:	audio-deinterleaver.c
+	gcc $(CFLAGS) -Wall $(@).c -o $(@)
+
+clean:
+	rm -f audio-deinterleaver audio-channel0*.wav audio-channel0*.raw
+
+#	./ffmpeg -y -f s32le -ar 48k -ac 2 -i audio-channel00-s32.raw audio-channel00-s32.wav
