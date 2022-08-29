@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <Processing.NDI.Lib.h>
 
 using namespace std;
@@ -105,6 +106,7 @@ typedef struct
 
 
 	/* NDI SDK related */
+	const NDIlib_v3* p_NDILib;
 	NDIlib_recv_instance_t pNDI_recv;
 	struct timeval lastVideoFrameTime;
 	struct timeval currVideoFrameTime;
@@ -243,7 +245,7 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 
 	NDIlib_audio_frame_interleaved_32s_t a_frame;
 	a_frame.p_data = new int32_t[frame->no_samples * frame->no_channels];
-	NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
+	ctx->p_NDILib->NDIlib_util_audio_to_interleaved_32s_v2(frame, &a_frame);
 
 	/* compute destination number of samples */
 	int out_samples = av_rescale_rnd(swr_get_delay(ctx->avr, frame->sample_rate) + frame->no_samples, 48000, frame->sample_rate, AV_ROUND_UP);
@@ -516,29 +518,29 @@ static void *ndi_videoThreadFunc(void *p)
 
 		NDIlib_video_frame_v2_t video_frame;
 		NDIlib_audio_frame_v2_t audio_frame;
-                NDIlib_metadata_frame_t metadata;
+        NDIlib_metadata_frame_t metadata;
 #if 0
 		NDIlib_tally_t tally (true);
-		NDIlib_recv_set_tally(ctx->pNDI_recv, &tally);
+		ctx->p_NDILib->NDIlib_recv_set_tally(ctx->pNDI_recv, &tally);
 #endif
 
 		int timeout = av_rescale_q(1000, ctx->v_timebase, (AVRational){1, 1});
 		timeout = timeout + 500;
 
-		int v = NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout);
+		int v = ctx->p_NDILib->NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout);
 		switch (v) {
 			case NDIlib_frame_type_video:
 				processFrameVideo(opts, &video_frame);
-				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
+				ctx->p_NDILib->NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
 				break;
 			case NDIlib_frame_type_audio:
 				processFrameAudio(opts, &audio_frame);
-				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
+				ctx->p_NDILib->NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
-                        case NDIlib_frame_type_metadata:
-                                printf("Metadata content: %s\n", metadata.p_data);
-                                NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata);
-                                break;
+			case NDIlib_frame_type_metadata:
+				printf("Metadata content: %s\n", metadata.p_data);
+				ctx->p_NDILib->NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata);
+				break;
 			case NDIlib_frame_type_none:
 				printf("Frame time exceeded timeout of: %d\n", timeout);
 				ctx->reset_v_pts = 1;
@@ -649,37 +651,87 @@ static void close_device(ndi_opts_t *opts)
 		swr_free(&ctx->avr);
 
 	if (ctx->pNDI_recv) {
-		NDIlib_recv_destroy(ctx->pNDI_recv);
+		ctx->p_NDILib->NDIlib_recv_destroy(ctx->pNDI_recv);
 	}
 
-	NDIlib_destroy();
+	ctx->p_NDILib->NDIlib_destroy();
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
 
+static int load_ndi_library(ndi_opts_t *opts)
+{
+	char cwd[256] = { 0 };
+
+	printf(MODULE_PREFIX "%s() cwd = %s\n", __func__, getcwd(&cwd[0], sizeof(cwd)));
+	ndi_ctx_t *ctx = &opts->ctx;
+	const char *libname = "libndi.so";
+
+	/* Setup an absolute path to the lib, if needed. */
+	char libpath[256] = { 0 };
+	char *ndilibdir = getenv("NDI_LIB_DIR");
+	if (ndilibdir) {
+		sprintf(libpath, "%s/%s", ndilibdir, libname);
+	} else {
+		sprintf(libpath, "%s", libname);
+	}
+
+	printf(MODULE_PREFIX "Library path %s\n", libpath);
+	void *hNDILib = dlopen(libpath, RTLD_LOCAL | RTLD_LAZY);
+
+	/* Load the library dynamically. */
+	const NDIlib_v3* (*NDIlib_v3_load)(void) = NULL;
+	if (hNDILib)
+		*((void**)&NDIlib_v3_load) = dlsym(hNDILib, "NDIlib_v3_load");
+
+	/* If the library doesn't have a valid function symbol, complain and hard exit. */
+	if (!NDIlib_v3_load) {
+		if (hNDILib) {
+			dlclose(hNDILib);
+		}
+
+		fprintf(stderr, "Unable to locate the NewTek NDI Library, encoder aborting.\n");
+		return -1;
+	}
+
+	/* Lets get all of the DLL entry points */
+	ctx->p_NDILib = NDIlib_v3_load();
+
+	// We can now run as usual
+	if (!ctx->p_NDILib->NDIlib_initialize()) {
+		// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
+		// you can check this directly with a call to NDIlib_is_supported_CPU()
+		fprintf(stderr, "Unable to initialize NDI library");
+		return -1;
+	}
+
+	return 0; /* Success */
+}
+
 static int open_device(ndi_opts_t *opts)
 {
+	ndi_ctx_t *ctx = &opts->ctx;
+
 	printf(MODULE_PREFIX "%s()\n", __func__);
 
-	ndi_ctx_t *ctx = &opts->ctx;
-	printf(MODULE_PREFIX "NDI version: %s\n", NDIlib_version());
-
-	if (!NDIlib_initialize()) {
+	if (load_ndi_library(opts) < 0) {
 		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib\n");
 		return -1;
 	}
 
+	printf(MODULE_PREFIX "NDI version: %s\n", ctx->p_NDILib->NDIlib_version());
+
 	NDIlib_find_create_t find_create;
 	find_create.show_local_sources = true;
 	find_create.p_groups = nullptr;
-	NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2(&find_create);
+	NDIlib_find_instance_t pNDI_find = ctx->p_NDILib->NDIlib_find_create_v2(&find_create);
 	if (!pNDI_find) {
 		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib finder\n");
 		return -1;
 	}
 
 	if (opts->ndi_name != NULL) {
-		printf("Searching for NDI Source name: '%s'\n", opts->ndi_name);
+		printf(MODULE_PREFIX "Searching for NDI Source name: '%s'\n", opts->ndi_name);
 	} else {
 		printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
 	}
@@ -692,11 +744,11 @@ static int open_device(ndi_opts_t *opts)
 			fprintf(stderr, MODULE_PREFIX "No NDI sources detected\n");
 			return -1;
 		}
-		if (!NDIlib_find_wait_for_sources(pNDI_find, 5000 /* ms */)) {
+		if (!ctx->p_NDILib->NDIlib_find_wait_for_sources(pNDI_find, 5000 /* ms */)) {
 			printf("No change to sources found\n");
 			continue;
 		}
-		p_sources = NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
+		p_sources = ctx->p_NDILib->NDIlib_find_get_current_sources(pNDI_find, &sourceCount);
 	}
 
 	for (uint32_t x = 0; x < sourceCount; x++) {
@@ -723,17 +775,17 @@ static int open_device(ndi_opts_t *opts)
 		opts->card_idx = sourceCount - 1;
 
 	/* We now have at least one source, so we create a receiver to look at it. */
-	ctx->pNDI_recv = NDIlib_recv_create_v3();
+	ctx->pNDI_recv = ctx->p_NDILib->NDIlib_recv_create_v3(NULL);
 	if (!ctx->pNDI_recv) {
 		fprintf(stderr, MODULE_PREFIX "Unable to create v3 receiver\n");
 		return -1;
 	}
 
 	printf(MODULE_PREFIX "Found user requested stream, via card_idx %d\n", opts->card_idx);
-	NDIlib_recv_connect(ctx->pNDI_recv, p_sources + opts->card_idx);
+	ctx->p_NDILib->NDIlib_recv_connect(ctx->pNDI_recv, p_sources + opts->card_idx);
 
 	/* We don't need this */
-	NDIlib_find_destroy(pNDI_find);
+	ctx->p_NDILib->NDIlib_find_destroy(pNDI_find);
 
 	/* Detect signal properties */
 	opts->audio_channel_count = 0;
@@ -748,7 +800,7 @@ static int open_device(ndi_opts_t *opts)
 		NDIlib_audio_frame_v2_t audio_frame;
 		NDIlib_metadata_frame_t metadata_frame;
 
-		int ftype = NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000);
+		int ftype = ctx->p_NDILib->NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, NULL, 5000);
 		switch (ftype) {
 			case NDIlib_frame_type_video:
 #if 1
@@ -778,7 +830,7 @@ lastTimestamp = video_frame.timestamp;
 				}
 #endif
 
-				NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
+				ctx->p_NDILib->NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
 				break;
 			case NDIlib_frame_type_audio:
 				opts->audio_channel_samplerate = audio_frame.sample_rate;
@@ -794,19 +846,19 @@ lastTimestamp = video_frame.timestamp;
 				printf("channel_stride_in_bytes = %d\n", audio_frame.channel_stride_in_bytes);
 #endif
 				opts->audio_channel_count = audio_frame.no_channels;
-				NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
+				ctx->p_NDILib->NDIlib_recv_free_audio_v2(ctx->pNDI_recv, &audio_frame);
 				break;
-        		case NDIlib_frame_type_none:
+			case NDIlib_frame_type_none:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_none\n");
 				break;
-        		case NDIlib_frame_type_metadata:
+			case NDIlib_frame_type_metadata:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_metadata\n");
-				NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata_frame);
+				ctx->p_NDILib->NDIlib_recv_free_metadata(ctx->pNDI_recv, &metadata_frame);
 				break;
-        		case NDIlib_frame_type_error:
+			case NDIlib_frame_type_error:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_error\n");
 				break;
-        		case NDIlib_frame_type_status_change:
+			case NDIlib_frame_type_status_change:
 				printf(MODULE_PREFIX "unsupported NDIlib_frame_type_status_change\n");
 				break;
 			default:
