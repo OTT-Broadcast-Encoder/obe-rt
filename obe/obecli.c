@@ -48,7 +48,7 @@
 #if HAVE_DTAPI_H
 extern char *dektec_sdk_version;
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
 extern char *vega3301_sdk_version;
 #endif
 #if HAVE_VEGA3311_CAP_TYPES_H
@@ -117,7 +117,7 @@ static const char * const input_types[]              = { "url", "decklink", "lin
 #else
 								"avfoundation-no-available",
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
                                                                 "vega3301",
 #else
                                                                 "vega3301-not-available",
@@ -787,7 +787,7 @@ static int set_stream( char *command, obecli_command_t *child )
             if (video_codec) {
                 if (strcasecmp(video_codec, "AVC") == 0)
                     video_codec_id = 0; /* AVC */
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
                 else
                 if (strcasecmp(video_codec, "HEVC_VEGA3301") == 0) {
                     video_codec_id = 9; /* HEVC */
@@ -2465,7 +2465,7 @@ static void _usage(const char *prog, int exitcode)
 #endif
     );
     printf("Supports      Vega 3301: %s\n",
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
         "true"
 #else
         "false"
@@ -2500,7 +2500,7 @@ static void _usage(const char *prog, int exitcode)
 #if HAVE_DTAPI_H
     printf("DekTec SDK %s\n", dektec_sdk_version);
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
     printf("Vega 3301 SDK %s\n", vega3301_sdk_version);
 #endif
 #if HAVE_VEGA3311_CAP_TYPES_H

@@ -40,6 +40,7 @@
  * 
  * Increase/test 8 additional audio channels on the 3311.
  * 
+ * Mediainfo not working on ts files
  */
 
 /*****************************************************************************
@@ -82,13 +83,15 @@
 
 #define MODULE_PREFIX "[vega]: "
 
-#define CAP_DBG_LEVEL API_VEGA3311_CAP_DBG_LEVEL_0
+#define DO_10 1
+
+#define CAP_DBG_LEVEL API_VEGA3311_CAP_DBG_LEVEL_3
 
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
 #define VEGA_VERSION STR(VEGA331X_KERNEL_VERSION) "." STR(VEGA331X_MAJOR_VERSION) "." STR(VEGA331X_MINOR_VERSION)
 
-#define MAX_AUDIO_CHANNELS 8
+#define MAX_AUDIO_CHANNELS 16
 #define MAX_AUDIO_PAIRS (MAX_AUDIO_CHANNELS / 2)
 
 using namespace std;
@@ -146,6 +149,7 @@ typedef struct
             int width;
             int height;
             API_VEGA_BQB_RESOLUTION_E       encodingResolution;
+            API_VEGA_BQB_IMAGE_FORMAT_E     eFormat;
             API_VEGA_BQB_FPS_E              fps;
             API_VEGA_BQB_CHROMA_FORMAT_E    chromaFormat;
             API_VEGA_BQB_BIT_DEPTH_E        bitDepth;
@@ -173,7 +177,7 @@ static int configureCodec(vega_opts_t *opts)
         opts->codec.inputMode    = API_VEGA3311_CAP_INPUT_MODE_4CHN;
         opts->codec.inputSource  = API_VEGA3311_CAP_INPUT_SOURCE_SDI;
         opts->codec.sdiLevel     = API_VEGA3311_CAP_SDI_LEVEL_A;
-        opts->codec.audioLayout  = API_VEGA3311_CAP_AUDIO_LAYOUT_7P1;
+        opts->codec.audioLayout  = API_VEGA3311_CAP_AUDIO_LAYOUT_16P0;
         opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV16;
         opts->codec.bitrate_kbps = p->rc.i_bitrate;
         opts->codec.gop_size     = (API_VEGA_BQB_GOP_SIZE_E)p->i_keyint_max;
@@ -194,29 +198,47 @@ static int configureCodec(vega_opts_t *opts)
 		return -1;
         }
 
-//p->i_csp |= X264_CSP_HIGH_DEPTH;
+#if DO_10
+        // Manually enable 10bit.
+        p->i_csp |= X264_CSP_HIGH_DEPTH;
+#endif
 
+// API_VEGA_BQB_IMAGE_FORMAT_E
+// API_VEGA_BQB_IMAGE_FORMAT_NV12           | NV12 4:2:0 8bit
+// API_VEGA_BQB_IMAGE_FORMAT_NV16           | NV16 4:2:2 8bit
+// API_VEGA_BQB_IMAGE_FORMAT_PP01           | 4:2:0 10bit packed
+// API_VEGA_BQB_IMAGE_FORMAT_PP21           | 4:2:2 10bit packed
+//
+//
         if ((p->i_csp & X264_CSP_I420) && ((p->i_csp & X264_CSP_HIGH_DEPTH) == 0)) {
+                /* 4:2:0 8bit via NV12 */
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_420;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_8;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV12;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_NV12;
                 // OK
         } else
         if ((p->i_csp & X264_CSP_I420) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
+                /* 4:2:0 10bit via PP01 */
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_420;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_P010;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_PP01;
         } else
         if ((p->i_csp & X264_CSP_I422) && ((p->i_csp & X264_CSP_HIGH_DEPTH) == 0)) {
+                /* 4:2:2 8bit via NV16 */
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_8;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV16;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_NV16;
                 // NOT ok according to VLC
         } else
         if ((p->i_csp & X264_CSP_I422) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
+                /* 4:2:2 10bit via PP21 */
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_P210;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_PP21;
         } else {
 		fprintf(stderr, MODULE_PREFIX "unable to determine colorspace, i_csp = 0x%x\n", p->i_csp);
 		return -1;
@@ -234,7 +256,7 @@ static int configureCodec(vega_opts_t *opts)
         printf(MODULE_PREFIX "encoder.height       = %d\n", opts->codec.height);
         printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.encodingResolution, lookupVegaEncodingResolutionName(opts->codec.encodingResolution));
         printf(MODULE_PREFIX "encoder.fps          = %d\n", opts->codec.fps);
-        printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaChromaName(opts->codec.chromaFormat));
+        printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaEncodingChromaName(opts->codec.chromaFormat));
         printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
         printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, lookupVegaPixelFormatName(opts->codec.pixelFormat));
         printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
@@ -467,6 +489,8 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
 	vega_ctx_t *ctx = &opts->ctx;
 
+printf("%s()\n", __func__);
+
         API_VEGA_BQB_IMG_T img;
 
         if (st_frame_info->u32BufSize == 0) {
@@ -508,6 +532,7 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420P10LE;
         //img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV422P10LE;
         img.eFormat     = API_VEGA_BQB_IMAGE_FORMAT_NV16;
+        img.eFormat     = opts->codec.eFormat;
 
         if (g_sei_timestamping) {
                 /* Create the SEI for the LTN latency tracking. */
@@ -545,9 +570,9 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                 fprintf(stderr, MODULE_PREFIX "Error: PushImage failed\n");
         }
 
-#if 0
+#if 1
         printf(MODULE_PREFIX "pushed raw video frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 "\n",
-                convertSCR_to_PCR(st_input_info->tCurrentPCR.u64Dword), img.pts);
+                st_input_info->tCurrentPCR.u64Dword, img.pts);
 #endif
 }
 
@@ -612,6 +637,8 @@ static int open_device(vega_opts_t *opts, int probe)
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info;
         API_VEGA3311_CAPTURE_FORMAT_T input_src_info;
 
+        //VEGA3311_CAP_ResetChannel(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx);
+        //sleep(3);
         capret = VEGA3311_CAP_Init(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, CAP_DBG_LEVEL);
         if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
                 fprintf(stderr, MODULE_PREFIX "failed to initialize the capture input\n");
@@ -676,6 +703,8 @@ static int open_device(vega_opts_t *opts, int probe)
                 case API_VEGA3311_CAP_AUDIO_LAYOUT_5P1_SIDE:  printf("\tAudio layouts: 5.1 channel side\n"); break;
                 case API_VEGA3311_CAP_AUDIO_LAYOUT_7P0:       printf("\tAudio layouts: 7.0 channel\n"); break;
                 case API_VEGA3311_CAP_AUDIO_LAYOUT_7P1:       printf("\tAudio layouts: 7.1 channel\n"); break;
+                case API_VEGA3311_CAP_AUDIO_LAYOUT_16P0:      printf("\tAudio layouts: 16.0 channel\n"); break;
+                case API_VEGA3311_CAP_AUDIO_LAYOUT_PASS_THROUGH:      printf("\tAudio layouts: fpga format\n"); break;
                 default:
                         break;
                 }
@@ -801,33 +830,59 @@ static int open_device(vega_opts_t *opts, int probe)
                 ctx->init_params.eCodecType             = API_VEGA_BQB_CODEC_TYPE_HEVC;
                 ctx->init_params.eOutputFmt             = API_VEGA_BQB_STREAM_OUTPUT_FORMAT_ES;
 
-               
+                /* HEVC */
                 ctx->init_params.tHevcParam.eInputMode       = API_VEGA_BQB_INPUT_MODE_DATA;
+                //ctx->init_params.tHevcParam.eInputMode       = API_VEGA_BQB_INPUT_MODE_VIF_SQUARE;
                 ctx->init_params.tHevcParam.eInputPort       = (API_VEGA_BQB_VIF_MODE_INPUT_PORT_E)opts->card_idx; // API_VEGA_BQB_VIF_MODE_INPUT_PORT_A;
                 ctx->init_params.tHevcParam.eRobustMode      = API_VEGA_BQB_VIF_ROBUST_MODE_BLUE_SCREEN;
                 ctx->init_params.tHevcParam.eProfile         = API_VEGA_BQB_HEVC_MAIN422_10_PROFILE;
                 ctx->init_params.tHevcParam.eLevel           = API_VEGA_BQB_HEVC_LEVEL_50;
                 ctx->init_params.tHevcParam.eTier            = API_VEGA_BQB_HEVC_MAIN_TIER;
                 ctx->init_params.tHevcParam.eResolution      = opts->codec.encodingResolution;
-                ctx->init_params.tHevcParam.bInterlace       = opts->codec.interlaced;
                 ctx->init_params.tHevcParam.eAspectRatioIdc  = API_VEGA_BQB_HEVC_ASPECT_RATIO_IDC_1;
+
+//
+// TODO
+//
+//
+                ctx->init_params.tHevcParam.u32SarWidth     = 1920;
+                ctx->init_params.tHevcParam.u32SarHeight    = 1080;
+                ctx->init_params.tHevcParam.bDisableVpsTimingInfoPresent = false;
+                ctx->init_params.tHevcParam.eFormat          = opts->codec.eFormat;
                 ctx->init_params.tHevcParam.eChromaFmt       = opts->codec.chromaFormat;
                 ctx->init_params.tHevcParam.eBitDepth        = opts->codec.bitDepth;
-
+                ctx->init_params.tHevcParam.bInterlace       = opts->codec.interlaced;
+                ctx->init_params.tHevcParam.bDisableSceneChangeDetect       = false;
+// tcrop
+                ctx->init_params.tHevcParam.eTargetFrameRate = opts->codec.fps;
+// tcustomedframerateinfo
+                ctx->init_params.tHevcParam.ePtsMode         = API_VEGA_BQB_PTS_MODE_AUTO;
+                ctx->init_params.tHevcParam.eIDRFrameNum     = API_VEGA_BQB_IDR_FRAME_ALL;
+                //ctx->init_params.tHevcParam.eIDRType         = API_VEGA_BQB_HEVC_IDR_TYPE_W_RADL;
+                ctx->init_params.tHevcParam.eIDRType         = API_VEGA_BQB_HEVC_IDR_TYPE_N_LP;
                 if (opts->codec.bframes) {
-                        ctx->init_params.tHevcParam.eGopType         = API_VEGA_BQB_GOP_IPB;
+                        ctx->init_params.tHevcParam.eGopType = API_VEGA_BQB_GOP_IPB;
                 } else {
-                        ctx->init_params.tHevcParam.eGopType         = API_VEGA_BQB_GOP_IP;
+                        ctx->init_params.tHevcParam.eGopType = API_VEGA_BQB_GOP_IP;
                 }
+// eGopHeirarchy
                 ctx->init_params.tHevcParam.eGopSize         = opts->codec.gop_size;
                 ctx->init_params.tHevcParam.eBFrameNum       = opts->codec.bframes;
-                ctx->init_params.tHevcParam.eTargetFrameRate = opts->codec.fps;
+                ctx->init_params.tHevcParam.bDisableTemporalId = false;
                 ctx->init_params.tHevcParam.eRateCtrlAlgo    = API_VEGA_BQB_RATE_CTRL_ALGO_CBR;
+// u32FillerTriggerLevel
                 ctx->init_params.tHevcParam.u32Bitrate       = opts->codec.bitrate_kbps; /* TODO: We need to drive this from external to the module. */
+// u32MaxVBR
+// u32AveVBR
+// u32MinVBR
+// u32CpbDelay
                 ctx->init_params.tHevcParam.tCoding.bDisableDeblocking  = false;
+// tHdrConfig
                 ctx->init_params.tHevcParam.bEnableUltraLowLatency = false;
                 //ctx->init_params.bDisableVpsTimingInfoPresent = false;
                 //ctx->init_params.tVideoSignalType.bPresentFlag = true;
+
+                //VEGA_BQB_ENC_SetDbgMsgLevel((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx, API_VEGA_BQB_DBG_LEVEL_3);
 
                 if (VEGA_BQB_ENC_IsDeviceModeConfigurable((API_VEGA_BQB_DEVICE_E)opts->brd_idx)) {
                         API_VEGA_BQB_ENCODE_CONFIG_T encode_config;
@@ -857,6 +912,10 @@ static int open_device(vega_opts_t *opts, int probe)
 
                         VEGA_BQB_ENC_ConfigDeviceMode((API_VEGA_BQB_DEVICE_E)opts->brd_idx, &encode_config);
                 }
+
+                API_VEGA_BQB_DESC_T desc = { { 0 } };
+                VEGA_BQB_ENC_InitParamToString(ctx->init_params, &desc);
+                fprintf(stderr, "stoth initial param to string: %s\n", desc.content);
 
 		/* Open the capture hardware here */
 		if (VEGA_BQB_ENC_Init((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx, &ctx->init_params)) {
@@ -899,14 +958,24 @@ static int open_device(vega_opts_t *opts, int probe)
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to enc start\n");
                         return -1;
                 }
-
+                
                 ctx->ch_init_param.eInputMode    = opts->codec.inputMode;
                 ctx->ch_init_param.eInputSource  = opts->codec.inputSource;
                 ctx->ch_init_param.eFormat       = opts->codec.pixelFormat;
                 ctx->ch_init_param.eAudioLayouts = opts->codec.audioLayout;
+
+                printf("capture.eFormat       = %2d %s\n", ctx->ch_init_param.eFormat, lookupVegaPixelFormatName(ctx->ch_init_param.eFormat));
+                printf("capture.eAudioLayouts = %2d %s\n", ctx->ch_init_param.eAudioLayouts, lookupVegaAudioLayoutName(ctx->ch_init_param.eAudioLayouts));
+
+#if 0
+/* Intensional segfault */
+printf("Segfaulting to debug\n");
+char *p = 0;
+printf("%d\n", *p);
+#endif
                 capret = VEGA3311_CAP_Config(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, &ctx->ch_init_param);
                 if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
-                        fprintf(stderr, MODULE_PREFIX "ERROR: failed to enc start\n");
+                        fprintf(stderr, MODULE_PREFIX "ERROR: failed to cap config\n");
                         return -1;
                 }
 

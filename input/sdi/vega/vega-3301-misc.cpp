@@ -1,4 +1,4 @@
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
 
 /*****************************************************************************
  * vega-misc.cpp: Audio/Video from the VEGA encoder cards
@@ -37,7 +37,7 @@
 
 #include "vega-3301.h"
 
-const char *lookupVegaEncodingResolutionName(int v)
+const char *vega3301_lookupVegaEncodingResolutionName(int v)
 {
         switch (v) {
         case API_VEGA330X_RESOLUTION_720x480:           return "API_VEGA330X_RESOLUTION_720x480";
@@ -49,7 +49,7 @@ const char *lookupVegaEncodingResolutionName(int v)
         }
 }
 
-const char *lookupVegaChromaName(int v)
+const char *vega3301_lookupVegaChromaName(int v)
 {
         switch (v) {
         case API_VEGA330X_CHROMA_FORMAT_MONO:           return "API_VEGA330X_CHROMA_FORMAT_MONO";
@@ -60,7 +60,7 @@ const char *lookupVegaChromaName(int v)
         }
 }
 
-const char *lookupVegaBitDepthName(int v)
+const char *vega3301_lookupVegaBitDepthName(int v)
 {
         switch (v) {
         case API_VEGA330X_BIT_DEPTH_8:                  return "API_VEGA330X_BIT_DEPTH_8";
@@ -69,7 +69,7 @@ const char *lookupVegaBitDepthName(int v)
         }
 }
 
-const char *lookupVegaInputModeName(int v)
+const char *vega3301_lookupVegaInputModeName(int v)
 {
         switch (v) {
         case API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD:     return "API_VEGA3301_CAP_INPUT_MODE_1CHN_QFHD";
@@ -78,7 +78,7 @@ const char *lookupVegaInputModeName(int v)
         }
 }
 
-const char *lookupVegaInputSourceName(int v)
+const char *vega3301_lookupVegaInputSourceName(int v)
 {
         switch (v) {
         case API_VEGA3301_CAP_INPUT_SOURCE_SDI:         return "API_VEGA3301_CAP_INPUT_SOURCE_SDI";
@@ -88,7 +88,7 @@ const char *lookupVegaInputSourceName(int v)
         }
 }
 
-const char *lookupVegaSDILevelName(int v)
+const char *vega3301_lookupVegaSDILevelName(int v)
 {
         switch (v) {
         case API_VEGA3301_CAP_SDI_LEVEL_A:              return "API_VEGA3301_CAP_SDI_LEVEL_A";
@@ -97,7 +97,7 @@ const char *lookupVegaSDILevelName(int v)
         }
 }
 
-const char *lookupVegaPixelFormatName(int v)
+const char *vega3301_lookupVegaPixelFormatName(int v)
 {
         switch (v) {
         case API_VEGA3301_CAP_IMAGE_FORMAT_P210:        return "API_VEGA3301_CAP_IMAGE_FORMAT_P210";
@@ -112,7 +112,7 @@ const char *lookupVegaPixelFormatName(int v)
         }
 }
 
-const char *vega_lookupFrameType(API_VEGA330X_FRAME_TYPE_E type)
+const char *vega3301_lookupFrameType(API_VEGA330X_FRAME_TYPE_E type)
 {
         switch (type) {
         case API_VEGA330X_FRAME_TYPE_I: return "I";
@@ -151,7 +151,7 @@ const static struct obe_to_vega_video video_format_tab[] =
 };
 
 /* For a given vegas format and framerate, return a record with translations into OBE speak. */
-const struct obe_to_vega_video *lookupVegaCaptureResolution(int std, int framerate, int interlaced)
+const struct obe_to_vega_video *vega3301_lookupVegaCaptureResolution(int std, int framerate, int interlaced)
 {
 	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
 		const struct obe_to_vega_video *fmt = &video_format_tab[i];
@@ -163,7 +163,7 @@ const struct obe_to_vega_video *lookupVegaCaptureResolution(int std, int framera
 	return NULL;
 }
 
-const struct obe_to_vega_video *lookupVegaStandardByResolution(int width, int height, int framerate)
+const struct obe_to_vega_video *vega3301_lookupVegaStandardByResolution(int width, int height, int framerate)
 {
 	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
 		const struct obe_to_vega_video *fmt = &video_format_tab[i];
@@ -175,7 +175,7 @@ const struct obe_to_vega_video *lookupVegaStandardByResolution(int width, int he
 	return NULL;
 }
 
-int lookupVegaFramerate(int num, int den, API_VEGA330X_FPS_E *fps)
+int vega3301_lookupVegaFramerate(int num, int den, API_VEGA330X_FPS_E *fps)
 {
 	for (unsigned int i = 0; i < (sizeof(video_format_tab) / sizeof(struct obe_to_vega_video)); i++) {
 		const struct obe_to_vega_video *fmt = &video_format_tab[i];
@@ -188,4 +188,4 @@ int lookupVegaFramerate(int num, int den, API_VEGA330X_FPS_E *fps)
 	return -1; /* Error */
 }
 
-#endif /* #if HAVE_VEGA330X_H */
+#endif /* #if HAVE_VEGA3301_CAP_TYPES_H */

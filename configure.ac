@@ -93,14 +93,15 @@ AM_CONDITIONAL(AVFOUNDATION, test x"$HEADER_AVFOUNDATION" == x"yes")
 
 AC_CHECK_HEADERS([Processing.NDI.Lib.h], HEADER_NDILIB="yes")
 if test "x$HEADER_NDILIB" == "xyes" ; then
-    LDFLAGS+=" -lndi "
+#    LDFLAGS+=" -lndi "
+    LDFLAGS+=" "
 fi
 AM_CONDITIONAL(NDILIB, test x"$HEADER_NDILIB" == x"yes")
 
 # VEGA 3301 support
-AC_CHECK_HEADERS([vega330x.h], HEADER_VEGA3301LIB="yes")
+AC_CHECK_HEADERS([VEGA3301_cap_types.h], HEADER_VEGA3301LIB="yes")
 if test "x$HEADER_VEGA3301LIB" == "xyes" ; then
-    LDFLAGS+=" -lvega3301_capture -lvega3301_fpga_lib -lvega330x_venc -lrt "
+    LDFLAGS+=" -lvega3301_capture -lvega3301_fpga_lib -lvega330x_venc -lm31_common -lrt "
 fi
 AM_CONDITIONAL(VEGA3301LIB, test x"$HEADER_VEGA3301LIB" == x"yes")
 

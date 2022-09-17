@@ -765,7 +765,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if (input_device->input_type == INPUT_DEVICE_DEKTEC)
         input = dektec_input;
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
     else if (input_device->input_type == INPUT_DEVICE_VEGA3301)
         input = vega3301_input;
 #endif
@@ -846,7 +846,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     else if (input_device->input_type == INPUT_DEVICE_DEKTEC)
         printf( "Probing device: DekTec input %i. ", input_device->card_idx);
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
     else if (input_device->input_type == INPUT_DEVICE_VEGA3301)
         printf( "Probing device: Vega3301 input %i. ", input_device->card_idx);
 #endif
@@ -1223,7 +1223,7 @@ int obe_start( obe_t *h )
     else if (h->devices[0]->device_type == INPUT_DEVICE_DEKTEC)
         input = dektec_input;
 #endif
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
     else if (h->devices[0]->device_type == INPUT_DEVICE_VEGA3301)
         input = vega3301_input;
 #endif
@@ -1323,7 +1323,7 @@ int obe_start( obe_t *h )
                 }
                 ltnpthread_setname_np(h->encoders[h->num_encoders]->encoder_thread, "obe-x264-encoder");
             }
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
             else if (ostream->stream_format == VIDEO_HEVC_VEGA3301)
             {
                 x264_param_t *x264_param = &ostream->avc_param;

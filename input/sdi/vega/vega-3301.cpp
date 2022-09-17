@@ -1,4 +1,4 @@
-#if HAVE_VEGA330X_H
+#if HAVE_VEGA3301_CAP_TYPES_H
 
 /* Questions:
  *
@@ -199,7 +199,7 @@ static int configureCodec(vega_opts_t *opts)
         opts->codec.width        = p->i_width;
         opts->codec.height       = p->i_height;
 
-        const struct obe_to_vega_video *fmt = lookupVegaStandardByResolution(opts->codec.width, opts->codec.height, API_VEGA3301_CAP_FPS_60);
+        const struct obe_to_vega_video *fmt = vega3301_lookupVegaStandardByResolution(opts->codec.width, opts->codec.height, API_VEGA3301_CAP_FPS_60);
         if (!fmt) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters for specific width, height and framerate\n");
 		return -1;
@@ -207,7 +207,7 @@ static int configureCodec(vega_opts_t *opts)
         opts->codec.encodingResolution = (API_VEGA330X_RESOLUTION_E)fmt->vegaEncodingResolution;
         opts->codec.interlaced = p->b_interlaced;
 
-        if (lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
+        if (vega3301_lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
 		fprintf(stderr, MODULE_PREFIX "unable to query encoder framerate %d, %d\n", p->i_fps_num, p->i_fps_den);
 		return -1;
         }
@@ -241,20 +241,20 @@ static int configureCodec(vega_opts_t *opts)
         }
 
         printf(MODULE_PREFIX "encoder.device       = %d\n", opts->brd_idx);
-        printf(MODULE_PREFIX "encoder.inputsource  = %d '%s'\n", opts->codec.inputSource, lookupVegaInputSourceName(opts->codec.inputSource));
+        printf(MODULE_PREFIX "encoder.inputsource  = %d '%s'\n", opts->codec.inputSource, vega3301_lookupVegaInputSourceName(opts->codec.inputSource));
         printf(MODULE_PREFIX "encoder.inputport    = %d\n", opts->card_idx);
-        printf(MODULE_PREFIX "encoder.sdilevel     = %d '%s'\n", opts->codec.sdiLevel, lookupVegaSDILevelName(opts->codec.sdiLevel));
-        printf(MODULE_PREFIX "encoder.inputmode    = %d '%s'\n", opts->codec.inputMode, lookupVegaInputModeName(opts->codec.inputMode));
+        printf(MODULE_PREFIX "encoder.sdilevel     = %d '%s'\n", opts->codec.sdiLevel, vega3301_lookupVegaSDILevelName(opts->codec.sdiLevel));
+        printf(MODULE_PREFIX "encoder.inputmode    = %d '%s'\n", opts->codec.inputMode, vega3301_lookupVegaInputModeName(opts->codec.inputMode));
         printf(MODULE_PREFIX "encoder.bitrate_kbps = %d\n", opts->codec.bitrate_kbps);
         printf(MODULE_PREFIX "encoder.gop_size     = %d\n", opts->codec.gop_size);
         printf(MODULE_PREFIX "encoder.bframes      = %d\n", opts->codec.bframes);
         printf(MODULE_PREFIX "encoder.width        = %d\n", opts->codec.width);
         printf(MODULE_PREFIX "encoder.height       = %d\n", opts->codec.height);
-        printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.encodingResolution, lookupVegaEncodingResolutionName(opts->codec.encodingResolution));
+        printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.encodingResolution, vega3301_lookupVegaEncodingResolutionName(opts->codec.encodingResolution));
         printf(MODULE_PREFIX "encoder.fps          = %d\n", opts->codec.fps);
-        printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaChromaName(opts->codec.chromaFormat));
-        printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
-        printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, lookupVegaPixelFormatName(opts->codec.pixelFormat));
+        printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, vega3301_lookupVegaChromaName(opts->codec.chromaFormat));
+        printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, vega3301_lookupVegaBitDepthName(opts->codec.bitDepth));
+        printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, vega3301_lookupVegaPixelFormatName(opts->codec.pixelFormat));
         printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
 
         return 0; /* Success */
@@ -442,7 +442,7 @@ static void callback__process_video_coded_frame(API_VEGA330X_HEVC_CODED_PICT_T *
                                 p_pict->dts,
                                 p_pict->u64ItcBase,
                                 p_pict->u32ItcExt,
-                                vega_lookupFrameType(p_pict->eFrameType),
+                                vega3301_lookupFrameType(p_pict->eFrameType),
                                 p_pict->tNalInfo[i].pu8Addr, p_pict->tNalInfo[i].u32Length);
                         int dlen = p_pict->tNalInfo[i].u32Length;
                         if (dlen > 32)
@@ -768,7 +768,7 @@ static int open_device(vega_opts_t *opts, int probe)
 	}
 
 	/* We need to understand how much VANC we're going to be receiving. */
-	const struct obe_to_vega_video *std = lookupVegaCaptureResolution(
+	const struct obe_to_vega_video *std = vega3301_lookupVegaCaptureResolution(
                 input_src_info.eSourceSdiResolution,
                 input_src_info.eSourceSdiFrameRate,
                 input_src_info.bSourceSdiInterlace);
@@ -1069,4 +1069,4 @@ static void *vega_open_input(void *ptr)
 
 const obe_input_func_t vega3301_input = { vega_probe_stream, vega_open_input };
 
-#endif /* #if HAVE_VEGA330X_H */
+#endif /* #if HAVE_VEGA3301_CAP_TYPES_H */

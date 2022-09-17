@@ -37,6 +37,28 @@
 
 #include "vega-3311.h"
 
+const char *lookupVegaAudioLayoutName(API_VEGA3311_CAP_AUDIO_LAYOUT_E v)
+{
+        switch (v) {
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_MONO:                return "Audio layouts: mono";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_STEREO:              return "Audio layouts: stereo";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_2P1:                 return "Audio layouts: 2.1 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_3P0:                 return "Audio layouts: 3.0 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_QUAD:                return "Audio layouts: quadi";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_QUAD_SIDE:           return "Audio layouts: quad side";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_3P1:                 return "Audio layouts: 3.1 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_5P0:                 return "Audio layouts: 5.0 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_5P0_SIDE:            return "Audio layouts: 5.0 channel side";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_5P1:                 return "Audio layouts: 5.1 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_5P1_SIDE:            return "Audio layouts: 5.1 channel side";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_7P0:                 return "Audio layouts: 7.0 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_7P1:                 return "Audio layouts: 7.1 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_16P0:                return "Audio layouts: 16.0 channel";
+        case API_VEGA3311_CAP_AUDIO_LAYOUT_PASS_THROUGH:        return "Audio layouts: fpga format"; 
+        default:                                                return "UNDEFINED"; 
+        }
+}
+
 const char *lookupVegaEncodingResolutionName(int v)
 {
         switch (v) {
@@ -49,14 +71,14 @@ const char *lookupVegaEncodingResolutionName(int v)
         }
 }
 
-const char *lookupVegaChromaName(int v)
+const char *lookupVegaEncodingChromaName(API_VEGA_BQB_CHROMA_FORMAT_E v)
 {
         switch (v) {
-        case API_VENC_CHROMA_FORMAT_MONO:           return "API_VENC_CHROMA_FORMAT_MONO";
-        case API_VENC_CHROMA_FORMAT_420:            return "API_VENC_CHROMA_FORMAT_420";
-        case API_VENC_CHROMA_FORMAT_422:            return "API_VENC_CHROMA_FORMAT_422";
-        case API_VENC_CHROMA_FORMAT_422_TO_420:     return "API_VENC_CHROMA_FORMAT_422_TO_420";
-        default:                                    return "UNDEFINED";
+        case API_VEGA_BQB_CHROMA_FORMAT_MONO:           return "API_VEGA_BQB_CHROMA_FORMAT_MONO";
+        case API_VEGA_BQB_CHROMA_FORMAT_420:            return "API_VEGA_BQB_CHROMA_FORMAT_420";
+        case API_VEGA_BQB_CHROMA_FORMAT_422:            return "API_VEGA_BQB_CHROMA_FORMAT_422";
+        case API_VEGA_BQB_CHROMA_FORMAT_422_TO_420:     return "API_VEGA_BQB_CHROMA_FORMAT_422_TO_420";
+        default:                                        return "UNDEFINED";
         }
 }
 
