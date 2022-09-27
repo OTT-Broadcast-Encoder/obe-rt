@@ -34,10 +34,9 @@
 
 #define PREFIX "[video filter]: "
 
-#define DO_JPG 0
-#if DO_JPG
+int g_filter_video_fullsize_jpg = 0;
+
 #include "convert.h"
-#endif
 
 #define DO_CRYSTAL_FP 0
 #if DO_CRYSTAL_FP
@@ -82,6 +81,9 @@ typedef struct
     struct SwsContext *sws_ctx;
     int sws_ctx_flags;
     enum AVPixelFormat dst_pix_fmt;
+
+    /* JPEG thumbnailing */
+    struct filter_compress_ctx *fc_ctx;
 
     /* downsample */
     void (*downsample_chroma_row_top)( uint16_t *src, uint16_t *dst, int width, int stride );
@@ -747,11 +749,6 @@ static void *start_filter_video( void *ptr )
     int h_shift, v_shift;
     const AVPixFmtDescriptor *pfd;
 
-#if DO_JPG
-    struct filter_compress_ctx *fc_ctx = NULL;
-    filter_compress_alloc(&fc_ctx);
-#endif
-
 #if DO_CRYSTAL_FP
     struct filter_analyze_fp_ctx *fp_ctx = NULL;
     filter_analyze_fp_alloc(&fp_ctx);
@@ -886,9 +883,15 @@ static void *start_filter_video( void *ptr )
         remove_from_queue( &filter->queue );
 //PRINT_OBE_IMAGE(&raw_frame->img, "VIDEO FILTER POST");
 
-#if DO_JPG
-	filter_compress_jpg(fc_ctx, raw_frame);
-#endif
+        /* Allocate the thumbnailer on the fly, during runtime. */
+        if (g_filter_video_fullsize_jpg) {
+            if (vfilt->fc_ctx == NULL) {
+                filter_compress_alloc(&vfilt->fc_ctx, g_filter_video_fullsize_jpg);
+            } else {
+            	filter_compress_jpg(vfilt->fc_ctx, raw_frame);
+            }
+        }
+
 #if DO_CRYSTAL_FP
 	filter_analyze_fp_process(fp_ctx, raw_frame);
 #endif
@@ -912,9 +915,11 @@ end:
     }
 
     free( filter_params );
-#if DO_JPG
-    filter_compress_free(fc_ctx);
-#endif
+
+    if (vfilt->fc_ctx) {
+        filter_compress_free(vfilt->fc_ctx);
+    }
+
 #if DO_CRYSTAL_FP
     filter_analyze_fp_free(fp_ctx);
 #endif

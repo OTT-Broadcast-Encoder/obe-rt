@@ -1,6 +1,7 @@
 #include <libavutil/avutil.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libavutil/opt.h>
 #include "common/common.h"
 #include "common/bitstream.h"
 #include "ltn_ws.h"
@@ -8,6 +9,7 @@
 struct filter_compress_ctx
 {
 	time_t lastFrameTime;
+	uint32_t instanceNr;
 };
 
 void filter_compress_free(struct filter_compress_ctx *ctx)
@@ -15,11 +17,13 @@ void filter_compress_free(struct filter_compress_ctx *ctx)
 	free(ctx);
 }
 
-int filter_compress_alloc(struct filter_compress_ctx **p)
+int filter_compress_alloc(struct filter_compress_ctx **p, uint32_t instanceNr)
 {
 	struct filter_compress_ctx *ctx = calloc(1, sizeof(*ctx));
+	if (!ctx)
+		return -1;
 
-	//av_register_all();
+	ctx->instanceNr = instanceNr;
 
 	*p = ctx;
 	return 0;
@@ -31,7 +35,6 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 	if (ctx->lastFrameTime == now) {
 		return -1;
 	}
-	printf("%s()\n", __func__);
 
 	ctx->lastFrameTime = now;
 
@@ -52,6 +55,7 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 	c->height = rf->img.height;
 	c->time_base = (AVRational) { 1, 25 };
 	c->pix_fmt = AV_PIX_FMT_YUVJ420P;
+	av_opt_set(c->priv_data, "preset", "fast", 0);
 
 	if (avcodec_open2(c, codec, NULL) < 0) {
 		printf("Could not open codec\n");
@@ -79,6 +83,7 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 	pkt.data = NULL;
 	pkt.size = 0;
 
+	/* TODO: Is this correct for all formats and colorspaces / subsampling / 8/10bit? No */
 	memcpy(frame->data[0], rf->img.plane[0], c->height * c->width);
 	memcpy(frame->data[1], rf->img.plane[1], (c->height * c->width) / 4);
 	memcpy(frame->data[2], rf->img.plane[2], (c->height * c->width) / 4);
@@ -86,36 +91,33 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 	frame->pts = 1;
 
 	int got_output = 0;
-        ret = avcodec_send_frame(c, frame);
-        while (ret >= 0) {
-                ret = avcodec_receive_packet(c, &pkt);
-                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                        return -1;
-                else if (ret < 0) {
-                }
-                got_output = 1;
-                break;
-        }
-
-#if 0
-	ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
-	if (ret < 0) {
-		printf("Error encoding frame\n");
-		exit(1);
+	ret = avcodec_send_frame(c, frame);
+	while (ret >= 0) {
+			ret = avcodec_receive_packet(c, &pkt);
+			if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+					return -1;
+			else if (ret < 0) {
+			}
+			got_output = 1;
+			break;
 	}
-#endif
 
 	if (got_output) {
 #if LTN_WS_ENABLE
 		ltn_ws_set_thumbnail_jpg(g_ltn_ws_handle, pkt.data, pkt.size);
+#endif
 
-#endif
-#if 0
-		printf("%s() frame output\n", __func__);
-		FILE *f = fopen("/tmp/image.jpg", "wb");
-		fwrite(pkt.data, 1, pkt.size, f);
-		fclose(f);
-#endif
+		char ofn[256], nfn[256];
+		sprintf(ofn, "/tmp/image%02d.jpg.new", ctx->instanceNr);
+		sprintf(nfn, "/tmp/image%02d.jpg", ctx->instanceNr);
+
+		FILE *f = fopen(ofn, "wb");
+		if (f) {
+			fwrite(pkt.data, 1, pkt.size, f);
+			fclose(f);
+			rename(ofn, nfn);
+		}
+
 		av_packet_unref(&pkt);
 	}
 

@@ -1374,6 +1374,7 @@ extern int g_core_runtime_terminate_after_seconds;
 
 /* Filters */
 extern int g_filter_audio_effect_pcm;
+extern int g_filter_video_fullsize_jpg;
 
 void display_variables()
 {
@@ -1534,6 +1535,8 @@ extern time_t g_decklink_missing_video_last_time;
     if (g_filter_audio_effect_pcm & (1 << 9))
         printf(" CLIP_LEFT");
     printf("\n");
+    printf("filter.video.create_fullsize_jpg   = %d\n",
+        g_filter_video_fullsize_jpg);
 }
 
 static int set_variable(char *command, obecli_command_t *child)
@@ -1712,6 +1715,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "filter.audio.pcm.adjustment") == 0) {
         g_filter_audio_effect_pcm = val;
+    } else
+    if (strcasecmp(var, "filter.video.create_fullsize_jpg") == 0) {
+        g_filter_video_fullsize_jpg = val;
     } else {
         printf("illegal variable name.\n");
         return -1;
