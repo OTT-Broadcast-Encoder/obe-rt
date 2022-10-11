@@ -759,10 +759,30 @@ static int open_device(ndi_opts_t *opts)
 				p_sources[x].p_url_address);
 	}
 
+	/* Removed the trailing ' @ blah' */
+	char tname[256];
+	strcpy(tname, opts->ndi_name);
+	char *t = strstr(tname, " @ ");
+	if (t) {
+		*t = 0;
+	}
+
 	uint32_t x;
 	for (x = 0; x < sourceCount; x++) {
+		printf("Searching for my new input '%s'\n", tname);
 		if (opts->ndi_name) {
-			if (strcasecmp(opts->ndi_name, p_sources[x].p_ndi_name) == 0) {
+#if 0
+			printf("Comparing '%s' to '%s'\n", tname, p_sources[x].p_ndi_name);
+
+			for (unsigned int i = 0; i < strlen(tname); i++)
+				printf("%02x ", tname[i]);
+			printf("\n");
+
+			for (unsigned int i = 0; i < strlen(p_sources[x].p_ndi_name); i++)
+				printf("%02x ", p_sources[x].p_ndi_name[i]);
+			printf("\n");
+#endif
+			if (strcasestr(&tname[0], p_sources[x].p_ndi_name)) {
 				opts->card_idx = x;
 				break;
 			}
