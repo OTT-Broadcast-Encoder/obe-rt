@@ -549,79 +549,7 @@ static void *ndi_videoThreadFunc(void *p)
 				printf("no frame? v = 0x%x\n", v);
 		}
 
-#if 0
 
-			/* Handle all of the Audio..... */
-			/* HANC parser produced S16 interleaved sames C1L | C1R | C2L | C2R
-			 *                            we need planer  C1L | C1R | C1L | C1R .... | C2L | C2R .... etc
-			 */
-			{
-				obe_raw_frame_t *aud_frame = new_raw_frame();
-				if (!raw_frame) {
-					fprintf(stderr, MODULE_PREFIX "Could not allocate raw audio frame\n" );
-					break;
-				}
-
-				aud_frame->release_data = obe_release_audio_data;
-				aud_frame->release_frame = obe_release_frame;
-				aud_frame->audio_frame.num_samples = ctx->HancInfo.no_audio_samples / nAudioChannels;
-				aud_frame->audio_frame.num_channels = nAudioChannels;
-				aud_frame->audio_frame.sample_fmt = AV_SAMPLE_FMT_S32P;
-				aud_frame->audio_frame.linesize = nAudioChannels * (16 /*bits */ / 8);
-				aud_frame->input_stream_id = 1;
-
-				/* Allocate a new sample buffer ready to hold S32P */
-				if (av_samples_alloc(aud_frame->audio_frame.audio_data,
-					&aud_frame->audio_frame.linesize,
-					opts->audio_channel_count,
-					aud_frame->audio_frame.num_samples,
-					(AVSampleFormat)aud_frame->audio_frame.sample_fmt, 0) < 0)
-				{
-					fprintf(stderr, MODULE_PREFIX "avsample alloc failed\n");
-				}
-
-				/* Convert input samples from S16 interleaved into S32P planer. */
-				if (avresample_convert(ctx->avr,
-					aud_frame->audio_frame.audio_data,
-					aud_frame->audio_frame.linesize,
-					aud_frame->audio_frame.num_samples,
-					(uint8_t**)&pAudioSamples,
-					0,
-					aud_frame->audio_frame.num_samples) < 0)
-				{
-					fprintf(stderr, MODULE_PREFIX "sample format conversion failed\n");
-				}
-
-// MMM
-//		int64_t pts = av_rescale_q(v4l2_ctx->a_counter++, v4l2_ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
-		//obe_clock_tick(v4l2_ctx->h, pts);
-				pts = 0;
-				aud_frame->pts = pts;
-
-				/* AVFM */
-				avfm_init(&aud_frame->avfm, AVFM_AUDIO_PCM);
-				avfm_set_hw_status_mask(&aud_frame->avfm, 0);
-
-				/* Remember that we drive everything in the pipeline from the audio clock. */
-				avfm_set_pts_video(&aud_frame->avfm, pts);
-				avfm_set_pts_audio(&aud_frame->avfm, pts);
-
-				avfm_set_hw_received_time(&aud_frame->avfm);
-				double dur = 27000000 / ((double)opts->timebase_den / (double)opts->timebase_num);
-				avfm_set_video_interval_clk(&aud_frame->avfm, dur);
-				//raw_frame->avfm.hw_audio_correction_clk = clock_offset;
-				//avfm_dump(&raw_frame->avfm);
-
-				if (add_to_filter_queue(ctx->h, aud_frame) < 0 ) {
-					printf("%s() Failed to add\n", __func__);
-				}
-			}
-
-			if (frame)
-				avcodec_free_frame(&frame);
-
-			av_free_packet(&pkt);
-#endif
 	}
 	printf(MODULE_PREFIX "Video thread complete\n");
 
