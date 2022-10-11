@@ -78,9 +78,9 @@ obecli_SOURCES += ../input/sdi/v210/v210fileinput.cpp
 if BLUEFISH444
 obecli_SOURCES += ../input/sdi/bluefish/bluefish.cpp
 endif
-if NDILIB
+#if NDILIB
 obecli_SOURCES += ../input/ndi/ndi.cpp
-endif
+#endif
 if DEKTECLIB
 obecli_SOURCES += ../input/sdi/dektec/dektec.cpp
 endif

@@ -26,6 +26,8 @@
 //#define __STDC_FORMAT_MACROS   1
 //#define __STDC_CONSTANT_MACROS 1
 
+#define HALF_FRAME_RATE 0
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -78,8 +80,10 @@ struct obe_to_ndi_video
 
 const static struct obe_to_ndi_video video_format_tab[] =
 {
-    { INPUT_VIDEO_FORMAT_720P_5994, 1280, 720, 0 /* bmdModeHD720p60 */, 1001, 60000 },
-    { INPUT_VIDEO_FORMAT_720P_60,   1280, 720, 0 /* bmdModeHD720p60 */, 1000, 60000 },
+    { INPUT_VIDEO_FORMAT_720P_5994,  1280, 720,  0 /* bmdModeHD720p60 */, 1001, 60000 },
+    { INPUT_VIDEO_FORMAT_720P_60,    1280, 720,  0 /* bmdModeHD720p60 */, 1000, 60000 },
+    { INPUT_VIDEO_FORMAT_1080P_2997, 1920, 1080, 0 /* bmdModeHD720p60 */, 1001, 30000 },
+    { INPUT_VIDEO_FORMAT_1080P_5994, 1920, 1080, 0 /* bmdModeHD720p60 */, 1001, 60000 },
 };
 
 static int lookupOBEName(int w, int h, int den, int num)
@@ -445,7 +449,7 @@ lastTimestamp = frame->timestamp;
 	if (ctx->v_counter == 0) {
 	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
 	   ctx->clock_offset = (timecode_pts * -1);
-	   printf("Clock offset established as %" PRIi64 "\n", ctx->clock_offset);
+	   printf("%s() Clock offset established as %" PRIi64 "\n", __func__, ctx->clock_offset);
 	}
 	if (ctx->reset_v_pts == 1) {
 	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK});
@@ -514,6 +518,10 @@ static void *ndi_videoThreadFunc(void *p)
 	ctx->vthreadComplete = 0;
 	ctx->vthreadTerminate = 0;
 
+#if HALF_FRAME_RATE
+unsigned int toggleOutput = 1;
+#endif
+
 	while (!ctx->vthreadTerminate && opts->probe == 0) {
 
 		NDIlib_video_frame_v2_t video_frame;
@@ -530,7 +538,12 @@ static void *ndi_videoThreadFunc(void *p)
 		int v = ctx->p_NDILib->NDIlib_recv_capture_v2(ctx->pNDI_recv, &video_frame, &audio_frame, &metadata, timeout);
 		switch (v) {
 			case NDIlib_frame_type_video:
-				processFrameVideo(opts, &video_frame);
+#if HALF_FRAME_RATE
+				if (++toggleOutput & 1)
+#endif
+				{
+					processFrameVideo(opts, &video_frame);
+				}
 				ctx->p_NDILib->NDIlib_recv_free_video_v2(ctx->pNDI_recv, &video_frame);
 				break;
 			case NDIlib_frame_type_audio:
@@ -587,24 +600,61 @@ static void close_device(ndi_opts_t *opts)
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
 
+static const char *find_ndi_library()
+{
+	/* User preferred library */
+	const char *ndilibpath = getenv("NDI_LIB_PATH");
+	if (ndilibpath) {
+		return ndilibpath;
+	}
+
+	/* FInd library in a specific order. */
+	const char *paths[] = {
+		"./libndi.so",
+		"./lib/libndi.so",
+		"./libs/libndi.so",
+		"/usr/local/lib/libndi.so.4.6.2",
+		"/usr/local/lib/libndi.so.4",
+		"/usr/local/lib/libndi.so",
+		"/usr/lib/libndi.so",
+		NULL
+	};
+
+	int i = 0;
+	const char *path = paths[i];
+	while (1) {
+		if (path == NULL)
+			break;
+
+		printf(MODULE_PREFIX "Searching for %30s - ", path);
+		struct stat st;
+		if (stat(path, &st) == 0) {
+			printf("found\n");
+			break;
+		}	
+
+		printf("not found\n");
+		path = paths[++i];
+	}
+
+	return path;
+}
+
 static int load_ndi_library(ndi_opts_t *opts)
 {
 	char cwd[256] = { 0 };
 
 	printf(MODULE_PREFIX "%s() cwd = %s\n", __func__, getcwd(&cwd[0], sizeof(cwd)));
 	ndi_ctx_t *ctx = &opts->ctx;
-	const char *libname = "libndi.so";
 
-	/* Setup an absolute path to the lib, if needed. */
-	char libpath[256] = { 0 };
-	char *ndilibdir = getenv("NDI_LIB_DIR");
-	if (ndilibdir) {
-		sprintf(libpath, "%s/%s", ndilibdir, libname);
-	} else {
-		sprintf(libpath, "%s", libname);
+	const char *libpath = find_ndi_library();
+	if (libpath == NULL) {
+		fprintf(stderr, "Unable to locate NDI library, aborting\n");
+		exit(1);
 	}
 
-	printf(MODULE_PREFIX "Library path %s\n", libpath);
+	printf(MODULE_PREFIX "Dynamically loading library %s\n", libpath);
+
 	void *hNDILib = dlopen(libpath, RTLD_LOCAL | RTLD_LAZY);
 
 	/* Load the library dynamically. */
@@ -618,8 +668,8 @@ static int load_ndi_library(ndi_opts_t *opts)
 			dlclose(hNDILib);
 		}
 
-		fprintf(stderr, "Unable to locate the NewTek NDI Library, encoder aborting.\n");
-		return -1;
+		fprintf(stderr, MODULE_PREFIX "NewTek NDI Library, missing critical function, aborting.\n");
+		exit(1);
 	}
 
 	/* Lets get all of the DLL entry points */
@@ -629,9 +679,11 @@ static int load_ndi_library(ndi_opts_t *opts)
 	if (!ctx->p_NDILib->NDIlib_initialize()) {
 		// Cannot run NDI. Most likely because the CPU is not sufficient (see SDK documentation).
 		// you can check this directly with a call to NDIlib_is_supported_CPU()
-		fprintf(stderr, "Unable to initialize NDI library");
-		return -1;
+		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDI library, aborting.\n");
+		exit(1);
 	}
+
+	printf(MODULE_PREFIX "Library loaded and initialized.\n");
 
 	return 0; /* Success */
 }
@@ -649,9 +701,28 @@ static int open_device(ndi_opts_t *opts)
 
 	printf(MODULE_PREFIX "NDI version: %s\n", ctx->p_NDILib->NDIlib_version());
 
-	NDIlib_find_create_t find_create;
+	/* If the ndi_name includes a @ symbol, looping the trailing ip addresses and sue these to assist
+	 * the search functionality.
+	 * Eg. ARC2-NODE-13 (SAC-NDI-Output ) @ 10.100.220.131,10.100.222.131
+	 */
+
+	char extraIPS[256] = { 0 };
+	if (strstr(opts->ndi_name, " @ ") != NULL) {
+		/* Process the IPS */
+		char *pos = rindex(opts->ndi_name, '@');
+		if (pos && pos[1] == ' ') {
+			strcpy(&extraIPS[0], pos + 2);
+		}
+	}
+
+	NDIlib_find_create_t find_create = { 0 };
 	find_create.show_local_sources = true;
 	find_create.p_groups = nullptr;
+
+	if (strlen(extraIPS) > 0) {
+		find_create.p_extra_ips = &extraIPS[0];
+	}
+
 	NDIlib_find_instance_t pNDI_find = ctx->p_NDILib->NDIlib_find_create_v2(&find_create);
 	if (!pNDI_find) {
 		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib finder\n");
@@ -660,6 +731,9 @@ static int open_device(ndi_opts_t *opts)
 
 	if (opts->ndi_name != NULL) {
 		printf(MODULE_PREFIX "Searching for NDI Source name: '%s'\n", opts->ndi_name);
+		if (strlen(extraIPS) > 0) {
+			printf(MODULE_PREFIX "Searching also at additional IP addresses '%s'\n", extraIPS);
+		}
 	} else {
 		printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
 	}
@@ -743,13 +817,18 @@ lastTimestamp = video_frame.timestamp;
 				opts->width = video_frame.xres;
 				opts->height = video_frame.yres;
 				opts->timebase_num = video_frame.frame_rate_D;
+#if HALF_FRAME_RATE
+printf("Reducing input framerate by 2\n");
+				opts->timebase_den = video_frame.frame_rate_N / 2;
+#else
 				opts->timebase_den = video_frame.frame_rate_N;
+#endif
 
 				if (video_frame.frame_format_type == NDIlib_frame_format_type_progressive)
 					opts->interlaced = 0;
 				else
 					opts->interlaced = 1;
-#if 0
+#if 1
 				printf("Detected fourCC 0x%x\n", video_frame.FourCC);
 				if (video_frame.FourCC == NDIlib_FourCC_type_UYVY) {
 					printf("UYVY\n");
@@ -765,7 +844,7 @@ lastTimestamp = video_frame.timestamp;
 				opts->audio_channel_count = audio_frame.no_channels;
 				if (opts->audio_channel_count & 1)
 					opts->audio_channel_count++;
-#if 1
+#if 0
 				/* Useful when debugging probe audio issues. */
 				printf("Detected audio\n");
 				printf("sample_rate = %d\n", audio_frame.sample_rate);
@@ -1002,10 +1081,11 @@ static void *ndi_open_input(void *ptr)
 	ctx->h = h;
 	ctx->v_counter = 0;
 	ctx->a_counter = 0;
-        ctx->clock_offset = 0;
+    ctx->clock_offset = 0;
 
-	if (open_device(opts) < 0)
+	if (open_device(opts) < 0) {
 		return NULL;
+	}
 
 	pthread_create(&ctx->vthreadId, 0, ndi_videoThreadFunc, opts);
 
