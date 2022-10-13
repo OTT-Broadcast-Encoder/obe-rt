@@ -694,18 +694,6 @@ static int open_device(ndi_opts_t *opts)
 
 	printf(MODULE_PREFIX "%s()\n", __func__);
 
-	if (load_ndi_library(opts) < 0) {
-		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib\n");
-		return -1;
-	}
-
-	printf(MODULE_PREFIX "NDI version: %s\n", ctx->p_NDILib->NDIlib_version());
-
-	/* If the ndi_name includes a @ symbol, looping the trailing ip addresses and sue these to assist
-	 * the search functionality.
-	 * Eg. ARC2-NODE-13 (SAC-NDI-Output ) @ 10.100.220.131,10.100.222.131
-	 */
-
 	char extraIPS[256] = { 0 };
 	if (strstr(opts->ndi_name, " @ ") != NULL) {
 		/* Process the IPS */
@@ -715,15 +703,46 @@ static int open_device(ndi_opts_t *opts)
 		}
 	}
 
-	NDIlib_find_create_t find_create = { 0 };
-	find_create.show_local_sources = true;
-	find_create.p_groups = nullptr;
+	/* --- */
+	/* Get the current working dir */
+	char cwd[256] = { 0 };
+	getcwd(&cwd[0], sizeof(cwd));
 
-	if (strlen(extraIPS) > 0) {
-		find_create.p_extra_ips = &extraIPS[0];
+	/* make an absolute pathname from the cwd and the NDI input ip given during configuration
+	 * We'll use this to push a discovery server into the ndi library, via an env var, before we load the library.
+	 * We do this because disocvery servers / mdns aren't always available on the platform, but we already have
+	 * the ip address of the source discovery server, so use this instead.
+	 * Why do we play this game with setting NDI_CONFIG_DIR? Because we can be encoding from different
+	 * discovery servers and a global $HOME/.newtek/ndi-v1-json blurb isn't usable, because it can only contain
+	 * a single discovery server.
+	 */
+	char cfgdir[256];
+	sprintf(cfgdir, "%s/.%s", cwd, extraIPS);
+	printf(MODULE_PREFIX "Using NDI discovery configuration directory '%s'\n", cfgdir);
+
+	/* Check if the ndi file exists, if not throw an informational warning */
+	char cfgname[256];
+	sprintf(cfgname, "%s/ndi-config.v1.json", cfgdir);
+	printf(MODULE_PREFIX "Using NDI discovery configuration absolute filename '%s'\n", cfgname);
+	FILE *fh = fopen(cfgname, "rb");
+	if (fh) {
+		printf(MODULE_PREFIX "NDI discovery configuration absolute filename found\n");
+		fclose(fh);
+	} else {
+		printf(MODULE_PREFIX "NDI discovery configuration absolute filename missing\n");
 	}
 
-	NDIlib_find_instance_t pNDI_find = ctx->p_NDILib->NDIlib_find_create_v2(&find_create);
+	setenv("NDI_CONFIG_DIR", cfgdir, 1);
+	/* --- */
+
+	if (load_ndi_library(opts) < 0) {
+		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib\n");
+		return -1;
+	}
+
+	printf(MODULE_PREFIX "NDI version: %s\n", ctx->p_NDILib->NDIlib_version());
+
+	NDIlib_find_instance_t pNDI_find = ctx->p_NDILib->NDIlib_find_create_v2(NULL);
 	if (!pNDI_find) {
 		fprintf(stderr, MODULE_PREFIX "Unable to initialize NDIlib finder\n");
 		return -1;
@@ -731,9 +750,6 @@ static int open_device(ndi_opts_t *opts)
 
 	if (opts->ndi_name != NULL) {
 		printf(MODULE_PREFIX "Searching for NDI Source name: '%s'\n", opts->ndi_name);
-		if (strlen(extraIPS) > 0) {
-			printf(MODULE_PREFIX "Searching also at additional IP addresses '%s'\n", extraIPS);
-		}
 	} else {
 		printf(MODULE_PREFIX "Searching for card idx #%d\n", opts->card_idx);
 	}
