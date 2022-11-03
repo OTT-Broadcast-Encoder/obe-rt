@@ -188,9 +188,37 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	ndi_ctx_t *ctx = &opts->ctx;
 
 #if 0
+	static time_t audioin_when = 0;
+	time_t now = time(NULL);
+
+	if (audioin_when != now) {
+		audioin_when = now;
+		/* Dump the first eight samples for each channel, assuming the format is planer */
+		for (int ch = 0; ch < frame->no_channels; ch++) {
+			float *d = &frame->p_data[ch * frame->no_samples]; 
+
+			printf("planer ch %02d: ", ch);
+			for (int s = 0; s < 8; s++) {
+				printf(" %08f,", d[s]);
+			}
+			printf("\n");
+		}
+		/* Dump the first eight samples for each channel, assuming the format is interleaved */
+		for (int ch = 0; ch < frame->no_channels; ch++) {
+			float *d = &frame->p_data[ch];
+			printf("interl ch %02d: ", ch);
+			for (int s = 0; s < 8; s++) {
+				printf(" %08f,", d[s * frame->no_channels]);
+			}
+			printf("\n");
+		}
+	}
+#endif
+
+#if 0
 	printf("%s() ", __func__);
 	int from = 0;
-	int to = frame->no_samples;
+	int to = 64; //frame->no_samples;
 	printf("float myaddr[] = {\n");
 	for (int x = from; x < to; x++) {
 		printf(" %08f,", frame->p_data[x]);
@@ -219,7 +247,7 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 		return;
 	}
 
-#if 1
+#if 0
 	int statsdump = 0;
 	if ((frame->sample_rate != 48000) ||
 		(frame->no_channels != 2) ||
@@ -340,33 +368,52 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 		fprintf(stderr, MODULE_PREFIX "Sample format conversion failed\n");
 		return;
 	}
-//printf("e samplesConverted %d\n", samplesConverted);
+
+	//printf("audio samples converted %d\n", samplesConverted);
 	rf->audio_frame.num_samples = samplesConverted;
 
 #if 0
 	for (int x = 0; x < 2 /*16*/; x++) {
-		printf("ch%02d: ", x);
+		printf("output ch%02d: ", x);
 		for (int y = 0; y < 8 /* samplesConverted */; y++) {
-			printf("%04d: %08x ", y, *(((int32_t *)rf->audio_frame.audio_data[x]) + y));
+			printf("%08x ", *(((int32_t *)rf->audio_frame.audio_data[x]) + y));
 		}
 		printf("\n");
 	}
 #endif
 
 	free(data);
-        if (ctx->reset_a_pts == 1) {
-           int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
-	   timecode_pts = timecode_pts + ctx->clock_offset;
-           int64_t pts_diff = av_rescale_q(1, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} );
-           int q = timecode_pts / pts_diff + (timecode_pts % pts_diff > 0);
-           ctx->a_counter = q;
-           ctx->reset_a_pts = 0;
-        }
+
+	if (ctx->reset_a_pts == 1) {
+		printf("Audio NDI reset_a_pts is 1\n");
+		int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
+		timecode_pts = timecode_pts + ctx->clock_offset;
+
+		int64_t pts_diff = av_rescale_q(1, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} );
+		int q = timecode_pts / pts_diff + (timecode_pts % pts_diff > 0);
+
+		ctx->a_counter = q;
+		ctx->reset_a_pts = 0;
+	}
+
 // MMM
 //		int64_t pts = av_rescale_q(v4l2_ctx->a_counter++, v4l2_ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
 		//obe_clock_tick(v4l2_ctx->h, pts);
-	int64_t pts = av_rescale_q(ctx->a_counter++, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} ); 
+	//int64_t pts = av_rescale_q(ctx->a_counter++, (AVRational){frame->no_samples, frame->sample_rate}, (AVRational){1, OBE_CLOCK} );
+	//int64_t pts = (frame->timecode * 27) / 10;
+
+	/* 27MHZ clock */
+	int64_t pts = av_rescale_q(frame->timecode + ctx->clock_offset, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
+	//printf("timecode %" PRIi64 ", offset = %" PRIi64 ", minus %" PRIi64 "\n", frame->timecode, ctx->clock_offset, frame->timecode - ctx->clock_offset);
 	rf->pts = pts;
+	//static int64_t lastPTS = 0;
+	//int64_t ptsDELTA = pts - lastPTS;
+	//lastPTS = pts;
+	//printf("pts %" PRIi64 ", timecode %" PRIi64 "\n", pts, frame->timecode);
+#if 0
+	printf("NDI audio ptsDELTA %" PRIi64 ", no_samples %d, sample_rate %d, a_counter %" PRIu64 "\n",
+		ptsDELTA, frame->no_samples, frame->sample_rate, ctx->a_counter - 1);
+#endif
 
 	/* AVFM */
 	avfm_init(&rf->avfm, AVFM_AUDIO_PCM);
@@ -382,6 +429,7 @@ static void processFrameAudio(ndi_opts_t *opts, NDIlib_audio_frame_v2_t *frame)
 	//raw_frame->avfm.hw_audio_correction_clk = clock_offset;
 	//avfm_dump(&raw_frame->avfm);
 
+//printf("audio pts %" PRIi64 "\n", pts);
 	if (add_to_filter_queue(ctx->h, rf) < 0 ) {
 		printf("%s() Failed to add frame for raw_frame->input_stream_id %d\n", __func__,
 			rf->input_stream_id);
@@ -447,15 +495,18 @@ lastTimestamp = frame->timestamp;
 	rf->alloc_img.stride[3] = 0;
 
 	if (ctx->v_counter == 0) {
-	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
-	   ctx->clock_offset = (timecode_pts * -1);
+	   //int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK} );
+	   ctx->clock_offset = (frame->timecode * -1);
 	   printf("%s() Clock offset established as %" PRIi64 "\n", __func__, ctx->clock_offset);
 	}
+
 	if (ctx->reset_v_pts == 1) {
 	   int64_t timecode_pts = av_rescale_q(frame->timecode, (AVRational){1, 10000000}, (AVRational){1, OBE_CLOCK});
 	   timecode_pts = timecode_pts + ctx->clock_offset;
+
 	   int64_t pts_diff = av_rescale_q(1, ctx->v_timebase, (AVRational){1, OBE_CLOCK} );
 	   int q = timecode_pts / pts_diff + (timecode_pts % pts_diff > 0);
+
 	   printf("Q is %d\n",q);
 	   ctx->v_counter = q;
 	   ctx->reset_v_pts = 0;
@@ -500,6 +551,7 @@ lastTimestamp = frame->timestamp;
 	//raw_frame->avfm.hw_audio_correction_clk = clock_offset;
 	//avfm_dump(&raw_frame->avfm);
 
+//printf("video pts %" PRIi64 "\n", pts);
 	if (add_to_filter_queue(ctx->h, rf) < 0 ) {
 	}
 }
