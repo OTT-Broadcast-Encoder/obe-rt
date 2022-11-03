@@ -425,15 +425,21 @@ static void *aac_start_encoder(void *ptr)
 #if LOCAL_DEBUG
         if (ctx->encoder->output_stream_id == 1) {
             printf("\n");
-            printf(MODULE "strm %d raw audio frame pts %" PRIi64 " linesize %d channels %d num_samples %d\n",
+            printf(MODULE "strm %d raw audio frame pts %" PRIi64 " linesize %d channels %d num_samples %d, pts delta %" PRIi64 "\n",
                 ctx->encoder->output_stream_id,
                 raw_frame->avfm.audio_pts,
                 raw_frame->audio_frame.linesize,
                 av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
-                raw_frame->audio_frame.num_samples);
+                raw_frame->audio_frame.num_samples,
+                raw_frame->avfm.audio_pts - ctx->avfm.audio_pts);
         }
 #endif
         if (raw_frame->avfm.audio_pts - ctx->avfm.audio_pts >= (2 * ctx->frameLengthTicks)) {
+            printf("Reset the cur_pts because of the hardware\n");
+            printf("raw_frame->avfm.audio_pts %" PRIi64 "\n", raw_frame->avfm.audio_pts);
+            printf("ctx->avfm.audio_pts %" PRIi64 "\n", ctx->avfm.audio_pts);
+            printf("ctx->frameLengthTicks %" PRIi64 "\n", ctx->frameLengthTicks);
+            printf("violation %" PRIi64 " >= %" PRIi64 "\n", raw_frame->avfm.audio_pts - ctx->avfm.audio_pts, 2 * ctx->frameLengthTicks);
             ctx->cur_pts = -1; /* Reset the audio timebase from the hardware. */
         }
         memcpy(&ctx->avfm, &raw_frame->avfm, sizeof(ctx->avfm));
