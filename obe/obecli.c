@@ -1304,6 +1304,7 @@ extern int64_t mp2_offset_ms;
 
 /* Mux */
 extern int64_t initial_audio_latency;
+extern int g_mux_audio_mp2_force_pmt_11172;
 
 /* x265 */
 extern int g_x265_monitor_bps;
@@ -1452,6 +1453,9 @@ extern time_t g_decklink_missing_video_last_time;
     printf("codec.x264.encode_alternate = %d\n", g_x264_encode_alternate);
 #endif
 
+    printf("codec.audio.mp2.force_pmt_type_11172 = %d [%s]\n",
+        g_mux_audio_mp2_force_pmt_11172,
+        g_mux_audio_mp2_force_pmt_11172 == 0 ? "disabled" : "enabled");
     printf("codec.audio.debug = %d [%s]\n",
         g_audio_cf_debug,
         g_audio_cf_debug == 0 ? "disabled" : "enabled");
@@ -1679,6 +1683,9 @@ static int set_variable(char *command, obecli_command_t *child)
         g_x264_encode_alternate_new = 1;
     } else
 #endif
+    if (strcasecmp(var, "codec.audio.mp2.force_pmt_type_11172") == 0) {
+        g_mux_audio_mp2_force_pmt_11172 = val;
+    } else
     if (strcasecmp(var, "codec.audio.debug") == 0) {
         g_audio_cf_debug = val;
     } else

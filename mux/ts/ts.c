@@ -286,6 +286,8 @@
 
 #define PREFIX "[Mux]: "
 
+int g_mux_audio_mp2_force_pmt_11172 = 0;
+
 static const int mpegts_stream_info[][3] =
 {
     { VIDEO_AVC,   LIBMPEGTS_VIDEO_AVC,      LIBMPEGTS_STREAM_ID_MPEGVIDEO },
@@ -554,6 +556,12 @@ void *open_muxer( void *ptr )
             j++;
 
         stream->stream_format = mpegts_stream_info[j][1];
+
+        /* Override the stream type, declare this in the PMT as 11172-3 instead of the default 13818-3 */
+        if (stream->stream_format == LIBMPEGTS_AUDIO_MPEG2 && g_mux_audio_mp2_force_pmt_11172) {
+            stream->stream_format = LIBMPEGTS_AUDIO_MPEG1;
+        }
+
         stream->stream_id = mpegts_stream_info[j][2]; /* Note this is the MPEG-TS stream_id, not the OBE stream_id */
         if( mux_opts->passthrough )
         {
