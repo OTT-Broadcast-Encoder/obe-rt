@@ -78,6 +78,7 @@
 #include <semaphore.h>
 #include <time.h>
 #include <encoders/video/sei-timestamp.h>
+#include <input/sdi/yuv422p10le.h>
 
 #include "vega-3311.h"
 #include <sys/stat.h>
@@ -102,6 +103,7 @@ using namespace std;
 const char *vega3311_sdk_version = VEGA_VERSION;
 
 extern int g_decklink_monitor_hw_clocks;
+extern int g_decklink_render_walltime;
 
 typedef struct
 {
@@ -567,10 +569,19 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         *(wv++) = *(p++) >> 6;
                 }
 
-                
                 img.pu8Addr     = dst[0];
                 img.u32Size     = dstlen;
                 img.eFormat     = opts->codec.eFormat;
+
+                if (g_decklink_render_walltime) {
+                        struct YUV422P10LE_painter_s pctx;
+                        YUV422P10LE_painter_reset(&pctx, dst[0], opts->width, opts->height, opts->width);
+
+                        char ts[64];
+                        obe_getTimestamp(ts, NULL);
+                        YUV422P10LE_painter_draw_ascii_at(&pctx, 2, 2, ts);
+                }
+
         } else {
                 img.pu8Addr     = st_frame_info->u8pDataBuf;
                 img.u32Size     = st_frame_info->u32BufSize;
