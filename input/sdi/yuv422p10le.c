@@ -1199,7 +1199,7 @@ static struct letter_t {
     /* 00000000 */
 };
 
-
+#if 0
 /* if the caller passes an illegal value, position 0,0 is returned
  * A null is never returned unless the call passes a NULL for the luma.
  * 0,0 is top left.
@@ -1244,13 +1244,14 @@ void yuv422p10le_draw_white_32x32_box(uint16_t *luma, unsigned int x, unsigned i
                 }
         }
 }
-
+#endif
 
 #define  y_white 0x3ff
 #define  y_black 0x000
 #define cr_white 0x200
 #define cb_white 0x200
 
+#if 0
 /* Six pixels */
 static uint32_t V210_white[] = {
 	 cr_white << 20 |  y_white << 10 | cb_white,
@@ -1333,6 +1334,7 @@ uint32_t YUV422P10LE_read_32bit_value(void *frame_bytes, uint32_t stride, uint32
 #endif
 	return bits;
 }
+#endif
 
 static int YUV422P10LE_render_character(struct YUV422P10LE_painter_s *ctx, unsigned char letter)
 {
