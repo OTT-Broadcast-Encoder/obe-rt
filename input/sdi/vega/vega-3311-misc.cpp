@@ -37,6 +37,29 @@
 
 #include "vega-3311.h"
 
+const char *lookupVegaAudioPacketSizeName(API_VEGA3311_CAP_AUDIO_PACKET_SIZE_E v)
+{
+        switch (v) {
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_240AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_240AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_288AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_288AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_336AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_336AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_384AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_384AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_432AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_432AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_480AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_480AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_528AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_528AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_576AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_576AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_624AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_624AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_672AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_672AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_720AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_720AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_768AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_768AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_816AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_816AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_864AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_864AS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_912AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_912AAS";
+        case API_VEGA3311_CAP_AUDIO_PACKET_SIZE_960AS:                return "API_VEGA3311_CAP_AUDIO_PACKET_SIZE_960AS";
+        default:                                                      return "UNDEFINED";
+        }
+}
+
 const char *lookupVegaAudioLayoutName(API_VEGA3311_CAP_AUDIO_LAYOUT_E v)
 {
         switch (v) {
@@ -94,18 +117,22 @@ const char *lookupVegaBitDepthName(int v)
 const char *lookupVegaInputModeName(int v)
 {
         switch (v) {
-        case API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI:  return "API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI";
-        case API_VEGA3311_CAP_INPUT_MODE_4CHN:      return "API_VEGA3311_CAP_INPUT_MODE_4CHN";
-        default:                                    return "UNDEFINED";
+        case API_VEGA3311_CAP_INPUT_MODE_1CHN_QUAD:  return "API_VEGA3311_CAP_INPUT_MODE_1CHN_QUAD";
+        case API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI:   return "API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI";
+        case API_VEGA3311_CAP_INPUT_MODE_4CHN:       return "API_VEGA3311_CAP_INPUT_MODE_4CHN";
+        default:                                     return "UNDEFINED";
         }
 }
 
 const char *lookupVegaInputSourceName(int v)
 {
         switch (v) {
-        case API_VEGA3311_CAP_INPUT_SOURCE_SDI:         return "API_VEGA3311_CAP_INPUT_SOURCE_SDI";
-        case API_VEGA3311_CAP_INPUT_SOURCE_HDMI:        return "API_VEGA3311_CAP_INPUT_SOURCE_HDMI";
-        default:                                        return "UNDEFINED";
+        case API_VEGA3311_CAP_INPUT_SOURCE_SDI:          return "API_VEGA3311_CAP_INPUT_SOURCE_SDI";
+        case API_VEGA3311_CAP_INPUT_SOURCE_HDMI:         return "API_VEGA3311_CAP_INPUT_SOURCE_HDMI";
+        case API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2022: return "API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2022";
+        case API_VEGA3311_CAP_INPUT_SOURCE_12G_SDI:      return "API_VEGA3311_CAP_INPUT_SOURCE_12G_SDI";
+        case API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2110: return "API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2110";
+        default:                                         return "UNDEFINED";
         }
 }
 
@@ -129,6 +156,7 @@ const char *lookupVegaPixelFormatName(int v)
         case API_VEGA3311_CAP_IMAGE_FORMAT_YV16:        return "API_VEGA3311_CAP_IMAGE_FORMAT_YV16";
         case API_VEGA3311_CAP_IMAGE_FORMAT_YUY2:        return "API_VEGA3311_CAP_IMAGE_FORMAT_YUY2";
         case API_VEGA3311_CAP_IMAGE_FORMAT_V210:        return "API_VEGA3311_CAP_IMAGE_FORMAT_V210";
+        case API_VEGA3311_CAP_IMAGE_FORMAT_Y210:        return "API_VEGA3311_CAP_IMAGE_FORMAT_Y210";
         default:                                        return "UNDEFINED";
         }
 }
