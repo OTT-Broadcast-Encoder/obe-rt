@@ -392,6 +392,54 @@ static void mux_get_queue_counts(obe_t *h,
     }
 }
 
+int64_t last_video_dts = 0;
+
+/* For a given video pts, count how many items one the queue are older and newer than this value */
+static void verify_audio_pts_queue_content(obe_t *h, int64_t videoDTS)
+{
+    int older = 0, newer = 0;
+    int64_t min_a_pts = 0xffffffffffLL;
+    int64_t min_v_pts = 0xffffffffffLL;
+    int64_t max_a_pts = 0;
+
+    //pthread_mutex_lock(&h->mux_queue.mutex);
+    for (int i = 0; i < h->mux_queue.size; i++) {
+        obe_coded_frame_t *cf = h->mux_queue.queue[i];
+        if (cf->type == CF_VIDEO) {
+            if (cf->pts < min_v_pts)
+                min_v_pts = cf->pts;
+            continue;
+        }
+        if (cf->pts <= videoDTS)
+            older++;
+        else
+            newer++;
+
+        if (cf->pts < min_a_pts)
+            min_a_pts = cf->pts;
+        if (cf->pts >= max_a_pts)
+            max_a_pts = cf->pts;
+    }
+    //pthread_mutex_unlock(&h->mux_queue.mutex);
+
+    printf("older %5d newer %5d    min_a_pts %12" PRIi64 " max_a_pts %12" PRIi64 " delta %12" PRIi64 "(ms) video_dts %12" PRIi64 ", delta %12" PRIi64 "\n",
+        older, newer,
+        min_a_pts, max_a_pts,
+        (max_a_pts - min_a_pts) / 300 / 90,
+        videoDTS,
+        (min_a_pts - min_v_pts) / 300 / 90);
+}
+
+static void mux_dump_queue_content(obe_t *h)
+{
+    pthread_mutex_lock(&h->mux_queue.mutex);
+    for (int i = 0; i < h->mux_queue.size; i++) {
+        obe_coded_frame_t *cf = h->mux_queue.queue[i];
+        coded_frame_print(cf);
+    }
+    pthread_mutex_unlock(&h->mux_queue.mutex);
+}
+
 #define MAX_QUEUED_AUDIO_WARNING 100
 void mux_dump_queue(obe_t *h)
 {
@@ -413,6 +461,10 @@ void mux_dump_queue(obe_t *h)
 
     printf("\tmux.other frames = %d totalsize %d\n",
         oq.entries, oq.totalSizeBytes);
+
+#if 1
+    mux_dump_queue_content(h);
+#endif
 }
 
 /* Must be called with the queue already locked. */
@@ -843,6 +895,15 @@ void *open_muxer( void *ptr )
                 {
                     video_found = 1;
                     video_dts = coded_frame->real_dts;
+#if 0
+                    printf("dts delta %12" PRIi64 "   last %12" PRIi64 "  next %12" PRIi64 "  len %d\n",
+                        coded_frame->real_dts - last_video_dts,
+                        last_video_dts,
+                        coded_frame->real_dts,
+                        coded_frame->len);
+#endif
+                    last_video_dts = coded_frame->real_dts;
+
                     /* FIXME: handle case where first_video_pts < coded_frame->real_pts */
                     if( first_video_pts == -1 )
                     {
@@ -850,6 +911,7 @@ void *open_muxer( void *ptr )
                         first_video_pts = coded_frame->pts;
                         first_video_real_pts = coded_frame->real_pts;
                         remove_early_frames( h, first_video_pts );
+                        printf("Frame too early, removing ---- BAD\n");
                     }
                     break;
                 } else {
@@ -881,7 +943,7 @@ void *open_muxer( void *ptr )
                 pthread_mutex_unlock( &h->mux_queue.mutex );
                 goto end;
             }
-        }
+        } // while
 
         frames = calloc( h->mux_queue.size, sizeof(*frames) );
         if( !frames )
@@ -892,6 +954,8 @@ void *open_muxer( void *ptr )
         }
 
         //printf("\n START - queuelen %i \n", h->mux_queue.size);
+
+    verify_audio_pts_queue_content(h, video_dts);
 
 	/* Prpare the 'frames' array with any audio and video frames.
 	 * If we detect any video frames with discontinuities, adjust out video_drift_correction.
@@ -919,11 +983,26 @@ void *open_muxer( void *ptr )
              * before the first video frame.
              */
             int64_t rescaled_dts = coded_frame->pts - first_video_pts + first_video_real_pts;
+#if 0
+            printf("A: %d was rescaled_dts %" PRIi64 "  video_dts %" PRIi64 "  first_video_pts %" PRIi64 "  first_video_real_pts %" PRIi64 "\n",
+                coded_frame->type == CF_AUDIO,
+                rescaled_dts, video_dts, first_video_pts, first_video_real_pts);
+#endif
             if (coded_frame->type == CF_VIDEO)
                 rescaled_dts = coded_frame->real_dts;
 
             //printf("\n stream-id %i ours: %"PRIi64" \n", coded_frame->output_stream_id, coded_frame->pts );
-
+#if 0
+            printf("A: %d now rescaled_dts %" PRIi64 "  video_dts %" PRIi64 "  first_video_pts %" PRIi64 "  first_video_real_pts %" PRIi64 "\n",
+                coded_frame->type == CF_AUDIO,
+                rescaled_dts, video_dts, first_video_pts, first_video_real_pts);
+#endif
+#if 0
+            if (coded_frame->type == CF_AUDIO) {
+                printf("video_dts %" PRIi64 "\n",
+                    video_dts);
+            }
+#endif
             if( rescaled_dts <= video_dts )
             {
                 frames[num_frames].opaque = h->mux_queue.queue[i];
@@ -954,6 +1033,11 @@ void *open_muxer( void *ptr )
             } else {
                 /* Skipping this frame, we're not ready to mux it yet, its in the future. */
                 /* This happens a lot with AC3 / bitstream frames in normal latency mode. */
+#if 0
+            printf("%s: skp rescaled_dts %" PRIi64 "  video_dts %" PRIi64 "  first_video_pts %" PRIi64 "  first_video_real_pts %" PRIi64 "\n",
+                coded_frame->type == CF_AUDIO ? "A" : "V",
+                rescaled_dts, video_dts, first_video_pts, first_video_real_pts);
+#endif
             }
         }
 

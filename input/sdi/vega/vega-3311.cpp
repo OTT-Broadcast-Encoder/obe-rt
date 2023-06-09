@@ -79,13 +79,13 @@
 #include <time.h>
 #include <encoders/video/sei-timestamp.h>
 #include <input/sdi/yuv422p10le.h>
-
+#include "histogram.h"
 #include "vega-3311.h"
 #include <sys/stat.h>
 
 #define MODULE_PREFIX "[vega]: "
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 #define FORCE_10BIT 1
 
@@ -104,6 +104,8 @@ const char *vega3311_sdk_version = VEGA_VERSION;
 
 extern int g_decklink_monitor_hw_clocks;
 extern int g_decklink_render_walltime;
+extern int g_decklink_histogram_print_secs;
+extern int g_decklink_histogram_reset;
 
 typedef struct
 {
@@ -111,14 +113,23 @@ typedef struct
 	obe_device_t *device;
 	obe_t *h;
 
+        /* Capture layer and encoder layer configuration management */
         API_VEGA_BQB_INIT_PARAM_T init_params;
         API_VEGA3311_CAP_INIT_PARAM_T ch_init_param;
-        uint32_t framecount;
 
+        uint32_t framecount;
         int bLastFrame;
 
         /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
         struct SwrContext *avr;
+
+        /* Video timing tracking */
+        int64_t videoLastPCR;
+
+        /* Audio timing tracking */
+        int64_t audioLastPCR;
+        struct ltn_histogram_s *hg_callback_audio;
+        struct ltn_histogram_s *hg_callback_video;
 
 } vega_ctx_t;
 
@@ -240,6 +251,7 @@ static int configureCodec(vega_opts_t *opts)
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_Y210;
                 opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE;
+                //opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P010; // Use this to avoid a driver CSC to NV20.
         } else {
 		fprintf(stderr, MODULE_PREFIX "unable to determine colorspace, i_csp = 0x%x\n", p->i_csp);
 		return -1;
@@ -342,7 +354,7 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
         void* pv_user_arg)
 {
         vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
-	//vega_ctx_t *ctx = &opts->ctx;
+	vega_ctx_t *ctx = &opts->ctx;
 
         if (st_frame_info->u32BufSize == 0) {
                 if (st_input_info->eAudioState == API_VEGA3311_CAP_STATE_CAPTURING) {
@@ -356,6 +368,18 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
                 return;
         }
 
+	ltn_histogram_interval_update(ctx->hg_callback_audio);
+
+	if (g_decklink_histogram_print_secs > 0) {
+		ltn_histogram_interval_print(STDOUT_FILENO, ctx->hg_callback_audio, g_decklink_histogram_print_secs);
+        }
+
+	if (g_decklink_histogram_reset) {
+		g_decklink_histogram_reset = 0;
+		ltn_histogram_reset(ctx->hg_callback_audio);
+		ltn_histogram_reset(ctx->hg_callback_video);
+	}
+
         /* Vega deliveres the samples in s16P planar format already. We don't need to
          * convert from INterleaved to planar. Yay.
          */
@@ -363,16 +387,20 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
         //int64_t pcr = convertSCR_to_PCR(st_input_info->tCurrentPCR.u64Dword);
         int64_t pcr = st_input_info->tCurrentPCR.u64Dword;
 //        printf("%" PRIi64 "\n", st_input_info->tCurrentPCR.u64Dword);
-#if 0
+
+#if LOCAL_DEBUG
         int64_t pts = pcr / 300;
-        printf(MODULE_PREFIX "pushed raw audio frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 " %p length %d\n",
+        printf(MODULE_PREFIX "pushed raw audio frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 " %p length %d delta: %016" PRIi64 "\n",
                 pcr, pts,
-                st_frame_info->u8pDataBuf, st_frame_info->u32BufSize);
+                st_frame_info->u8pDataBuf, st_frame_info->u32BufSize,
+                pcr - ctx->audioLastPCR);
 #endif
         int channels = MAX_AUDIO_CHANNELS;
         int samplesPerChannel = st_frame_info->u32BufSize / channels / sizeof(uint16_t);
 
         deliver_audio_frame(opts, st_frame_info->u8pDataBuf, st_frame_info->u32BufSize, samplesPerChannel, pcr, channels);
+
+        ctx->audioLastPCR = pcr;
 }
 
 /* Take a single NAL, convert to a raw frame and push it into the downstream workflow. */
@@ -507,6 +535,11 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                 }
         }
 
+	ltn_histogram_interval_update(ctx->hg_callback_video);
+	if (g_decklink_histogram_print_secs > 0) {
+		ltn_histogram_interval_print(STDOUT_FILENO, ctx->hg_callback_video, g_decklink_histogram_print_secs);
+        }
+
         //if (ops->cb_param_p->last_frame == 1)
         {
          //       sem_post(&cb_param_p->capture_sem);
@@ -515,7 +548,7 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
         ctx->framecount++;
 
-        /* Capture an output frame to disk, for debug */
+        /* Capture an output frame to disk, for debug, when you touch this file. */
         {
                 struct stat s;
                 const char *tf = "/tmp/vega-frame-capture-input.touch";
@@ -534,7 +567,6 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
         //int64_t pts = convertSCR_to_PCR(st_input_info->u64CurrentPCR) / 300;
         memset(&img, 0 , sizeof(img));
-
         uint8_t *dst[3] = { 0, 0, 0 };
         if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE) {
                 /* If 10bit 422 .... Colorspace convert Y210 into yuv422p10le */
@@ -581,7 +613,6 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         obe_getTimestamp(ts, NULL);
                         YUV422P10LE_painter_draw_ascii_at(&pctx, 2, 2, ts);
                 }
-
         } else {
                 img.pu8Addr     = st_frame_info->u8pDataBuf;
                 img.u32Size     = st_frame_info->u32BufSize;
@@ -624,7 +655,7 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                 /* SEI: End */
         }
 
-        /* Capture an output frame to disk, for debug */
+        /* Capture an output frame to disk, for debug, when you touch this file. */
         {
                 struct stat s;
                 const char *tf = "/tmp/vega-frame-capture-output.touch";
@@ -653,6 +684,22 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         printf(MODULE_PREFIX "pushed raw video frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 "\n",
                 st_input_info->tCurrentPCR.u64Dword, img.pts);
 #endif
+
+#if 1
+        printf("Video last pcr minus current pcr %12" PRIi64 " (are we dropping frames?)\n",
+                st_input_info->tCurrentPCR.u64Dword - ctx->videoLastPCR
+        );
+#endif
+        ctx->videoLastPCR = st_input_info->tCurrentPCR.u64Dword;
+
+        /* Check the audio PCR vs the video PCR is never more than 200 ms apart */
+        int64_t avdeltams = (ctx->videoLastPCR - ctx->audioLastPCR) / 300 / 90;
+        int64_t avdelta_warning = 150;
+        if (abs(avdeltams) >= avdelta_warning) {
+                printf(MODULE_PREFIX "warning: video PCR vs audio PCR delta %12" PRIi64 " (ms), exceeds %" PRIi64 ".\n",
+                        (ctx->videoLastPCR - ctx->audioLastPCR) / 300 / 90,
+                        avdelta_warning);
+        }
 }
 
 #if 0
@@ -889,6 +936,9 @@ static int open_device(vega_opts_t *opts, int probe)
                         fprintf(stderr, MODULE_PREFIX "Could not alloc libswresample context\n");
                         return -1;
                 }
+
+                ltn_histogram_alloc_video_defaults(&ctx->hg_callback_audio, "audio arrival latency");
+                ltn_histogram_alloc_video_defaults(&ctx->hg_callback_video, "video arrival latency");
 
                 /* Give libswresample a made up channel map.
                  * Convert S16 interleaved to S32P planar.

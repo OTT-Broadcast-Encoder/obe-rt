@@ -1,8 +1,8 @@
 AUTOMAKE_OPTIONS = foreign
 GIT_VERSION := $(shell git describe --abbrev=8 --dirty --always --tags)
 
-VERSION_MAJOR = 3
-VERSION_MINOR = 11
+VERSION_MAJOR = 4
+VERSION_MINOR = 0
 VERSION_PATCH = 0
 
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
@@ -144,3 +144,7 @@ obecli_LDFLAGS = vfilter.o x86_sdi.o
 libklvanc_noinst_includedir = $(includedir)
 
 noinst_HEADERS  = $(top_srcdir)/mux/mux.h
+
+deploy: all
+#	scp -P3999 obecli 192.168.2.76:/home/stoth/VEGA-3311
+	scp -P3999 obecli 192.168.2.106:/home/stoth/VEGA-3311
