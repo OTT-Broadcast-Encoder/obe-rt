@@ -535,6 +535,8 @@ typedef struct
 
     int len;
     uint8_t *data;
+
+    struct timeval creationDate;
 } obe_coded_frame_t;
 
 typedef struct

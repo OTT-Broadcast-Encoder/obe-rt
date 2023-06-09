@@ -155,6 +155,7 @@ obe_coded_frame_t *new_coded_frame( int output_stream_id, int len )
         free( coded_frame );
         return NULL;
     }
+    gettimeofday(&coded_frame->creationDate, NULL);
 
     return coded_frame;
 }
@@ -167,12 +168,17 @@ void destroy_coded_frame( obe_coded_frame_t *coded_frame )
 
 void coded_frame_print(obe_coded_frame_t *cf)
 {
+    struct timeval now, result;
+    gettimeofday(&now, NULL);
+    obe_timeval_subtract(&result, &now, &cf->creationDate);
+
 	double v = (double)cf->len / (cf->cpb_final_arrival_time - cf->cpb_initial_arrival_time);
-	printf("strm %d  type %c  len %7d  rpts %13" PRIi64 "  rdts %13" PRIi64 "  iat %13" PRIi64 "  fat %13" PRIi64 " (%11.09f)  at %13" PRIi64 "  pr %d  ra %d -- ",
+	printf("strm %d  type %c  len %7d  pts %13" PRIi64 " rpts %13" PRIi64 "  rdts %13" PRIi64 "  iat %13" PRIi64 "  fat %13" PRIi64 " (%11.09f)  at %13" PRIi64 "  pr %d  ra %d age %" PRIi64 " -- ",
 		cf->output_stream_id,
 		cf->type == CF_VIDEO ? 'V' :
 		cf->type == CF_AUDIO ? 'A' : 'U',
 		cf->len,
+		cf->pts,
 		cf->real_pts,
 		cf->real_dts,
 		cf->cpb_initial_arrival_time,
@@ -180,7 +186,8 @@ void coded_frame_print(obe_coded_frame_t *cf)
 		v,
 		cf->arrival_time,
 		cf->priority,
-		cf->random_access);
+		cf->random_access,
+        obe_timediff_to_msecs(&result));
 
 	for (int i = 0; i < 16; i++)
 		printf("%02x ", cf->data[i]);
