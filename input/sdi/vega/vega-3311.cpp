@@ -85,7 +85,7 @@
 
 #define MODULE_PREFIX "[vega]: "
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 #define FORCE_10BIT 1
 
