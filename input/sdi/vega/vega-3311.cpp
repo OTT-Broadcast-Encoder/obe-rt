@@ -515,6 +515,17 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
         ctx->framecount++;
 
+#if 0
+	static time_t last_report = 0;
+	time_t now;
+	now = time(NULL);
+	if (now != last_report) {
+		printf(MODULE_PREFIX "[DEV%d:CH%d] Video drops: %" PRIu64 " Audio drops: %" PRIu64 "\n",
+		       u32DevId, eCh, st_input_info->u64VideoFrameDropped, st_input_info->u64AudioFrameDropped);
+		last_report = now;
+	}
+#endif
+
         /* Capture an output frame to disk, for debug */
         {
                 struct stat s;
