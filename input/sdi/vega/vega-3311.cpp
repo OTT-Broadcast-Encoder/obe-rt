@@ -239,7 +239,7 @@ static int configureCodec(vega_opts_t *opts)
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_Y210;
-                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P010;
         } else {
 		fprintf(stderr, MODULE_PREFIX "unable to determine colorspace, i_csp = 0x%x\n", p->i_csp);
 		return -1;
@@ -635,7 +635,50 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         obe_getTimestamp(ts, NULL);
                         YUV422P10LE_painter_draw_ascii_at(&pctx, 2, 2, ts);
                 }
+        } else if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P010) {
+                /* If 10bit 422 .... Colorspace convert Y210 into NV20 (mislabeled by Advantech as P210) */
 
+                /*  len as expressed in bytes. No stride */
+                int ylen = (opts->width * opts->height) * 5 / 4;
+                int uvlen = ylen;
+                int dstlen = ylen + uvlen;
+
+                dst[0] = (uint8_t *)malloc(dstlen); /* Y - Primary plane - we submit this single address the the GPU */
+                dst[1] = dst[0] + ylen; /* UV plane */
+
+                /* Unpack all of the 16 bit Y/U/Y/V words, shift to correct for padding and write new planes */
+                uint8_t *wy = dst[0];
+		uint8_t *wuv = dst[1];
+                uint16_t *p = (uint16_t *)&st_frame_info->u8pDataBuf[0];
+
+                for (int i = 0 ; i < opts->width * opts->height; i += 4) {
+			uint16_t y0, y1, y2, y3;
+			uint16_t uv0, uv1, uv2, uv3;
+			y0 = *(p++) >> 6;
+			uv0 = *(p++) >> 6;
+			y1 = *(p++) >> 6;
+			uv1 = *(p++) >> 6;
+			y2 = *(p++) >> 6;
+			uv2 = *(p++) >> 6;
+			y3 = *(p++) >> 6;
+			uv3 = *(p++) >> 6;
+
+			*(wy++) = y0;
+                        *(wy++) = (y0 >> 8) | (y1 << 2);
+                        *(wy++) = (y1 >> 6) | (y2 << 4);
+                        *(wy++) = (y2 >> 4) | (y3 << 6);
+                        *(wy++) = (y3 >> 2);
+
+			*(wuv++) = uv0;
+                        *(wuv++) = (uv0 >> 8) | (uv1 << 2);
+                        *(wuv++) = (uv1 >> 6) | (uv2 << 4);
+                        *(wuv++) = (uv2 >> 4) | (uv3 << 6);
+                        *(wuv++) = (uv3 >> 2);
+                }
+
+                img.pu8Addr     = dst[0];
+                img.u32Size     = dstlen;
+                img.eFormat     = opts->codec.eFormat;
         } else {
                 img.pu8Addr     = st_frame_info->u8pDataBuf;
                 img.u32Size     = st_frame_info->u32BufSize;
