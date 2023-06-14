@@ -547,6 +547,49 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         memset(&img, 0 , sizeof(img));
 
         uint8_t *dst[3] = { 0, 0, 0 };
+
+	/* Burnreader to validate frames on capture */
+	if (ctx->ch_init_param.eFormat == API_VEGA3311_CAP_IMAGE_FORMAT_Y210) {
+		/* These are the default constants in the burnwriter */
+		int startline = 1;
+		int bitwidth = 30;
+		int bitheight = 30;
+
+		/* Check the line at the vertical center of the boxes */
+		int checkline = startline + (bitheight / 2);
+		uint16_t *pic = (uint16_t *)&st_frame_info->u8pDataBuf[0];
+		uint16_t *x;
+		uint32_t bits = 0;
+		int bitcount = 0;
+		static int64_t framecnt = 0;
+
+		/* Check to ensure counters are actually present */
+		x = pic + (checkline * opts->width) + 1;
+		for (int c = 30; c >= 0; c--) {
+			x += (bitwidth / 2 * 2);
+			if ((*x >> 6) > 0x195 && (*x >> 6) < 0x205)
+				bitcount++;
+			x += (bitwidth / 2 * 2);
+		}
+
+		/* Now extract the count */
+		x = pic + (checkline * opts->width);
+		for (int c = 31; c >= 0; c--) {
+                        x += (bitwidth / 2 * 2);
+                        if ((*x >> 6) > 0x200)
+				bits |= (1 << c);
+                        x += (bitwidth / 2 * 2);
+		}
+
+		if ((bitcount == 31) && (framecnt && framecnt + 1 != bits)) {
+                        char ts[64];
+                        obe_getTimestamp(ts, NULL);
+                        printf("%s: OSD counter discontinuity, expected %08" PRIx64 " got %08" PRIx32 "\n",
+                               ts, framecnt + 1, bits);
+		}
+		framecnt = bits;
+	}
+
         if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE) {
                 /* If 10bit 422 .... Colorspace convert Y210 into yuv422p10le */
 
