@@ -243,6 +243,8 @@ printf(" split_raw_frame->audio_frame.linesize %d", split_raw_frame->audio_frame
             if (raw_frame->input_stream_id != output_stream->sdi_audio_pair)
                 continue;
 
+            /* PTS is the standard 27MHz clock. Adjust by ms. */
+            raw_frame->pts += ((int64_t)output_stream->audio_offset_ms * (OBE_CLOCK/1000));
 #if LOCAL_DEBUG
             printf("%s() adding A52 frame for input_stream_id %d to encoder output_stream_id %d sdi_audio_pair %d\n", __func__,
                 raw_frame->input_stream_id, h->encoders[i]->output_stream_id, output_stream->sdi_audio_pair);
