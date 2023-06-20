@@ -250,8 +250,7 @@ static int configureCodec(vega_opts_t *opts)
                 opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
                 opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
                 opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_Y210;
-                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE;
-                //opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P010; // Use this to avoid a driver CSC to NV20.
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P010;
         } else {
 		fprintf(stderr, MODULE_PREFIX "unable to determine colorspace, i_csp = 0x%x\n", p->i_csp);
 		return -1;
@@ -548,7 +547,18 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
         ctx->framecount++;
 
-        /* Capture an output frame to disk, for debug, when you touch this file. */
+#if 0
+	static time_t last_report = 0;
+	time_t now;
+	now = time(NULL);
+	if (now != last_report) {
+		printf(MODULE_PREFIX "[DEV%d:CH%d] Video drops: %" PRIu64 " Audio drops: %" PRIu64 "\n",
+		       u32DevId, eCh, st_input_info->u64VideoFrameDropped, st_input_info->u64AudioFrameDropped);
+		last_report = now;
+	}
+#endif
+
+        /* Capture an output frame to disk, for debug */
         {
                 struct stat s;
                 const char *tf = "/tmp/vega-frame-capture-input.touch";
@@ -568,6 +578,49 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         //int64_t pts = convertSCR_to_PCR(st_input_info->u64CurrentPCR) / 300;
         memset(&img, 0 , sizeof(img));
         uint8_t *dst[3] = { 0, 0, 0 };
+
+	/* Burnreader to validate frames on capture */
+	if (ctx->ch_init_param.eFormat == API_VEGA3311_CAP_IMAGE_FORMAT_Y210) {
+		/* These are the default constants in the burnwriter */
+		int startline = 1;
+		int bitwidth = 30;
+		int bitheight = 30;
+
+		/* Check the line at the vertical center of the boxes */
+		int checkline = startline + (bitheight / 2);
+		uint16_t *pic = (uint16_t *)&st_frame_info->u8pDataBuf[0];
+		uint16_t *x;
+		uint32_t bits = 0;
+		int bitcount = 0;
+		static int64_t framecnt = 0;
+
+		/* Check to ensure counters are actually present */
+		x = pic + (checkline * opts->width) + 1;
+		for (int c = 30; c >= 0; c--) {
+			x += (bitwidth / 2 * 2);
+			if ((*x >> 6) > 0x195 && (*x >> 6) < 0x205)
+				bitcount++;
+			x += (bitwidth / 2 * 2);
+		}
+
+		/* Now extract the count */
+		x = pic + (checkline * opts->width);
+		for (int c = 31; c >= 0; c--) {
+                        x += (bitwidth / 2 * 2);
+                        if ((*x >> 6) > 0x200)
+				bits |= (1 << c);
+                        x += (bitwidth / 2 * 2);
+		}
+
+		if ((bitcount == 31) && (framecnt && framecnt + 1 != bits)) {
+                        char ts[64];
+                        obe_getTimestamp(ts, NULL);
+                        printf("%s: OSD counter discontinuity, expected %08" PRIx64 " got %08" PRIx32 "\n",
+                               ts, framecnt + 1, bits);
+		}
+		framecnt = bits;
+	}
+
         if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE) {
                 /* If 10bit 422 .... Colorspace convert Y210 into yuv422p10le */
 
@@ -613,6 +666,50 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         obe_getTimestamp(ts, NULL);
                         YUV422P10LE_painter_draw_ascii_at(&pctx, 2, 2, ts);
                 }
+        } else if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P010) {
+                /* If 10bit 422 .... Colorspace convert Y210 into NV20 (mislabeled by Advantech as P210) */
+
+                /*  len as expressed in bytes. No stride */
+                int ylen = (opts->width * opts->height) * 5 / 4;
+                int uvlen = ylen;
+                int dstlen = ylen + uvlen;
+
+                dst[0] = (uint8_t *)malloc(dstlen); /* Y - Primary plane - we submit this single address the the GPU */
+                dst[1] = dst[0] + ylen; /* UV plane */
+
+                /* Unpack all of the 16 bit Y/U/Y/V words, shift to correct for padding and write new planes */
+                uint8_t *wy = dst[0];
+		uint8_t *wuv = dst[1];
+                uint16_t *p = (uint16_t *)&st_frame_info->u8pDataBuf[0];
+
+                for (int i = 0 ; i < opts->width * opts->height; i += 4) {
+			uint16_t y0, y1, y2, y3;
+			uint16_t uv0, uv1, uv2, uv3;
+			y0 = *(p++) >> 6;
+			uv0 = *(p++) >> 6;
+			y1 = *(p++) >> 6;
+			uv1 = *(p++) >> 6;
+			y2 = *(p++) >> 6;
+			uv2 = *(p++) >> 6;
+			y3 = *(p++) >> 6;
+			uv3 = *(p++) >> 6;
+
+			*(wy++) = y0;
+                        *(wy++) = (y0 >> 8) | (y1 << 2);
+                        *(wy++) = (y1 >> 6) | (y2 << 4);
+                        *(wy++) = (y2 >> 4) | (y3 << 6);
+                        *(wy++) = (y3 >> 2);
+
+			*(wuv++) = uv0;
+                        *(wuv++) = (uv0 >> 8) | (uv1 << 2);
+                        *(wuv++) = (uv1 >> 6) | (uv2 << 4);
+                        *(wuv++) = (uv2 >> 4) | (uv3 << 6);
+                        *(wuv++) = (uv3 >> 2);
+                }
+
+                img.pu8Addr     = dst[0];
+                img.u32Size     = dstlen;
+                img.eFormat     = opts->codec.eFormat;
         } else {
                 img.pu8Addr     = st_frame_info->u8pDataBuf;
                 img.u32Size     = st_frame_info->u32BufSize;
