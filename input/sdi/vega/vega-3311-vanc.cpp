@@ -133,38 +133,7 @@ static int findOutputStreamIdByFormat(vega_ctx_t *ctx, enum stream_type_e stype,
 	return -1;
 }
 
-/* We're given some VANC data, craete a SCTE104 metadata entry for it
- * and we'll send it to the encoder later, by an atachment to the video frame.
- */
-static int add_metadata_scte104_vanc_section(vega_ctx_t *ctx,
-	struct avmetadata_s *md,
-	uint8_t *section, uint32_t section_length, int lineNr)
-{
-	/* Put the coded frame into an raw_frame attachment and discard the coded frame. */
-	int idx = md->count;
-	if (idx >= MAX_RAW_FRAME_METADATA_ITEMS) {
-		printf("%s() already has %d items, unable to add additional. Skipping\n",
-			__func__, idx);
-		return -1;
-	}
-
-	md->array[idx] = avmetadata_item_alloc(section_length, AVMETADATA_VANC_SCTE104);
-	if (!md->array[idx])
-		return -1;
-	md->count++;
-
-	avmetadata_item_data_write(md->array[idx], section, section_length);
-	avmetadata_item_data_set_linenr(md->array[idx], lineNr);
-
-        int streamId = findOutputStreamIdByFormat(ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
-        if (streamId < 0)
-                return 0;
-	avmetadata_item_data_set_outputstreamid(md->array[idx], streamId);
-
-	return 0;
-}
-
-static int transmit_pes_to_muxer(vega_ctx_t *ctx, uint8_t *buf, uint32_t byteCount)
+static int transmit_smpte2038_pes_to_muxer(vega_ctx_t *ctx, uint8_t *buf, uint32_t byteCount)
 {
 	int streamId = findOutputStreamIdByFormat(ctx, STREAM_TYPE_MISC, SMPTE2038);
 	if (streamId < 0)
@@ -184,12 +153,36 @@ static int transmit_pes_to_muxer(vega_ctx_t *ctx, uint8_t *buf, uint32_t byteCou
 	return 0;
 }
 
+static int transmit_scte35_section_to_muxer(vega_ctx_t *ctx, uint8_t *buf, uint32_t byteCount)
+{      
+        /* TODO: This only works if we have one SCTE35 stream. */
+	int streamId = findOutputStreamIdByFormat(ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
+	if (streamId < 0) {
+                fprintf(stderr, MODULE_PREFIX "Unable to find SCTE35 stream\n");
+		return 0;
+        }
+
+	/* Now send the constructed frame to the mux */
+	obe_coded_frame_t *coded_frame = new_coded_frame(streamId, byteCount);
+	if (!coded_frame) {
+		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, byteCount);
+		return -1;
+	}
+	coded_frame->pts           = ctx->lastcorrectedPicPTS;
+	coded_frame->real_pts      = ctx->lastcorrectedPicPTS;
+	coded_frame->real_dts      = ctx->lastcorrectedPicPTS;
+	coded_frame->random_access = 1; /* ? */
+
+	memcpy(coded_frame->data, buf, byteCount);
+	add_to_queue(&ctx->h->mux_queue, coded_frame);
+
+	return 0;
+}
+
 static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_scte_104_s *pkt)
 {
         vega_opts_t *opts = (vega_opts_t *)callback_context;
         vega_ctx_t *ctx = &opts->ctx;
-
-        printf(MODULE_PREFIX "%s\n", __func__);
 
 	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
 		printf("%s:%s()\n", __FILE__, __func__);
@@ -201,15 +194,36 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl,
 		return 0;
 	}
 
-#if 0
+	struct klvanc_single_operation_message *m = &pkt->so_msg;
 
-	/* Append all the original VANC to the metadata object, we'll process it later. */
-	add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
-		(uint8_t *)&pkt->hdr.raw[0],
-		pkt->hdr.rawLengthWords * 2,
-		pkt->hdr.lineNr);
+	if (m->opID == 0xFFFF /* Multiple Operation Message */) {
+		struct splice_entries results;
+		/* Take the PTS from the coded frame, output from our codec, build a SCTE35 message
+		 * for that timestamp. Send it to the muxer.
+		 */
 
-	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
+                /* TODO: WE're technically guessing that the callback happened close to the time
+                 * associated with the last video frame. It's going to get us close.
+                 * We really need to collect the PCR and propagate it, but we can't easily do that - yet
+                 */
+		/* Note, we add 10 second to the PTS to compensate for TS_START added by libmpegts */
+		int r = scte35_generate_from_scte104(pkt, &results, ctx->lastcorrectedPicPTS + (10 * 90000));
+		if (r != 0) {
+			fprintf(stderr, "Generation of SCTE-35 sections failed\n");
+		}
+
+		for (size_t i = 0; i < results.num_splices; i++) {
+                        /* Send the message right to the muxer, which isn't frame accurate. */
+			transmit_scte35_section_to_muxer(ctx, results.splice_entry[i],
+							 results.splice_size[i]);
+			free(results.splice_entry[i]);
+		}
+	} else {
+		/* Unsupported single_operation_message type */
+		fprintf(stderr, MODULE_PREFIX "Unsupported single_operation SCTE35 message type, ignoring.\n");
+	}
+
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
 		static time_t lastErrTime = 0;
 		time_t now = time(0);
 		if (lastErrTime != now) {
@@ -225,7 +239,7 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl,
 
 		}
 	}
-#endif
+
 	return 0;
 }
 
@@ -233,8 +247,6 @@ static int cb_all(void *callback_context, struct klvanc_context_s *vanchdl, stru
 {
         vega_opts_t *opts = (vega_opts_t *)callback_context;
         vega_ctx_t *ctx = &opts->ctx;
-
-        printf(MODULE_PREFIX "%s\n", __func__);
 
 	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
 		printf("%s()\n", __func__);
@@ -254,7 +266,7 @@ static int cb_all(void *callback_context, struct klvanc_context_s *vanchdl, stru
 	}
 
 #if 0
-/* This patch should not be required for VEGA based custoemrs. */
+/* This patch should not be required for VEGA based deployments. */
 	if (OPTION_ENABLED(patch1) && ctx->vanchdl && pkt->did == 0x52 && pkt->dbnsdid == 0x01) {
 
 		/* Patch#1 -- SCTE104 VANC appearing in a non-standard DID.
@@ -428,7 +440,7 @@ static void parse_ancillary_data(vega_ctx_t *ctx, vega_opts_t *opts, uint32_t bl
                 /* Finish the 2038 session and forward 2038 to muxer */
                 if (ctx->smpte2038_ctx) {
                         if (klvanc_smpte2038_packetizer_end(ctx->smpte2038_ctx, ctx->lastcorrectedPicPTS + (10 * 90000)) == 0) {
-                                if (transmit_pes_to_muxer(ctx, ctx->smpte2038_ctx->buf, ctx->smpte2038_ctx->bufused) < 0) {
+                                if (transmit_smpte2038_pes_to_muxer(ctx, ctx->smpte2038_ctx->buf, ctx->smpte2038_ctx->bufused) < 0) {
                                         fprintf(stderr, MODULE_PREFIX "failed to xmit PES to muxer\n");
                                 }
                         }
@@ -502,8 +514,6 @@ void vega3311_vanc_callback(uint32_t u32DevId,
 
                 return;
         }
-
-
 
         AncdPHD *pkt_hdr = (AncdPHD *)st_frame_info->u8pDataBuf;
 #if 0

@@ -949,6 +949,13 @@ static int open_device(vega_opts_t *opts, int probe)
 #endif
         }
 
+        if (ctx->h->enable_scte35) {
+                klsyslog_and_stdout(LOG_INFO, "Enabling option SCTE35");
+        } else {
+                /* Disable SCTE104 parsing callbacks, configuration optimization. */
+                vega3311_vanc_callbacks.scte_104 = NULL;
+        }
+
         if (OPTION_ENABLED(smpte2038)) {
                 klsyslog_and_stdout(LOG_INFO, MODULE_PREFIX "Enabling option SMPTE2038");
                 if (klvanc_smpte2038_packetizer_alloc(&ctx->smpte2038_ctx) < 0) {
@@ -1643,12 +1650,11 @@ static void *vega_probe_stream(void *ptr)
                 cur_stream++;
 	}
 
-#if 0
         /* Add a new output stream type, a TABLE_SECTION mechanism.
          * We use this to pass DVB table sections direct to the muxer,
          * for SCTE35, and other sections in the future.
          */
-        if (decklink_ctx->h->enable_scte35) {
+        if (ctx->h->enable_scte35) {
                 ALLOC_STREAM(cur_stream);
 
                 pthread_mutex_lock(&h->device_list_mutex);
@@ -1664,7 +1670,6 @@ static void *vega_probe_stream(void *ptr)
                 }
                 cur_stream++;
         }
-#endif
 
         /* Add a new output stream type, a SCTE2038 mechanism.
          * We use this to pass PES direct to the muxer.
