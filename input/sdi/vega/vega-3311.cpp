@@ -202,17 +202,6 @@ static int configureCodec(vega_opts_t *opts)
         return 0; /* Success */
 }
 
-
-static void callback__process_capture(API_VEGA_BQB_PICT_INFO_T *pPicInfo, const API_VEGA_BQB_PICT_INFO_CALLBACK_PARAM_T *args)
-{
-        printf("%s() pic %d  sei %d\n", __func__,
-                pPicInfo->u32PictureNumber,
-                pPicInfo->u32SeiNum);
-
-        // HDR Insert happends here?
-        // Why not do this in the capture callback?
-}
-
 static void close_device(vega_opts_t *opts)
 {
 	vega_ctx_t *ctx = &opts->ctx;
@@ -262,8 +251,6 @@ static void close_device(vega_opts_t *opts)
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
-
-extern struct klvanc_callbacks_s vega3311_vanc_callbacks;
 
 static int open_device(vega_opts_t *opts, int probe)
 {
@@ -797,16 +784,6 @@ API_VEGA_BQB_FPS_60,
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to register audio capture callback function\n");
                         return -1;
                 }
-
-#if 1
-                /* Register callback to insert SEI in VIF mode */
-                encret = VEGA_BQB_ENC_RegisterPictureInfoCallback((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx,
-                        callback__process_capture, opts);
-                if (encret != API_VEGA_BQB_RET_SUCCESS) {
-                        fprintf(stderr, MODULE_PREFIX "ERROR: failed to enc pictures info callback\n");
-                }
-                printf(MODULE_PREFIX "Registering Picture Info callback\n");
-#endif
 
                 printf(MODULE_PREFIX "Starting hardware encoder\n");
 

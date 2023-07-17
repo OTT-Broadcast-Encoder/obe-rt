@@ -28,6 +28,7 @@ extern int g_decklink_render_walltime;
 extern int g_decklink_histogram_print_secs;
 extern int g_decklink_histogram_reset;
 extern int g_decklink_record_audio_buffers;
+extern struct klvanc_callbacks_s vega3311_vanc_callbacks;
 
 struct obe_to_vega_video
 {
