@@ -103,18 +103,9 @@ extern "C"
 #define STR(x) STR_HELPER(x)
 #define VEGA_VERSION STR(VEGA331X_KERNEL_VERSION) "." STR(VEGA331X_MAJOR_VERSION) "." STR(VEGA331X_MINOR_VERSION)
 
-#define MAX_AUDIO_CHANNELS 16
-#define MAX_AUDIO_PAIRS (MAX_AUDIO_CHANNELS / 2)
-
 using namespace std;
 
 const char *vega3311_sdk_version = VEGA_VERSION;
-
-extern int g_decklink_monitor_hw_clocks;
-extern int g_decklink_render_walltime;
-extern int g_decklink_histogram_print_secs;
-extern int g_decklink_histogram_reset;
-extern int g_decklink_record_audio_buffers;
 
 static int configureCodec(vega_opts_t *opts)
 {
@@ -213,151 +204,6 @@ static int configureCodec(vega_opts_t *opts)
         printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
 
         return 0; /* Success */
-}
-
-/* Take PCM, convrt it into frames and push it into the downstream workflow. */
-static void deliver_audio_frame(vega_opts_t *opts, unsigned char *plane, int sizeBytes, int sampleCount, int64_t frametime, int channelCount)
-{
-	vega_ctx_t *ctx = &opts->ctx;
-
-#if 0
-	int offset = 0;
-	for (int i = offset; i < (offset + 64); i++)
-		printf("%02x", plane[i]);
-	printf("\n");
-#endif
-
-	//printf("%s() %d bytes numsamples %d\n", __func__, sizeBytes, sampleCount);
-	obe_raw_frame_t *rf = new_raw_frame();
-	if (!rf)
-		return;
-
-	rf->audio_frame.num_samples  = sampleCount;
-	rf->audio_frame.num_channels = MAX_AUDIO_CHANNELS;
-	rf->audio_frame.sample_fmt   = AV_SAMPLE_FMT_S32P; /* Destination format */
-	rf->audio_frame.linesize     = rf->audio_frame.num_channels * sizeof(uint16_t);
-
-	if (av_samples_alloc(rf->audio_frame.audio_data, &rf->audio_frame.linesize, rf->audio_frame.num_channels,
-                              rf->audio_frame.num_samples, (AVSampleFormat)rf->audio_frame.sample_fmt, 0) < 0)
-	{
-		fprintf(stderr, MODULE_PREFIX "av_samples_alloc failed\n");
-                free(rf);
-		return;
-	}
-
-        /* Convert input samples from S16 interleaved (native from the h/w) into S32P planer. */
-        if (swr_convert(ctx->avr,
-                rf->audio_frame.audio_data,
-                rf->audio_frame.num_samples,
-                (const uint8_t**)&plane,
-                rf->audio_frame.num_samples) < 0)
-        {
-                fprintf(stderr, MODULE_PREFIX "Sample format conversion failed\n");
-                /* TODO: Free the audio plane? */
-                free(rf);
-                return;
-        }
-
-	avfm_init(&rf->avfm, AVFM_AUDIO_PCM);
-
-	avfm_set_hw_status_mask(&rf->avfm, AVFM_HW_STATUS__MASK_VEGA); // probably not required.
-
-	/* Hardware clock of the dektec starts up non-zero, increments regardless,
-	 * out stack assumes the clock starts at zero. Compensate by subtracting
-	 * the base start value.
-	 */
-	static int64_t frametime_base = 0;
-	if (frametime_base == 0)
-		frametime_base = frametime;
-
-	avfm_set_pts_audio(&rf->avfm, frametime - frametime_base);
-	avfm_set_hw_received_time(&rf->avfm);
-	//avfm_set_video_interval_clk(&rf->avfm, decklink_ctx->vframe_duration);
-
-	rf->release_data = obe_release_audio_data;
-	rf->release_frame = obe_release_frame;
-	rf->input_stream_id = 1; // TODO: Is this correct?
-
-	if (add_to_filter_queue(ctx->h, rf) < 0 ) {
-		fprintf(stderr, MODULE_PREFIX "Unable to add audio frame to the filter q.\n");
-	}
-}
-
-
-/* Called by the vega sdk when a raw audio frame is ready. */
-static void callback__a_capture_cb_func(uint32_t u32DevId,
-        API_VEGA3311_CAP_CHN_E eCh,
-        API_VEGA3311_CAPTURE_FRAME_INFO_T *st_frame_info,
-        API_VEGA3311_CAPTURE_FORMAT_T *st_input_info,
-        void* pv_user_arg)
-{
-        vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
-	vega_ctx_t *ctx = &opts->ctx;
-
-        if (st_frame_info->u32BufSize == 0) {
-                if (st_input_info->eAudioState == API_VEGA3311_CAP_STATE_CAPTURING) {
-                        printf(MODULE_PREFIX "[DEV%u:CH%d] audio state change to capturing, source signal recovery\n", u32DevId, eCh);
-                } else if (st_input_info->eAudioState == API_VEGA3311_CAP_STATE_WAITING) {
-                        printf(MODULE_PREFIX "[DEV%u:CH%d] audio state change to waiting, source signal loss\n", u32DevId, eCh);
-                } else if (st_input_info->eAudioState == API_VEGA3311_CAP_STATE_STANDBY) {
-                        printf(MODULE_PREFIX "[DEV%u:CH%d] audio state change to standby, callback function is terminated\n", u32DevId, eCh);
-                }
-
-                return;
-        }
-
-        if (g_decklink_record_audio_buffers) {
-            g_decklink_record_audio_buffers--;
-            static int aidx = 0;
-            char fn[256];
-            int channels = MAX_AUDIO_CHANNELS;
-            int samplesPerChannel = st_frame_info->u32BufSize / channels / sizeof(uint16_t);
-#if AUDIO_DEBUG_ENABLE
-            sprintf(fn, "/storage/ltn/stoth/cardindex%d-audio%03d-srf%d.raw", opts->card_idx, aidx++, samplesPerChannel);
-#else
-            sprintf(fn, "/tmp/cardindex%d-audio%03d-srf%d.raw", opts->card_idx, aidx++, samplesPerChannel);
-#endif
-            FILE *fh = fopen(fn, "wb");
-            if (fh) {
-                fwrite(st_frame_info->u8pDataBuf, 1, st_frame_info->u32BufSize, fh);
-                fclose(fh);
-                printf("Creating %s\n", fn);
-            }
-        }
-
-	ltn_histogram_interval_update(ctx->hg_callback_audio);
-
-	if (g_decklink_histogram_print_secs > 0) {
-		ltn_histogram_interval_print(STDOUT_FILENO, ctx->hg_callback_audio, g_decklink_histogram_print_secs);
-        }
-
-	if (g_decklink_histogram_reset) {
-		g_decklink_histogram_reset = 0;
-		ltn_histogram_reset(ctx->hg_callback_audio);
-		ltn_histogram_reset(ctx->hg_callback_video);
-	}
-
-        /* Vega deliveres the samples in s16P planar format already. We don't need to
-         * convert from INterleaved to planar. Yay.
-         */
-
-        //int64_t pcr = convertSCR_to_PCR(st_input_info->tCurrentPCR.u64Dword);
-        int64_t pcr = st_input_info->tCurrentPCR.u64Dword;
-//        printf("%" PRIi64 "\n", st_input_info->tCurrentPCR.u64Dword);
-
-#if LOCAL_DEBUG
-        int64_t pts = pcr / 300LL;
-        printf(MODULE_PREFIX "pushed raw audio frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 " %p length %d delta: %016" PRIi64 "\n",
-                pcr, pts,
-                st_frame_info->u8pDataBuf, st_frame_info->u32BufSize,
-                pcr - ctx->audioLastPCR);
-#endif
-        int channels = MAX_AUDIO_CHANNELS;
-        int samplesPerChannel = st_frame_info->u32BufSize / channels / sizeof(uint16_t);
-
-        deliver_audio_frame(opts, st_frame_info->u8pDataBuf, st_frame_info->u32BufSize, samplesPerChannel, pcr, channels);
-
-        ctx->audioLastPCR = pcr;
 }
 
 /* Take a single NAL, convert to a raw frame and push it into the downstream workflow.
@@ -1447,7 +1293,7 @@ API_VEGA_BQB_FPS_60,
                 printf(MODULE_PREFIX "Registering Capture Audio callback\n");
 
                 capret = VEGA3311_CAP_RegisterAudioCallback(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx,
-                        callback__a_capture_cb_func, opts);
+                        vega3311_audio_callback, opts);
                 if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to register audio capture callback function\n");
                         return -1;
@@ -1558,7 +1404,7 @@ static void *vega_probe_stream(void *ptr)
 	obe_input_t *user_opts = &probe_ctx->user_opts;
 	obe_device_t *device;
 	obe_int_input_stream_t *streams[MAX_STREAMS];
-	int num_streams = 1 + MAX_AUDIO_PAIRS;
+	int num_streams = 1 + MAX_VEGA_AUDIO_PAIRS;
         int cur_stream = 0;
 
 	printf(MODULE_PREFIX "%s()\n", __func__);
@@ -1576,7 +1422,7 @@ static void *vega_probe_stream(void *ptr)
         non_display_parser = &opts->ctx.non_display_parser;
 
 	/* TODO: support multi-channel */
-	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
+	opts->num_audio_channels = MAX_VEGA_AUDIO_CHANNELS;
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
         opts->enable_smpte2038 = user_opts->enable_smpte2038;
@@ -1730,7 +1576,7 @@ static void *vega_open_input(void *ptr)
 
 	pthread_cleanup_push(close_thread, (void *)opts);
 
-	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
+	opts->num_audio_channels = MAX_VEGA_AUDIO_CHANNELS;
 	opts->card_idx           = user_opts->card_idx;
 	opts->video_format       = user_opts->video_format;
         opts->enable_smpte2038   = user_opts->enable_smpte2038;

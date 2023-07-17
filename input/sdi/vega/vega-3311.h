@@ -20,6 +20,15 @@ extern "C"
 #include <libavutil/opt.h>
 }
 
+#define MAX_VEGA_AUDIO_CHANNELS 16
+#define MAX_VEGA_AUDIO_PAIRS (MAX_VEGA_AUDIO_CHANNELS / 2)
+
+extern int g_decklink_monitor_hw_clocks;
+extern int g_decklink_render_walltime;
+extern int g_decklink_histogram_print_secs;
+extern int g_decklink_histogram_reset;
+extern int g_decklink_record_audio_buffers;
+
 struct obe_to_vega_video
 {
     int progressive;            /* Boolean - Progressive or interlaced. */
@@ -155,5 +164,11 @@ void vega3311_vanc_callback(uint32_t u32DevId,
         API_VEGA3311_CAPTURE_FRAME_INFO_T* st_frame_info,
         API_VEGA3311_CAPTURE_FORMAT_T* st_input_info,
         void *pv_user_arg);
+
+void vega3311_audio_callback(uint32_t u32DevId,
+        API_VEGA3311_CAP_CHN_E eCh,
+        API_VEGA3311_CAPTURE_FRAME_INFO_T *st_frame_info,
+        API_VEGA3311_CAPTURE_FORMAT_T *st_input_info,
+        void* pv_user_arg);
 
 #endif /* LTN_VEGA_H */
