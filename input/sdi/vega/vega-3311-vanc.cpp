@@ -1,11 +1,11 @@
 #if HAVE_VEGA3311_CAP_TYPES_H
 
 /*****************************************************************************
- * vega-misc.cpp: Audio/Video from the VEGA encoder cards
+ * vega-vanc.cpp: VANC processing from Vega encoding cards
  *****************************************************************************
- * Copyright (C) 2021 LTN
+ * Copyright (C) 2023 LTN
  *
- * Authors: Steven Toth <stoth@ltnglobal.com>
+ * Authors: Steven Toth <steven.toth@ltnglobal.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
