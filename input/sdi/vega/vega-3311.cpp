@@ -82,12 +82,20 @@
 #include "histogram.h"
 #include "vega-3311.h"
 #include <sys/stat.h>
+#include <libltntstools/hexdump.h>
+
+extern "C"
+{
+#include <libklvanc/vanc.h>
+#include <libklscte35/scte35.h>
+}
 
 #define MODULE_PREFIX "[vega]: "
 
 #define LOCAL_DEBUG 0
 
 #define FORCE_10BIT 1
+#define INSERT_HDR 0
 
 #define CAP_DBG_LEVEL API_VEGA3311_CAP_DBG_LEVEL_3
 
@@ -106,6 +114,7 @@ extern int g_decklink_monitor_hw_clocks;
 extern int g_decklink_render_walltime;
 extern int g_decklink_histogram_print_secs;
 extern int g_decklink_histogram_reset;
+extern int g_decklink_record_audio_buffers;
 
 typedef struct
 {
@@ -115,16 +124,28 @@ typedef struct
 
         /* Capture layer and encoder layer configuration management */
         API_VEGA_BQB_INIT_PARAM_T init_params;
+        API_VEGA_BQB_INIT_PARAM_T init_paramsMACRO;      /* TODO fix this during confirmance checking */
+        API_VEGA_BQB_INIT_PARAM_T init_paramsMACROULL;   /* TODO fix this during confirmance checking */
         API_VEGA3311_CAP_INIT_PARAM_T ch_init_param;
 
         uint32_t framecount;
         int bLastFrame;
+
+        /* VANC Handling, attached the klvanc library for processing and parsing. */
+        struct klvanc_context_s *vanchdl;
 
         /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
         struct SwrContext *avr;
 
         /* Video timing tracking */
         int64_t videoLastPCR;
+        int64_t videoLastDTS, videoLastPTS;
+        int64_t videoDTSOffset;
+        int64_t videoPTSOffset;
+        int64_t lastAdjustedPicDTS;
+        int64_t lastAdjustedPicPTS;
+        int64_t lastcorrectedPicPTS;
+        int64_t lastcorrectedPicDTS;
 
         /* Audio timing tracking */
         int64_t audioLastPCR;
@@ -177,6 +198,256 @@ typedef struct
     } codec;
 
 } vega_opts_t;
+
+typedef struct
+{
+    volatile uint32_t pkt_continuity_counter;
+    volatile uint32_t block_number: 16;
+    volatile uint32_t f_bit: 1;
+    volatile uint32_t o_bit: 1;
+    volatile uint32_t reserved0: 14;
+    volatile uint32_t stc_lsb;
+    volatile uint32_t stc_msb;
+    volatile API_VEGA3311_CAP_PCR_FORMAT_T ancd_pcr;
+} AncdPHD; /* 24 bytes */
+
+typedef struct
+{
+    volatile uint32_t user_data0: 10;
+    volatile uint32_t user_data1: 10;
+    volatile uint32_t checksum: 10;
+    volatile uint32_t padding2: 2;
+} anc_user_data_format; /* 4 bytes */
+
+typedef struct
+{
+    /* 32 bits */
+    volatile uint32_t header_flag: 22;
+    volatile uint32_t h_not_v_flag: 1;
+    volatile uint32_t post_pre_flag: 1;
+    volatile uint32_t block_index: 8;
+
+    /* 32 bits */
+    volatile uint32_t header_pattern: 6;
+    volatile uint32_t c_not_y_flag: 1;
+    volatile uint32_t line_number: 11;
+    volatile uint32_t horizontal_offset: 12;
+    volatile uint32_t padding0: 2;
+
+    /* 32 bits */
+    volatile uint32_t did: 10;
+    volatile uint32_t sdid: 10;
+    volatile uint32_t data_count: 10;
+    volatile uint32_t padding1: 2;
+} block_data_t; /* 12 bytes */
+
+/* VANC Callbacks */
+static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_eia_708b_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        printf(MODULE_PREFIX "%s\n", __func__);
+
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+		printf("%s:%s()\n", __FILE__, __func__);
+		klvanc_dump_EIA_708B(vanchdl, pkt); /* vanc lib helper */
+	}
+
+	return 0;
+}
+
+static int cb_EIA_608(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_eia_608_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        printf(MODULE_PREFIX "%s\n", __func__);
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+		printf("%s:%s()\n", __FILE__, __func__);
+		klvanc_dump_EIA_608(vanchdl, pkt); /* vanc library helper */
+	}
+
+	return 0;
+}
+
+#if 0
+/* We're given some VANC data, craete a SCTE104 metadata entry for it
+ * and we'll send it to the encoder later, by an atachment to the video frame.
+ */
+static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
+	struct avmetadata_s *md,
+	uint8_t *section, uint32_t section_length, int lineNr)
+{
+	/* Put the coded frame into an raw_frame attachment and discard the coded frame. */
+	int idx = md->count;
+	if (idx >= MAX_RAW_FRAME_METADATA_ITEMS) {
+		printf("%s() already has %d items, unable to add additional. Skipping\n",
+			__func__, idx);
+		return -1;
+	}
+
+	md->array[idx] = avmetadata_item_alloc(section_length, AVMETADATA_VANC_SCTE104);
+	if (!md->array[idx])
+		return -1;
+	md->count++;
+
+	avmetadata_item_data_write(md->array[idx], section, section_length);
+	avmetadata_item_data_set_linenr(md->array[idx], lineNr);
+
+        int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
+        if (streamId < 0)
+                return 0;
+	avmetadata_item_data_set_outputstreamid(md->array[idx], streamId);
+
+	return 0;
+}
+
+static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
+{
+	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, SMPTE2038);
+	if (streamId < 0)
+		return 0;
+
+	/* Now send the constructed frame to the mux */
+	obe_coded_frame_t *coded_frame = new_coded_frame(streamId, byteCount);
+	if (!coded_frame) {
+		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, byteCount);
+		return -1;
+	}
+	coded_frame->pts = decklink_ctx->stream_time;
+	coded_frame->random_access = 1; /* ? */
+	memcpy(coded_frame->data, buf, byteCount);
+	add_to_queue(&decklink_ctx->h->mux_queue, coded_frame);
+
+	return 0;
+}
+#endif
+
+static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_scte_104_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        printf(MODULE_PREFIX "%s\n", __func__);
+
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+		printf("%s:%s()\n", __FILE__, __func__);
+		klvanc_dump_SCTE_104(vanchdl, pkt); /* vanc library helper */
+	}
+
+	if (klvanc_packetType1(&pkt->hdr)) {
+		/* Silently discard type 1 SCTE104 packets, as per SMPTE 291 section 6.3 */
+		return 0;
+	}
+
+#if 0
+
+	/* Append all the original VANC to the metadata object, we'll process it later. */
+	add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
+		(uint8_t *)&pkt->hdr.raw[0],
+		pkt->hdr.rawLengthWords * 2,
+		pkt->hdr.lineNr);
+
+	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
+		static time_t lastErrTime = 0;
+		time_t now = time(0);
+		if (lastErrTime != now) {
+			lastErrTime = now;
+
+			char t[64];
+			sprintf(t, "%s", ctime(&now));
+			t[ strlen(t) - 1] = 0;
+			syslog(LOG_INFO, "[decklink] SCTE104 frames present on SDI");
+			fprintf(stdout, "[decklink] SCTE104 frames present on SDI  @ %s", t);
+			printf("\n");
+			fflush(stdout);
+
+		}
+	}
+#endif
+	return 0;
+}
+
+static int cb_all(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_header_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        printf(MODULE_PREFIX "%s\n", __func__);
+
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+		printf("%s()\n", __func__);
+	}
+
+        //klvanc_packet_header_dump_console(pkt); /* Local project fund, see vega3311-misc.cpp */
+
+#if 0
+
+	/* We've been called with a VANC frame. Pass it to the SMPTE2038 packetizer.
+	 * We'll be called here from the thread handing the VideoFrameArrived
+	 * callback, which calls vanc_packet_parse for each ANC line.
+	 * Push the pkt into the SMPTE2038 layer, its collecting VANC data.
+	 */
+	if (decklink_ctx->smpte2038_ctx) {
+		if (klvanc_smpte2038_packetizer_append(decklink_ctx->smpte2038_ctx, pkt) < 0) {
+		}
+	}
+
+	decklink_opts_t *decklink_opts = container_of(decklink_ctx, decklink_opts_t, decklink_ctx);
+	if (OPTION_ENABLED(patch1) && decklink_ctx->vanchdl && pkt->did == 0x52 && pkt->dbnsdid == 0x01) {
+
+		/* Patch#1 -- SCTE104 VANC appearing in a non-standard DID.
+		 * Modify the DID to reflect traditional SCTE104 and re-parse.
+		 * Any potential multi-entrant libklvanc issues here? No now, future probably yes.
+		 */
+
+		/* DID 0x62 SDID 01 : 0000 03ff 03ff 0162 0101 0217 01ad 0115 */
+		pkt->raw[3] = 0x241;
+		pkt->raw[4] = 0x107;
+		int ret = klvanc_packet_parse(decklink_ctx->vanchdl, pkt->lineNr, pkt->raw, pkt->rawLengthWords);
+		if (ret < 0) {
+			/* No VANC on this line */
+			fprintf(stderr, "%s() patched VANC for did 0x52 failed\n", __func__);
+		}
+	}
+#endif
+	return 0;
+}
+
+static int cb_VANC_TYPE_KL_UINT64_COUNTER(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_kl_u64le_counter_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        printf(MODULE_PREFIX "%s\n", __func__);
+
+        /* Have the library display some debug */
+	static uint64_t lastGoodKLFrameCounter = 0;
+        if (lastGoodKLFrameCounter && lastGoodKLFrameCounter + 1 != pkt->counter) {
+                char ts[64];
+                obe_getTimestamp(ts, NULL);
+
+                fprintf(stderr, MODULE_PREFIX "%s: KL VANC frame counter discontinuity was %" PRIu64 " now %" PRIu64 "\n",
+                        ts,
+                        lastGoodKLFrameCounter, pkt->counter);
+        }
+        lastGoodKLFrameCounter = pkt->counter;
+
+        return 0;
+}
+
+static struct klvanc_callbacks_s callbacks = 
+{
+	.afd			= NULL,
+	.eia_708b		= cb_EIA_708B,
+	.eia_608		= cb_EIA_608,
+	.scte_104		= cb_SCTE_104,
+	.all			= cb_all,
+	.kl_i64le_counter       = cb_VANC_TYPE_KL_UINT64_COUNTER,
+	.sdp			= NULL,
+};
+/* End: VANC Callbacks */
 
 static int configureCodec(vega_opts_t *opts)
 {
@@ -345,6 +616,197 @@ static void deliver_audio_frame(vega_opts_t *opts, unsigned char *plane, int siz
 	}
 }
 
+/* Convert the Advantech oddly frameswpacket VANC into a standardized version we can 
+ * push into libKL vanc, for parsing and calback handling.
+ */
+static void parse_ancillary_data(vega_ctx_t *ctx, vega_opts_t *opts, uint32_t block_index, uint8_t *src_buf)
+{
+        block_data_t *block_data_ptr = (block_data_t *)src_buf;
+
+        /* Pointer to vanc data */
+        //uint8_t *udw_ptr_last = NULL;
+        uint8_t *udw_ptr = (uint8_t *)block_data_ptr + sizeof(block_data_t);
+        uint8_t word10b_count;
+
+        /* Bit shifting and unpacking table we use to walk the payload and convert into uint16_t's */
+        struct state_s
+        {
+                int offset;
+                int b1mask;
+                int b1rshift;
+                int b2mask;
+                int b2lshift;
+        } states[4] = {
+            { 0, 0xff, 0, 0x03, 8, },
+            { 1, 0xfc, 2, 0x0f, 6, },
+            { 2, 0xf0, 4, 0x3f, 4, },
+            { 3, 0xc0, 0, 0xff, 0, },
+        };
+
+        /* For every VANC messages we're passed .... */
+        for (uint32_t i = 0; i < block_index; i++) {
+
+                word10b_count = (uint8_t)block_data_ptr->data_count;
+
+                /* Convert this specifi9c VANC message into uint16_t payload */
+                int payloadIdx = 0;
+                uint16_t payload[256] = {0};
+                payload[payloadIdx++] = 0;
+                payload[payloadIdx++] = 0x3ff;
+                payload[payloadIdx++] = 0x3ff;
+                payload[payloadIdx++] = (uint32_t)block_data_ptr->did;
+                payload[payloadIdx++] = (uint32_t)block_data_ptr->sdid;
+                payload[payloadIdx++] = (uint32_t)block_data_ptr->data_count;
+                //payload[payloadIdx++] = (uint32_t)block_data_ptr->horizontal_offset;
+
+                int cstate = 0; /* We only go through state 0 once, start here then we iterate through 1..3 after this */
+                
+                /* Calculate and round up number of blocks containing words */
+                /* Setup a uint8_t loop, walk thr loop using the state/shift machine rules to unpack the payload */
+                uint16_t a, b, c, d;
+                int count = ((word10b_count / 5) + 1) * 5;
+                for (int j = 0; j < (count * 10) / 8; j += 4)
+                {
+                        a = 0xffff;
+                        if (cstate == 0)
+                        {
+                                a = (*(udw_ptr + j + states[cstate].offset) & states[cstate].b1mask) >> states[cstate].b1rshift;
+                                a |= ((*(udw_ptr + j + states[cstate].offset + 1) & states[cstate].b2mask) << states[cstate].b2lshift);
+                                payload[payloadIdx++] = a;
+                                cstate++;
+                        }
+
+                        b = (*(udw_ptr + j + states[cstate].offset) & states[cstate].b1mask) >> states[cstate].b1rshift;
+                        b |= ((*(udw_ptr + j + states[cstate].offset + 1) & states[cstate].b2mask) << states[cstate].b2lshift);
+                        payload[payloadIdx++] = b;
+
+                        cstate++;
+                        c = (*(udw_ptr + j + states[cstate].offset) & states[cstate].b1mask) >> states[cstate].b1rshift;
+                        c |= ((*(udw_ptr + j + states[cstate].offset + 1) & states[cstate].b2mask) << states[cstate].b2lshift);
+                        payload[payloadIdx++] = c;
+
+                        cstate++;
+                        d = (*(udw_ptr + j + states[cstate].offset) & states[cstate].b1mask) >> states[cstate].b1rshift;
+                        d |= ((*(udw_ptr + j + states[cstate].offset + 1) & states[cstate].b2mask) << states[cstate].b2lshift);
+                        payload[payloadIdx++] = d;
+
+#if 0
+                        if (a != 0xffff) {
+                                printf("\toffset[%3d] %04x %04x %04x %04x\n", j, a, b, c, d);
+                        } else {
+                                printf("\toffset[%3d]      %04x %04x %04x\n", j,    b, c, d);
+                        }
+#endif
+                        cstate = 1;
+                }
+                payload[payloadIdx++] = 0xdead;
+
+#if 0
+                /* Dump the payload in 8 bit format, so we can compare klvanc in cinterface mode output */
+                printf("Reconstructed VANC Payload for parsing:\n");
+                for (int j = 1; j < payloadIdx + 1; j++)
+                {
+                        printf("%04x ", payload[j - 1]);
+                        if (j % 16 == 0)
+                                printf("\n");
+                }
+                printf("\n");
+#endif
+
+                if (ctx->vanchdl) {
+        		int ret = klvanc_packet_parse(ctx->vanchdl,
+                                (uint32_t)block_data_ptr->line_number,
+                                payload,
+                                sizeof(payload) / (sizeof(unsigned short)));
+        		if (ret < 0) {
+                                /* No VANC on this line */
+                                fprintf(stderr, MODULE_PREFIX "No VANC on this line / parse failed or construction bug?\n");
+		        }
+	        }
+
+#if 0
+                /* Dump the raw payload, for debug purposes, in its advantech packed format */
+                for (int i = 0; i < word10b_count; i++)
+                {
+                        printf("%02x ", *(udw_ptr + i));
+                }
+                printf("\n");
+#endif
+
+#if 0
+                if (block_data_ptr->h_not_v_flag == 0)
+                {
+                        printf("\tBlock idx %u: %s-V, %s, line %u, H-offset=%u, DID 0x%X, SDID 0x%X, DC 0x%X\n",
+                               i,
+                               (block_data_ptr->post_pre_flag == 0) ? "POST" : "PRE",
+                               (block_data_ptr->c_not_y_flag == 0) ? "Y" : "C",
+                               (uint32_t)block_data_ptr->line_number,
+                               (uint32_t)block_data_ptr->horizontal_offset,
+                               (uint32_t)block_data_ptr->did,
+                               (uint32_t)block_data_ptr->sdid,
+                               (uint32_t)block_data_ptr->data_count);
+                }
+                else
+                {
+                        printf("\tBlock idx %u: POST-H, %s, line %u, H-offset=%u, DID 0x%X, SDID 0x%X, DC 0x%X\n",
+                               i,
+                               (block_data_ptr->c_not_y_flag == 0) ? "Y" : "C",
+                               (uint32_t)block_data_ptr->line_number,
+                               (uint32_t)block_data_ptr->horizontal_offset,
+                               (uint32_t)block_data_ptr->did,
+                               (uint32_t)block_data_ptr->sdid,
+                               (uint32_t)block_data_ptr->data_count);
+                }
+#endif
+                /* setup for next block data */
+                /* sizeof(block_data_t) = 3x uint32_t = 12 bytes */
+                block_data_ptr = (block_data_t *)(udw_ptr + ((word10b_count + 3) / 3) * sizeof(uint32_t));
+                udw_ptr = (uint8_t *)block_data_ptr + sizeof(block_data_t);
+#if 0
+                if (udw_ptr_last)
+                {
+                        printf("%ld bytes\n", udw_ptr - udw_ptr_last);
+                }
+                udw_ptr_last = udw_ptr;
+#endif
+        } /* For every VANC messages we're passed.... */
+}
+
+static void callback__anc_capture_cb_func(uint32_t u32DevId,
+        API_VEGA3311_CAP_CHN_E eCh,
+        API_VEGA3311_CAPTURE_FRAME_INFO_T* st_frame_info,
+        API_VEGA3311_CAPTURE_FORMAT_T* st_input_info,
+        void *pv_user_arg)
+{
+        vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
+        vega_ctx_t *ctx = &opts->ctx;
+
+        if (st_frame_info->u32BufSize == 0) {
+                if (st_input_info->eAncdState == API_VEGA3311_CAP_STATE_CAPTURING) {
+                        printf(MODULE_PREFIX "[DEV%u:CH%d] anc state change to capturing, source signal recovery\n", u32DevId, eCh);
+                } else if (st_input_info->eAncdState == API_VEGA3311_CAP_STATE_WAITING) {
+                        printf(MODULE_PREFIX "[DEV%u:CH%d] anc state change to waiting, source signal loss\n", u32DevId, eCh);
+                } else if (st_input_info->eAncdState == API_VEGA3311_CAP_STATE_STANDBY) {
+                        printf(MODULE_PREFIX "[DEV%u:CH%d] anc state change to standby, callback function is terminated\n", u32DevId, eCh);
+                }
+
+                return;
+        }
+
+        AncdPHD *pkt_hdr = (AncdPHD *)st_frame_info->u8pDataBuf;
+#if 0
+        printf(MODULE_PREFIX "anc callback PCR %15" PRIi64 " size %d bytes\n", pkt_hdr->ancd_pcr.u64Dword, st_frame_info->u32BufSize);
+#if 0
+        printf(MODULE_PREFIX "Entire VANC callback data:\n");
+        ltntstools_hexdump(st_frame_info->u8pDataBuf, st_frame_info->u32BufSize, 32);
+#endif
+#endif
+        uint8_t *ancd_data_block_p = st_frame_info->u8pDataBuf + sizeof(AncdPHD);
+        //int ancd_data_block_size = st_frame_info->u32BufSize - sizeof(AncdPHD);
+
+        parse_ancillary_data(ctx, opts, (uint32_t)pkt_hdr->block_number, ancd_data_block_p);
+}
+
 /* Called by the vega sdk when a raw audio frame is ready. */
 static void callback__a_capture_cb_func(uint32_t u32DevId,
         API_VEGA3311_CAP_CHN_E eCh,
@@ -365,6 +827,25 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
                 }
 
                 return;
+        }
+
+        if (g_decklink_record_audio_buffers) {
+            g_decklink_record_audio_buffers--;
+            static int aidx = 0;
+            char fn[256];
+            int channels = MAX_AUDIO_CHANNELS;
+            int samplesPerChannel = st_frame_info->u32BufSize / channels / sizeof(uint16_t);
+#if AUDIO_DEBUG_ENABLE
+            sprintf(fn, "/storage/ltn/stoth/cardindex%d-audio%03d-srf%d.raw", opts->card_idx, aidx++, samplesPerChannel);
+#else
+            sprintf(fn, "/tmp/cardindex%d-audio%03d-srf%d.raw", opts->card_idx, aidx++, samplesPerChannel);
+#endif
+            FILE *fh = fopen(fn, "wb");
+            if (fh) {
+                fwrite(st_frame_info->u8pDataBuf, 1, st_frame_info->u32BufSize, fh);
+                fclose(fh);
+                printf("Creating %s\n", fn);
+            }
         }
 
 	ltn_histogram_interval_update(ctx->hg_callback_audio);
@@ -388,7 +869,7 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
 //        printf("%" PRIi64 "\n", st_input_info->tCurrentPCR.u64Dword);
 
 #if LOCAL_DEBUG
-        int64_t pts = pcr / 300;
+        int64_t pts = pcr / 300LL;
         printf(MODULE_PREFIX "pushed raw audio frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 " %p length %d delta: %016" PRIi64 "\n",
                 pcr, pts,
                 st_frame_info->u8pDataBuf, st_frame_info->u32BufSize,
@@ -402,8 +883,10 @@ static void callback__a_capture_cb_func(uint32_t u32DevId,
         ctx->audioLastPCR = pcr;
 }
 
-/* Take a single NAL, convert to a raw frame and push it into the downstream workflow. */
-/* TODO: Coalesce these at a higher level and same some memory allocs? */
+/* Take a single NAL, convert to a raw frame and push it into the downstream workflow.
+ * TODO: Coalesce these at a higher level and same some memory allocs?
+ * PTS is a 64bit signed value, than doesn't wrap at 33 bites, it constantly accumlates.
+ */
 static void deliver_video_nal(vega_opts_t *opts, unsigned char *buf, int lengthBytes, int64_t pts, int64_t dts)
 {
 	vega_ctx_t *ctx = &opts->ctx;
@@ -421,7 +904,7 @@ static void deliver_video_nal(vega_opts_t *opts, unsigned char *buf, int lengthB
         rf->alloc_img.csp = AV_PIX_FMT_QSV; /* Magic type to indicate to the downstream filters that this isn't raw video */
         rf->timebase_num = opts->timebase_num;
         rf->timebase_den = opts->timebase_den;
-        rf->pts = pts * 300; /* Converts 90KHz to 27MHz */
+        rf->pts = pts * 300LL; /* Converts 90KHz to 27MHz */
 
         //printf("%s() format = %d, timebase_num %d, timebase_den %d\n", __func__, rf->alloc_img.format, rf->timebase_num, rf->timebase_den);  // TODO: FIxme IE INPUT_VIDEO_FORMAT_2160P_25
 
@@ -467,12 +950,53 @@ static void deliver_video_nal(vega_opts_t *opts, unsigned char *buf, int lengthB
 static void callback__process_video_coded_frame(API_VEGA_BQB_HEVC_CODED_PICT_T *p_pict, void *args)
 {
         vega_opts_t *opts = (vega_opts_t *)args;
-	//vega_ctx_t *ctx = &opts->ctx;
+	vega_ctx_t *ctx = &opts->ctx;
+
+#if 0
+        FILE *fh = fopen("/storage/ltn/vega/hevc-pic-data.bin", "a+");
+        if (fh) {
+                fwrite(p_pict, 1, 16 * sizeof(int64_t), fh);
+                fclose(fh);
+                printf(MODULE_PREFIX "Wrote %d bytes\n", sizeof(*p_pict));
+        }
+#endif
+
+        /* When the value wraps, make sure we disgregard iffy bits 63-33.
+         * The result is a pure 33bit guaranteed positive number.
+         */
+        int64_t adjustedPicPTS = p_pict->pts & 0x1ffffffffLL;
+        int64_t adjustedPicDTS = p_pict->dts & 0x1ffffffffLL;
+
+        if (adjustedPicDTS < ctx->lastAdjustedPicDTS) {
+                /* Detect the wrap, adjust the constant accumulator */
+                ctx->videoDTSOffset += 0x1ffffffffLL;
+                printf(MODULE_PREFIX "Bumping DTS base\n");
+        }
+        if (adjustedPicPTS < ctx->lastAdjustedPicPTS) {
+                /* Detect the wrap, adjust the constant accumulator */
+                ctx->videoPTSOffset += 0x1ffffffffLL;
+                printf(MODULE_PREFIX "Bumping PTS base\n");
+        }
+
+        /* Compute a new PTS/DTS based on a constant accumulator and guaranteed positive PTS/DTS value */
+        int64_t correctedPTS = ctx->videoDTSOffset + adjustedPicPTS;
+        int64_t correctedDTS = ctx->videoPTSOffset + adjustedPicDTS;
+
+        /* The upshot is that the correctPTS and correctDTS should always increase over time regardless of
+         * wrapping and can be used to pass downstream (same as the decklink).
+         */
 
         for (unsigned int i = 0; i < p_pict->u32NalNum; i++) {
 
                 if (g_decklink_monitor_hw_clocks) {
-                        printf(MODULE_PREFIX "pts: %15" PRIi64 "  dts: %15" PRIi64 " base %012" PRIu64 " ext %012d frametype: %s  addr: %p length %7d -- ",
+                        printf(MODULE_PREFIX "corrected  pts: %15" PRIi64 "  dts: %15" PRIi64
+                                " adjustedPicPTS %15" PRIi64 " adjustedPicDTS %15" PRIi64
+                                " ctx->videoPTSOffset %15" PRIi64 " ctx->videoDTSOffset %15" PRIi64 "\n",
+                                correctedPTS, correctedDTS,
+                                adjustedPicPTS, adjustedPicDTS,
+                                ctx->videoPTSOffset, ctx->videoDTSOffset
+                        );
+                        printf(MODULE_PREFIX "pic        pts: %15" PRIi64 "  dts: %15" PRIi64 " base %012" PRIu64 " ext %012d frametype: %s  addr: %p length %7d -- ",
                                 p_pict->pts,
                                 p_pict->dts,
                                 p_pict->u64ItcBase,
@@ -504,8 +1028,16 @@ static void callback__process_video_coded_frame(API_VEGA_BQB_HEVC_CODED_PICT_T *
                 }
                 /* TODO: Decision here. Coalesce all nals into a single allocation - better performance, one raw frame downstream. */
 
-                deliver_video_nal(opts, p_pict->tNalInfo[i].pu8Addr, p_pict->tNalInfo[i].u32Length, p_pict->pts, p_pict->dts);
+                deliver_video_nal(opts, p_pict->tNalInfo[i].pu8Addr, p_pict->tNalInfo[i].u32Length, correctedPTS, correctedDTS);
         }
+
+        ctx->videoLastDTS = p_pict->dts;
+        ctx->videoLastPTS = p_pict->pts;
+        ctx->lastAdjustedPicPTS = adjustedPicPTS;
+        ctx->lastAdjustedPicDTS = adjustedPicDTS;
+        ctx->lastcorrectedPicPTS = correctedPTS;
+        ctx->lastcorrectedPicDTS = correctedDTS;
+
 }
 
 /* Callback from the video capture device */
@@ -519,6 +1051,7 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 	vega_ctx_t *ctx = &opts->ctx;
 
         API_VEGA_BQB_IMG_T img;
+        int64_t pcr = st_input_info->tCurrentPCR.u64Dword;
 
         if (st_frame_info->u32BufSize == 0) {
                 if (st_input_info->eVideoState == API_VEGA3311_CAP_STATE_CAPTURING) {
@@ -533,6 +1066,52 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
                         //printf(MODULE_PREFIX "[DEV%d:CH%d] video state change to standby, callback function is terminated\n", u32DevId, eCh);
                 }
         }
+
+#if INSERT_HDR
+    API_VEGA_BQB_SEI_PARAM_T *p_sei = NULL;
+    API_VEGA_BQB_HDR_PARAM_T *p_hdr = &t_init_param.tHevcParam.tHdrConfig;
+   
+    pPicInfo->u32PictureNumber = args->u32CaptureCounter;
+
+    p_sei = &pPicInfo->tSeiParam[pPicInfo->u32SeiNum];
+    uint16_t u16MaxContentLightLevel = p_hdr->u16MaxContentLightLevel;
+    uint16_t u16MaxPictureAvgLightLevel = p_hdr->u16MaxPictureAvgLightLevel;
+    VEGA_BQB_ENC_MakeContentLightInfoSei
+    (
+        p_sei,
+        API_VEGA_BQB_SEI_PAYLOAD_LOC_GOP,
+        u16MaxContentLightLevel,
+        u16MaxPictureAvgLightLevel
+    );
+    pPicInfo->u32SeiNum++;
+
+    p_sei = &pPicInfo->tSeiParam[pPicInfo->u32SeiNum];
+    uint16_t u16DisplayPrimariesX0 = p_hdr->u16DisplayPrimariesX0;
+    uint16_t u16DisplayPrimariesY0 = p_hdr->u16DisplayPrimariesY0;
+    uint16_t u16DisplayPrimariesX1 = p_hdr->u16DisplayPrimariesX1;
+    uint16_t u16DisplayPrimariesY1 = p_hdr->u16DisplayPrimariesY1;
+    uint16_t u16DisplayPrimariesX2 = p_hdr->u16DisplayPrimariesX2;
+    uint16_t u16DisplayPrimariesY2 = p_hdr->u16DisplayPrimariesY2;
+    uint16_t u16WhitePointX = p_hdr->u16WhitePointX;
+    uint16_t u16WhitePointY = p_hdr->u16WhitePointY;
+    uint32_t u32MaxDisplayMasteringLuminance = p_hdr->u32MaxDisplayMasteringLuminance;
+    uint32_t u32MinDisplayMasteringLuminance = p_hdr->u32MinDisplayMasteringLuminance;
+    VEGA_BQB_ENC_MakeMasteringDisplayColourVolumeSei
+    (
+        p_sei,
+        u16DisplayPrimariesX0,
+        u16DisplayPrimariesY0,
+        u16DisplayPrimariesX1,
+        u16DisplayPrimariesY1,
+        u16DisplayPrimariesX2,
+        u16DisplayPrimariesY2,
+        u16WhitePointX,
+        u16WhitePointY,
+        u32MaxDisplayMasteringLuminance,
+        u32MinDisplayMasteringLuminance
+    );
+    pPicInfo->u32SeiNum++;
+#endif
 
 	ltn_histogram_interval_update(ctx->hg_callback_video);
 	if (g_decklink_histogram_print_secs > 0) {
@@ -717,11 +1296,14 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         }
 
         img.eFormat     = opts->codec.eFormat;
-        img.pts         = 0;
+        img.pts         = pcr / 300LL;
         img.eTimeBase   = API_VEGA_BQB_TIMEBASE_90KHZ;
         img.bLastFrame  = ctx->bLastFrame;
 
         if (g_sei_timestamping) {
+
+                // WARNING..... DON'T TRAMPLE THE HDR SEI
+
                 /* Create the SEI for the LTN latency tracking. */
                 img.u32SeiNum = 1;
                 img.bSeiPassThrough = true;
@@ -779,18 +1361,18 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
 
 #if LOCAL_DEBUG
         printf(MODULE_PREFIX "pushed raw video frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 "\n",
-                st_input_info->tCurrentPCR.u64Dword, img.pts);
+                pcr, img.pts);
 #endif
 
-#if 1
+#if 0
         printf("Video last pcr minus current pcr %12" PRIi64 " (are we dropping frames?)\n",
-                st_input_info->tCurrentPCR.u64Dword - ctx->videoLastPCR
+                pcr - ctx->videoLastPCR
         );
 #endif
-        ctx->videoLastPCR = st_input_info->tCurrentPCR.u64Dword;
+        ctx->videoLastPCR = pcr;
 
         /* Check the audio PCR vs the video PCR is never more than 200 ms apart */
-        int64_t avdeltams = (ctx->videoLastPCR - ctx->audioLastPCR) / 300 / 90;
+        int64_t avdeltams = (ctx->videoLastPCR - ctx->audioLastPCR) / 300LL / 90LL;
         int64_t avdelta_warning = 150;
         if (abs(avdeltams) >= avdelta_warning) {
                 printf(MODULE_PREFIX "warning: video PCR vs audio PCR delta %12" PRIi64 " (ms), exceeds %" PRIi64 ".\n",
@@ -799,14 +1381,15 @@ static void callback__v_capture_cb_func(uint32_t u32DevId,
         }
 }
 
-#if 0
-static void callback__process_capture(API_VEGA330X_PICT_INFO_T *pPicInfo, const API_VEGA330X_PICT_INFO_CALLBACK_PARAM_T *args)
+static void callback__process_capture(API_VEGA_BQB_PICT_INFO_T *pPicInfo, const API_VEGA_BQB_PICT_INFO_CALLBACK_PARAM_T *args)
 {
         printf("%s() pic %d  sei %d\n", __func__,
                 pPicInfo->u32PictureNumber,
                 pPicInfo->u32SeiNum);
+
+        // HDR Insert happends here?
+        // Why not do this in the capture callback?
 }
-#endif
 
 static void close_device(vega_opts_t *opts)
 {
@@ -822,6 +1405,7 @@ static void close_device(vega_opts_t *opts)
 
 	VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_VIDEO);
 	VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_AUDIO);
+        VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_ANC_DATA);
 
 #if 1
         VEGA_BQB_ENC_Stop((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx);
@@ -844,6 +1428,11 @@ static void close_device(vega_opts_t *opts)
         if (ctx->avr)
                 swr_free(&ctx->avr);
 
+        if (ctx->vanchdl) {
+                klvanc_context_destroy(ctx->vanchdl);
+                ctx->vanchdl = 0;
+        }
+
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
 
@@ -856,6 +1445,25 @@ static int open_device(vega_opts_t *opts, int probe)
 	vega_ctx_t *ctx = &opts->ctx;
 
 	printf(MODULE_PREFIX "Searching for device#0 port#%d\n", opts->card_idx);
+        
+        if (klvanc_context_create(&ctx->vanchdl) < 0) {
+                fprintf(stderr, MODULE_PREFIX "Error initializing VANC library context\n");
+        } else {
+                ctx->vanchdl->verbose = 0;
+                ctx->vanchdl->callbacks = &callbacks;
+                ctx->vanchdl->callback_context = opts;
+                ctx->vanchdl->allow_bad_checksums = 1;
+                //ctx->last_vanc_cache_dump = 0;
+
+#if 0
+                if (OPTION_ENABLED(vanc_cache)) {
+                        /* Turn on the vanc cache, we'll want to query it later. */
+                        decklink_ctx->last_vanc_cache_dump = 1;
+                        fprintf(stdout, "Enabling option VANC CACHE, interval %d seconds\n", VANC_CACHE_DUMP_INTERVAL);
+                        klvanc_context_enable_cache(decklink_ctx->vanchdl);
+                }
+#endif
+        }
 
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info;
         API_VEGA3311_CAPTURE_FORMAT_T input_src_info;
@@ -897,6 +1505,11 @@ static int open_device(vega_opts_t *opts, int probe)
                         printf("\tinput mode: 1 Channel UltraHD\n");
                 else
                         printf("\tinput mode: 4 Channel FullHD\n");
+
+                printf("\tAncillary data window settings:\n");
+                printf("\t\tHANC      space: %d\n", st_dev_info.tAncWindowSetting.bHanc);
+                printf("\t\tPRE-VANC  space: %d\n", st_dev_info.tAncWindowSetting.bPreVanc);
+                printf("\t\tPOST-VANC space: %d\n", st_dev_info.tAncWindowSetting.bPostVanc);
 
                 switch (st_dev_info.eImageFmt) {
                 case API_VEGA3311_CAP_IMAGE_FORMAT_NV12: printf("\tImage Fmt: NV12\n"); break;
@@ -1062,7 +1675,7 @@ static int open_device(vega_opts_t *opts, int probe)
                 ctx->init_params.tHevcParam.eInputPort       = (API_VEGA_BQB_VIF_MODE_INPUT_PORT_E)opts->card_idx; // API_VEGA_BQB_VIF_MODE_INPUT_PORT_A;
                 ctx->init_params.tHevcParam.eRobustMode      = API_VEGA_BQB_VIF_ROBUST_MODE_BLUE_SCREEN;
                 ctx->init_params.tHevcParam.eProfile         = API_VEGA_BQB_HEVC_MAIN422_10_PROFILE;
-                ctx->init_params.tHevcParam.eLevel           = API_VEGA_BQB_HEVC_LEVEL_50;
+                ctx->init_params.tHevcParam.eLevel           = API_VEGA_BQB_HEVC_LEVEL_41;
                 ctx->init_params.tHevcParam.eTier            = API_VEGA_BQB_HEVC_MAIN_TIER;
                 ctx->init_params.tHevcParam.eResolution      = opts->codec.encodingResolution;
                 ctx->init_params.tHevcParam.eAspectRatioIdc  = API_VEGA_BQB_HEVC_ASPECT_RATIO_IDC_1;
@@ -1079,7 +1692,13 @@ static int open_device(vega_opts_t *opts, int probe)
                 ctx->init_params.tHevcParam.eBitDepth        = opts->codec.bitDepth;
                 ctx->init_params.tHevcParam.bInterlace       = opts->codec.interlaced;
                 ctx->init_params.tHevcParam.bDisableSceneChangeDetect       = false;
-// tcrop
+
+                /* Prevent 1920x1080 encodes coming out as 1920x1088 */
+                ctx->init_params.tHevcParam.tCrop.u32CropLeft   = 0;
+                ctx->init_params.tHevcParam.tCrop.u32CropRight  = 0;
+                ctx->init_params.tHevcParam.tCrop.u32CropTop    = 0;
+                ctx->init_params.tHevcParam.tCrop.u32CropBottom = ctx->init_params.tHevcParam.u32SarHeight % 16;
+
                 ctx->init_params.tHevcParam.eTargetFrameRate = opts->codec.fps;
 // tcustomedframerateinfo
                 ctx->init_params.tHevcParam.ePtsMode         = API_VEGA_BQB_PTS_MODE_AUTO;
@@ -1110,6 +1729,167 @@ static int open_device(vega_opts_t *opts, int probe)
 
                 //VEGA_BQB_ENC_SetDbgMsgLevel((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx, API_VEGA_BQB_DBG_LEVEL_3);
                 fprintf(stderr, "AAAAAAA\n");
+
+#if 0
+/**
+@brief Creates a API_VEGA_BQB_INIT_PARAM_X_T structure for HEVC encode.
+
+The \b VEGA_BQB_ENC_MakeInitParamX function helps user to create a VEGA-331X init parameter, which can be used to initialize the 1-N encoder.
+
+@param pApiInitParam    pointer to init parameter to be set; provided by caller.
+@param eInputResolution input resolution size
+@param eInputChromaFmt  input chroma format
+@param eInputBitDepth   input bit depth
+@param eInputFrameRate  input frame rate
+@param u32NumOfOutputs  output numbers
+@param u32OutputId[]    array of output ID
+@param eProfile[]       output profile values.
+@param eLevel[]         output level values
+@param eTier[]          output tier values
+@param eResolution[]    output resolution values.
+@param eChromaFmt[]     output chroma formats.
+@param eBitDepth[]      output bit depth.
+@param eTargetFrameRate[] output frame rate values.
+@param u32Bitrate[]     output bitrate value in kbps. 0 < u32Bitrate <= API_MAX_BITRATE.
+@param eGopHierarchy[]  output GOP hierarchy
+@param eGopSize[]       output GOP sizes
+@param eGopType[]       output GOP types
+@param eBFrameNum[]     number of B frame used in a group
+@param u32CpbDelay[]    output CPB delay value.
+@return
+- API_VEGA_BQB_RET_SUCCESS: Successful
+- API_VEGA_BQB_RET_FAIL: Failed
+*/
+LIBVEGA_BQB_API API_VEGA_BQB_RET
+VEGA_BQB_ENC_MakeInitParamX
+(
+        API_VEGA_BQB_INIT_PARAM_X_T    *pApiInitParam,
+  const API_VEGA_BQB_RESOLUTION_E       eInputResolution,
+  const API_VEGA_BQB_CHROMA_FORMAT_E    eInputChromaFmt,
+  const API_VEGA_BQB_BIT_DEPTH_E        eInputBitDepth,
+  const API_VEGA_BQB_FPS_E              eInputFrameRate,
+  const uint32_t                        u32NumOfOutputs,
+  const uint32_t                        u32OutputId[],
+  const API_VEGA_BQB_HEVC_PROFILE_E     eProfile[],
+  const API_VEGA_BQB_HEVC_LEVEL_E       eLevel[],
+  const API_VEGA_BQB_HEVC_TIER_E        eTier[],
+  const API_VEGA_BQB_RESOLUTION_E       eResolution[],
+  const API_VEGA_BQB_CHROMA_FORMAT_E    eChromaFmt[],
+  const API_VEGA_BQB_BIT_DEPTH_E        eBitDepth[],
+  const API_VEGA_BQB_FPS_E              eTargetFrameRate[],
+  const uint32_t                        u32Bitrate[],
+  const API_VEGA_BQB_GOP_HIERARCHY_E    eGopHierarchy[],
+  const API_VEGA_BQB_GOP_SIZE_E         eGopSize[],
+  const API_VEGA_BQB_GOP_TYPE_E         eGopType[],
+  const API_VEGA_BQB_B_FRAME_NUM_E      eBFrameNum[],
+  const uint32_t                        u32CpbDelay[]
+);
+/**
+@brief Creates a API_VEGA_BQB_INIT_PARAM_T structure for HEVC encode.
+
+The \b VEGA_BQB_ENC_MakeInitParam function helps user to create a VEGA331X init parameter, which can be used to initialize the VEGA331X encoder.
+
+@param pApiInitParam    pointer to init parameter to be set; provided by caller.
+@param eProfile         profile value.
+@param eLevel           level value
+@param eTier            tier value.
+@param eResolution      resolution value.
+@param eChromaFmt       chroma format.
+@param eBitDepth        bit depth.
+@param eTargetFrameRate frame rate value.
+@param u32Bitrate       bitrate value in kbps. 0 < u32Bitrate <= API_MAX_BITRATE.
+@param u32CpbDelay      CPB delay value.
+@return
+- API_VEGA_BQB_RET_SUCCESS: Successful
+- API_VEGA_BQB_RET_FAIL: Failed
+*/
+LIBVEGA_BQB_API API_VEGA_BQB_RET
+VEGA_BQB_ENC_MakeInitParam
+(
+        API_VEGA_BQB_INIT_PARAM_T      *pApiInitParam,
+  const API_VEGA_BQB_HEVC_PROFILE_E     eProfile,
+  const API_VEGA_BQB_HEVC_LEVEL_E       eLevel,
+  const API_VEGA_BQB_HEVC_TIER_E        eTier,
+  const API_VEGA_BQB_RESOLUTION_E       eResolution,
+  const API_VEGA_BQB_CHROMA_FORMAT_E    eChromaFmt,
+  const API_VEGA_BQB_BIT_DEPTH_E        eBitDepth,
+  const API_VEGA_BQB_FPS_E              eTargetFrameRate,
+  const uint32_t                        u32Bitrate,
+  const uint32_t                        u32CpbDelay
+);
+
+VEGA_BQB_ENC_MakeULLInitParam
+(
+pInitParam,
+API_VEGA_BQB_HEVC_MAIN_PROFILE,
+API_VEGA_BQB_HEVC_LEVEL_AUTO,
+API_VEGA_BQB_HEVC_HIGH_TIER,
+API_VEGA_BQB_RESOLUTION_3840x2160,
+API_VEGA_BQB_CHROMA_FORMAT_420,
+API_VEGA_BQB_BIT_DEPTH_8,
+API_VEGA_BQB_FPS_60,
+60000
+);
+#endif
+
+                VEGA_BQB_ENC_MakeInitParam
+                (
+                        &ctx->init_paramsMACRO,
+                        API_VEGA_BQB_HEVC_MAIN422_10_PROFILE,
+                        API_VEGA_BQB_HEVC_LEVEL_41,
+                        API_VEGA_BQB_HEVC_MAIN_TIER,
+                        opts->codec.encodingResolution,
+                        opts->codec.chromaFormat,
+                        opts->codec.bitDepth,
+                        opts->codec.fps,
+                        opts->codec.bitrate_kbps,
+                        270000
+                );
+                ctx->init_paramsMACRO.eOutputFmt = API_VEGA_BQB_STREAM_OUTPUT_FORMAT_ES;
+
+                VEGA_BQB_ENC_MakeULLInitParam
+                (
+                        &ctx->init_paramsMACROULL,
+                        API_VEGA_BQB_HEVC_MAIN422_10_PROFILE,
+                        API_VEGA_BQB_HEVC_LEVEL_AUTO,
+                        API_VEGA_BQB_HEVC_MAIN_TIER,
+                        opts->codec.encodingResolution,
+                        opts->codec.chromaFormat,
+                        opts->codec.bitDepth,
+                        opts->codec.fps,
+                        opts->codec.bitrate_kbps
+                );
+                ctx->init_paramsMACRO.eOutputFmt = API_VEGA_BQB_STREAM_OUTPUT_FORMAT_ES;
+
+#if INSERT_HDR
+            pInitParam->tHevcParam.tVideoSignalType.bPresentFlag = true;
+            pInitParam->tHevcParam.tVideoSignalType.bVideoFullRange = false;
+            pInitParam->tHevcParam.tVideoSignalType.eVideoFormat = API_VEGA_BQB_VIDEO_FORMAT_UNSPECIFIED;
+            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.bPresentFlag = true;
+            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eColorPrimaries = API_VEGA_BQB_COLOR_PRIMARY_BT2020;
+            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_SMPTE_ST_2084;
+            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eMatrixCoeff = API_VEGA_BQB_MATRIX_COEFFS_BT2020NC;
+
+            pInitParam->tHevcParam.tHdrConfig.bEnable = true;
+            pInitParam->tHevcParam.tHdrConfig.u8LightContentLocation = 0;
+            pInitParam->tHevcParam.tHdrConfig.u16MaxContentLightLevel = 10000;
+            pInitParam->tHevcParam.tHdrConfig.u16MaxPictureAvgLightLevel = 4000;
+
+            pInitParam->tHevcParam.tHdrConfig.u8AlternativeTransferCharacteristicsLocation = 1;
+            pInitParam->tHevcParam.tHdrConfig.eAlternativeTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_BT2020_10;
+
+            pInitParam->tHevcParam.tHdrConfig.u8MasteringDisplayColourVolumeLocation = 2;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX0 = 13250;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY0 = 34500;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX1 = 7500;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY1 = 3000;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX2 = 34000;
+            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY2 = 16000;
+            pInitParam->tHevcParam.tHdrConfig.u16WhitePointX = 15635;
+            pInitParam->tHevcParam.tHdrConfig.u16WhitePointY = 16450;
+            pInitParam->tHevcParam.tHdrConfig.u32MaxDisplayMasteringLuminance = 10000000;
+            pInitParam->tHevcParam.tHdrConfig.u32MinDisplayMasteringLuminance = 500;
+#endif
 
                 if (VEGA_BQB_ENC_IsDeviceModeConfigurable((API_VEGA_BQB_DEVICE_E)opts->brd_idx)) {
                      fprintf(stderr, "DEVICE MODE IS CONFIGURABLE\n");
@@ -1177,14 +1957,14 @@ static int open_device(vega_opts_t *opts, int probe)
                         return -1;
                 }
 
-
-#if 0
-                /* Experimental, what is this callback for? and how does it relate to the existing a/v callbacks? */
-                encret = VEGA_BQB_ENC_RegisterPictureInfoCallback((API_VEGA330X_BOARD_E)opts->brd_idx, (API_VEGA330X_CHN_E)opts->card_idx,
+#if 1
+                /* Register callback to insert SEI in VIF mode */
+                encret = VEGA_BQB_ENC_RegisterPictureInfoCallback((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx,
                         callback__process_capture, opts);
-                if (encret != API_VEGA330X_RET_SUCCESS) {
+                if (encret != API_VEGA_BQB_RET_SUCCESS) {
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to enc pictures info callback\n");
                 }
+                printf(MODULE_PREFIX "Registering Picture Info callback\n");
 #endif
 
                 printf(MODULE_PREFIX "Starting hardware encoder\n");
@@ -1205,6 +1985,12 @@ static int open_device(vega_opts_t *opts, int probe)
                 ctx->ch_init_param.eInputMode    = opts->codec.inputMode;
                 ctx->ch_init_param.eInputSource  = opts->codec.inputSource;
                 ctx->ch_init_param.eAudioLayouts = opts->codec.audioLayout;
+
+                /* Configure HANd process. We don't want HANC audio packets but we'll take everything else */
+                ctx->ch_init_param.tAncWindowSetting.bHanc = false;     /* Enable HANC ancillary data processing (Audio packet) */
+                ctx->ch_init_param.tAncWindowSetting.bPreVanc = true;
+                ctx->ch_init_param.tAncWindowSetting.bPostVanc = true;
+
 //	API_VEGA3311_CAP_ANC_WINDOW_T          tAncWindowSetting;
 //	API_VEGA3311_CAP_ANC_REMAPPING_T       tAncRemapSetting;
 
@@ -1219,7 +2005,7 @@ static int open_device(vega_opts_t *opts, int probe)
                 printf("---\n");
 #if 0
 /* Intensional segfault */
-printf("Segfaulting to debug, gdb print this: ctx->ch_init_param\n");
+printf("Segfaulting to debug, gdb print this: ctx->ch_init_param or ctx->init_paramsMACRO, ctx->init_paramsMACROULL\n");
 char *p = 0;
 printf("%d\n", *p);
 #endif
@@ -1228,6 +2014,14 @@ printf("%d\n", *p);
                 capret = VEGA3311_CAP_Config(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, &ctx->ch_init_param);
                 if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to cap config\n");
+                        return -1;
+                }
+
+                printf(MODULE_PREFIX "Configuring ANC Interface\n");
+
+                capret = VEGA3311_CAP_RegisterAncdCallback(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, callback__anc_capture_cb_func, opts);
+                if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
+                        fprintf(stderr, MODULE_PREFIX "ERROR: failed to anc register callback\n");
                         return -1;
                 }
 
