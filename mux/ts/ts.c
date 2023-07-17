@@ -421,13 +421,14 @@ static void verify_audio_pts_queue_content(obe_t *h, int64_t videoDTS)
             max_a_pts = cf->pts;
     }
     //pthread_mutex_unlock(&h->mux_queue.mutex);
-
+#if 0
     printf("older %5d newer %5d    min_a_pts %12" PRIi64 " max_a_pts %12" PRIi64 " delta %12" PRIi64 "(ms) video_dts %12" PRIi64 ", delta %12" PRIi64 "\n",
         older, newer,
         min_a_pts, max_a_pts,
         (max_a_pts - min_a_pts) / 300 / 90,
         videoDTS,
         (min_a_pts - min_v_pts) / 300 / 90);
+#endif
 }
 
 static void mux_dump_queue_content(obe_t *h)
@@ -984,9 +985,9 @@ void *open_muxer( void *ptr )
              */
             int64_t rescaled_dts = coded_frame->pts - first_video_pts + first_video_real_pts;
 #if 0
-            printf("A: %d was rescaled_dts %" PRIi64 "  video_dts %" PRIi64 "  first_video_pts %" PRIi64 "  first_video_real_pts %" PRIi64 "\n",
+            printf("A: %d was rescaled_dts %" PRIi64 "  video_dts %" PRIi64 "  first_video_pts %" PRIi64 "  first_video_real_pts %" PRIi64 "  cf->pts %" PRIi64 "\n",
                 coded_frame->type == CF_AUDIO,
-                rescaled_dts, video_dts, first_video_pts, first_video_real_pts);
+                rescaled_dts, video_dts, first_video_pts, first_video_real_pts, coded_frame->pts);
 #endif
             if (coded_frame->type == CF_VIDEO)
                 rescaled_dts = coded_frame->real_dts;
