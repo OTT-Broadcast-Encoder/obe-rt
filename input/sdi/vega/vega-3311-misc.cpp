@@ -37,6 +37,22 @@
 
 #include "vega-3311.h"
 
+extern "C"
+{
+#include <libklvanc/vanc.h>
+#include <libklscte35/scte35.h>
+}
+
+const char *lookupVegaeTimeBase(API_VEGA_BQB_TIMEBASE_E tb)
+{
+    switch(tb) {
+    case API_VEGA_BQB_TIMEBASE_SECOND:       return "API_VEGA_BQB_TIMEBASE_SECOND";
+    case API_VEGA_BQB_TIMEBASE_MILLI_SECOND: return "API_VEGA_BQB_TIMEBASE_MILLI_SECOND";
+    case API_VEGA_BQB_TIMEBASE_90KHZ:        return "API_VEGA_BQB_TIMEBASE_90KHZ";
+    default:                                 return "UNDEFINED";
+    }
+}
+
 const char *lookupVegaAudioPacketSizeName(API_VEGA3311_CAP_AUDIO_PACKET_SIZE_E v)
 {
         switch (v) {
@@ -235,6 +251,16 @@ int lookupVegaFramerate(int num, int den, API_VEGA_BQB_FPS_E *fps)
 	}
 
 	return -1; /* Error */
+}
+
+void klvanc_packet_header_dump_console(struct klvanc_packet_header_s *pkt)
+{
+        printf("pkt %p\n", pkt);
+        printf("\ttype -> %d\n", pkt->type);
+        printf("\tdid  -> %04x\n", pkt->did);
+        printf("\tsdid -> %04x\n", pkt->dbnsdid);
+        printf("\tline -> %d\n", pkt->lineNr);
+        printf("\tlen  -> %d\n", pkt->payloadLengthWords);
 }
 
 #endif /* #if HAVE_VEGA3311_CAP_TYPES_H */

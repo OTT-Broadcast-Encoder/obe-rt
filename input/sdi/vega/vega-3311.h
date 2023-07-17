@@ -32,6 +32,7 @@ struct obe_to_vega_video
     API_VEGA_BQB_FPS_E vegaFramerate;          /* SDK specific enum */
 };
 
+const char *lookupVegaeTimeBase(API_VEGA_BQB_TIMEBASE_E tb);
 const char *vega_lookupFrameType(API_VEGA_BQB_FRAME_TYPE_E type);
 const char *lookupVegaSDILevelName(int v);
 const char *lookupVegaPixelFormatName(int v);
@@ -46,5 +47,7 @@ const char *lookupVegaAudioPacketSizeName(API_VEGA3311_CAP_AUDIO_PACKET_SIZE_E v
 const struct obe_to_vega_video *lookupVegaCaptureResolution(int std, int framerate, int interlaced);
 const struct obe_to_vega_video *lookupVegaStandardByResolution(int width, int height, int framerate);
 int lookupVegaFramerate(int num, int den, API_VEGA_BQB_FPS_E *fps);
+
+void klvanc_packet_header_dump_console(struct klvanc_packet_header_s *pkt);
 
 #endif /* LTN_VEGA_H */
