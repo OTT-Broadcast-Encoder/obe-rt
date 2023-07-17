@@ -14,6 +14,7 @@ extern "C"
 #include "common/common.h"
 #include "common/lavc.h"
 #include "input/input.h"
+#include "input/sdi/sdi.h"
 #include <libavcodec/avcodec.h>
 #include <libswresample/swresample.h>
 #include <libavutil/opt.h>
@@ -71,6 +72,10 @@ typedef struct
         /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
         struct SwrContext *avr;
 
+        /* SMPTE2038 packetizer */
+        struct klvanc_smpte2038_packetizer_s *smpte2038_ctx;
+        obe_sdi_non_display_data_t non_display_parser;
+
         /* Video timing tracking */
         int64_t videoLastPCR;
         int64_t videoLastDTS, videoLastPTS;
@@ -78,7 +83,7 @@ typedef struct
         int64_t videoPTSOffset;
         int64_t lastAdjustedPicDTS;
         int64_t lastAdjustedPicPTS;
-        int64_t lastcorrectedPicPTS;
+        int64_t lastcorrectedPicPTS; /* 90KHz. Last PTS submitted for video, we'll use this in vanc handling and 2038 as needed. */
         int64_t lastcorrectedPicDTS;
 
         /* Audio timing tracking */
@@ -130,6 +135,18 @@ typedef struct
             API_VEGA3311_CAP_AUDIO_LAYOUT_E audioLayout;
             API_VEGA3311_CAP_IMAGE_FORMAT_E pixelFormat;
     } codec;
+
+#define OPTION_ENABLED(opt) (opts->enable_##opt)
+#define OPTION_ENABLED_(opt) (opts_->enable_##opt)
+    int enable_smpte2038;
+#if 0
+    int enable_vanc_cache;
+    int enable_bitstream_audio;
+    int enable_patch1;
+    int enable_los_exit_ms;
+    int enable_frame_injection;
+    int enable_allow_1080p60;
+#endif
 
 } vega_opts_t;
 

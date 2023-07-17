@@ -37,6 +37,8 @@
 
 #include "vega-3311.h"
 
+#define LOCAL_DEBUG 1
+
 extern "C"
 {
 #include <libklvanc/vanc.h>
@@ -117,11 +119,24 @@ static int cb_EIA_608(void *callback_context, struct klvanc_context_s *vanchdl, 
 	return 0;
 }
 
-#if 0
+static int findOutputStreamIdByFormat(vega_ctx_t *ctx, enum stream_type_e stype, enum stream_formats_e fmt)
+{
+	if (ctx && ctx->device == NULL)
+		return -1;
+
+	for(int i = 0; i < ctx->device->num_input_streams; i++) {
+		if ((ctx->device->input_streams[i]->stream_type == stype) &&
+			(ctx->device->input_streams[i]->stream_format == fmt))
+			return i;
+        }
+
+	return -1;
+}
+
 /* We're given some VANC data, craete a SCTE104 metadata entry for it
  * and we'll send it to the encoder later, by an atachment to the video frame.
  */
-static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
+static int add_metadata_scte104_vanc_section(vega_ctx_t *ctx,
 	struct avmetadata_s *md,
 	uint8_t *section, uint32_t section_length, int lineNr)
 {
@@ -141,7 +156,7 @@ static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 	avmetadata_item_data_write(md->array[idx], section, section_length);
 	avmetadata_item_data_set_linenr(md->array[idx], lineNr);
 
-        int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
+        int streamId = findOutputStreamIdByFormat(ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
         if (streamId < 0)
                 return 0;
 	avmetadata_item_data_set_outputstreamid(md->array[idx], streamId);
@@ -149,9 +164,9 @@ static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 	return 0;
 }
 
-static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
+static int transmit_pes_to_muxer(vega_ctx_t *ctx, uint8_t *buf, uint32_t byteCount)
 {
-	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, SMPTE2038);
+	int streamId = findOutputStreamIdByFormat(ctx, STREAM_TYPE_MISC, SMPTE2038);
 	if (streamId < 0)
 		return 0;
 
@@ -161,14 +176,13 @@ static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uin
 		syslog(LOG_ERR, "Malloc failed during %s, needed %d bytes\n", __func__, byteCount);
 		return -1;
 	}
-	coded_frame->pts = decklink_ctx->stream_time;
+	coded_frame->pts = ctx->lastcorrectedPicPTS;
 	coded_frame->random_access = 1; /* ? */
 	memcpy(coded_frame->data, buf, byteCount);
-	add_to_queue(&decklink_ctx->h->mux_queue, coded_frame);
+	add_to_queue(&ctx->h->mux_queue, coded_frame);
 
 	return 0;
 }
-#endif
 
 static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_scte_104_s *pkt)
 {
@@ -204,8 +218,8 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *vanchdl,
 			char t[64];
 			sprintf(t, "%s", ctime(&now));
 			t[ strlen(t) - 1] = 0;
-			syslog(LOG_INFO, "[decklink] SCTE104 frames present on SDI");
-			fprintf(stdout, "[decklink] SCTE104 frames present on SDI  @ %s", t);
+			syslog(LOG_INFO, MODULE_PREFIX "SCTE104 frames present on SDI");
+			fprintf(stdout, MODULE_PREFIX "SCTE104 frames present on SDI  @ %s", t);
 			printf("\n");
 			fflush(stdout);
 
@@ -228,20 +242,20 @@ static int cb_all(void *callback_context, struct klvanc_context_s *vanchdl, stru
 
         //klvanc_packet_header_dump_console(pkt); /* Local project func, see vega3311-misc.cpp */
 
-#if 0
-
 	/* We've been called with a VANC frame. Pass it to the SMPTE2038 packetizer.
-	 * We'll be called here from the thread handing the VideoFrameArrived
+	 * We'll be called here from the thread handing the advantech VANC callback (vega3311-vanc.cpp)
 	 * callback, which calls vanc_packet_parse for each ANC line.
 	 * Push the pkt into the SMPTE2038 layer, its collecting VANC data.
 	 */
-	if (decklink_ctx->smpte2038_ctx) {
-		if (klvanc_smpte2038_packetizer_append(decklink_ctx->smpte2038_ctx, pkt) < 0) {
+	if (ctx->smpte2038_ctx) {
+		if (klvanc_smpte2038_packetizer_append(ctx->smpte2038_ctx, pkt) < 0) {
+                        fprintf(stderr, MODULE_PREFIX "Failed to add message to SMPTE2038 framework\n");
 		}
 	}
 
-	decklink_opts_t *decklink_opts = container_of(decklink_ctx, decklink_opts_t, decklink_ctx);
-	if (OPTION_ENABLED(patch1) && decklink_ctx->vanchdl && pkt->did == 0x52 && pkt->dbnsdid == 0x01) {
+#if 0
+/* This patch should not be required for VEGA based custoemrs. */
+	if (OPTION_ENABLED(patch1) && ctx->vanchdl && pkt->did == 0x52 && pkt->dbnsdid == 0x01) {
 
 		/* Patch#1 -- SCTE104 VANC appearing in a non-standard DID.
 		 * Modify the DID to reflect traditional SCTE104 and re-parse.
@@ -258,13 +272,14 @@ static int cb_all(void *callback_context, struct klvanc_context_s *vanchdl, stru
 		}
 	}
 #endif
+
 	return 0;
 }
 
 static int cb_VANC_TYPE_KL_UINT64_COUNTER(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_kl_u64le_counter_s *pkt)
 {
-        vega_opts_t *opts = (vega_opts_t *)callback_context;
-        vega_ctx_t *ctx = &opts->ctx;
+        //vega_opts_t *opts = (vega_opts_t *)callback_context;
+        //vega_ctx_t *ctx = &opts->ctx;
 
         printf(MODULE_PREFIX "%s\n", __func__);
 
@@ -393,6 +408,12 @@ static void parse_ancillary_data(vega_ctx_t *ctx, vega_opts_t *opts, uint32_t bl
                 printf("\n");
 #endif
 
+                /* Start a new 2038 session */
+                /* Calls to klvanc_packet_parse are returned to 2038 via the cb_all
+                 * callback. We have 2038 code in that func to add 2038 payload to the 2038 context session. */
+                if (ctx->smpte2038_ctx)
+                        klvanc_smpte2038_packetizer_begin(ctx->smpte2038_ctx);
+
                 if (ctx->vanchdl) {
         		int ret = klvanc_packet_parse(ctx->vanchdl,
                                 (uint32_t)block_data_ptr->line_number,
@@ -403,6 +424,15 @@ static void parse_ancillary_data(vega_ctx_t *ctx, vega_opts_t *opts, uint32_t bl
                                 fprintf(stderr, MODULE_PREFIX "No VANC on this line / parse failed or construction bug?\n");
 		        }
 	        }
+
+                /* Finish the 2038 session and forward 2038 to muxer */
+                if (ctx->smpte2038_ctx) {
+                        if (klvanc_smpte2038_packetizer_end(ctx->smpte2038_ctx, ctx->lastcorrectedPicPTS + (10 * 90000)) == 0) {
+                                if (transmit_pes_to_muxer(ctx, ctx->smpte2038_ctx->buf, ctx->smpte2038_ctx->bufused) < 0) {
+                                        fprintf(stderr, MODULE_PREFIX "failed to xmit PES to muxer\n");
+                                }
+                        }
+                }
 
 #if 0
                 /* Dump the raw payload, for debug purposes, in its advantech packed format */
@@ -473,6 +503,8 @@ void vega3311_vanc_callback(uint32_t u32DevId,
                 return;
         }
 
+
+
         AncdPHD *pkt_hdr = (AncdPHD *)st_frame_info->u8pDataBuf;
 #if 0
         printf(MODULE_PREFIX "anc callback PCR %15" PRIi64 " size %d bytes\n", pkt_hdr->ancd_pcr.u64Dword, st_frame_info->u32BufSize);
@@ -484,7 +516,11 @@ void vega3311_vanc_callback(uint32_t u32DevId,
         uint8_t *ancd_data_block_p = st_frame_info->u8pDataBuf + sizeof(AncdPHD);
         //int ancd_data_block_size = st_frame_info->u32BufSize - sizeof(AncdPHD);
 
+
+
         parse_ancillary_data(ctx, opts, (uint32_t)pkt_hdr->block_number, ancd_data_block_p);
+
+
 }
 
 #endif /* #if HAVE_VEGA3311_CAP_TYPES_H */

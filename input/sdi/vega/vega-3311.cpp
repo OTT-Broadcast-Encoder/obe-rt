@@ -910,6 +910,11 @@ static void close_device(vega_opts_t *opts)
                 ctx->vanchdl = 0;
         }
 
+        if (ctx->smpte2038_ctx) {
+                klvanc_smpte2038_packetizer_free(&ctx->smpte2038_ctx);
+                ctx->smpte2038_ctx = 0;
+        }
+
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);
 }
 
@@ -942,6 +947,14 @@ static int open_device(vega_opts_t *opts, int probe)
                         klvanc_context_enable_cache(decklink_ctx->vanchdl);
                 }
 #endif
+        }
+
+        if (OPTION_ENABLED(smpte2038)) {
+                klsyslog_and_stdout(LOG_INFO, MODULE_PREFIX "Enabling option SMPTE2038");
+                if (klvanc_smpte2038_packetizer_alloc(&ctx->smpte2038_ctx) < 0) {
+                        fprintf(stderr, MODULE_PREFIX "Unable to allocate a SMPTE2038 context.\n");
+                }
+                printf(MODULE_PREFIX "2038 HANDLE %p\n", ctx->smpte2038_ctx);
         }
 
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info;
@@ -1207,7 +1220,6 @@ static int open_device(vega_opts_t *opts, int probe)
                 //ctx->init_params.tVideoSignalType.bPresentFlag = true;
 
                 //VEGA_BQB_ENC_SetDbgMsgLevel((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx, API_VEGA_BQB_DBG_LEVEL_3);
-                fprintf(stderr, "AAAAAAA\n");
 
 #if 0
 /**
@@ -1409,14 +1421,12 @@ API_VEGA_BQB_FPS_60,
 			fprintf(stderr, MODULE_PREFIX "VEGA_BQB_ENC_Init: failed to initialize the encoder\n");
 			return -1;
 		}
-                fprintf(stderr, "BAAAAAA\n");
 
                 encret = VEGA_BQB_ENC_RegisterCallback((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx, callback__process_video_coded_frame, opts);
                 if (encret!= API_VEGA_BQB_RET_SUCCESS) {
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to register encode callback function\n");
                         return -1;
                 }
-
 
                 printf(MODULE_PREFIX "Registering Capture Video callback\n");
 
@@ -1530,6 +1540,10 @@ static void close_thread(void *handle)
 	free(opts);
 }
 
+#define ALLOC_STREAM(nr) \
+    streams[cur_stream] = (obe_int_input_stream_t*)calloc(1, sizeof(*streams[cur_stream])); \
+    if (!streams[cur_stream]) goto finish;
+
 static void *vega_probe_stream(void *ptr)
 {
 	obe_input_probe_t *probe_ctx = (obe_input_probe_t*)ptr;
@@ -1538,10 +1552,13 @@ static void *vega_probe_stream(void *ptr)
 	obe_device_t *device;
 	obe_int_input_stream_t *streams[MAX_STREAMS];
 	int num_streams = 1 + MAX_AUDIO_PAIRS;
+        int cur_stream = 0;
 
 	printf(MODULE_PREFIX "%s()\n", __func__);
 
 	vega_ctx_t *ctx;
+
+        obe_sdi_non_display_data_t *non_display_parser = NULL;
 
 	vega_opts_t *opts = (vega_opts_t*)calloc(1, sizeof(*opts));
 	if (!opts) {
@@ -1549,11 +1566,21 @@ static void *vega_probe_stream(void *ptr)
 		goto finish;
 	}
 
+        non_display_parser = &opts->ctx.non_display_parser;
+
 	/* TODO: support multi-channel */
 	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
+        opts->enable_smpte2038 = user_opts->enable_smpte2038;
+#if 0
+        opts->enable_vanc_cache = user_opts->enable_vanc_cache;
+        opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
+        opts->enable_patch1 = user_opts->enable_patch1;
+#endif
 	opts->probe = 1;
+
+        non_display_parser->probe = 1;
 
 	ctx = &opts->ctx;
 	ctx->h = h;
@@ -1581,7 +1608,7 @@ static void *vega_probe_stream(void *ptr)
 
 	for( int i = 0; i < num_streams; i++ ) {
 
-		streams[i] = (obe_int_input_stream_t*)calloc( 1, sizeof(*streams[i]) );
+                ALLOC_STREAM(i);
 		if (!streams[i])
 			goto finish;
 
@@ -1591,35 +1618,79 @@ static void *vega_probe_stream(void *ptr)
 		pthread_mutex_unlock( &h->device_list_mutex );
 
 		if (i == 0) {
-			streams[i]->stream_type   = STREAM_TYPE_VIDEO;
-			streams[i]->stream_format = VIDEO_HEVC_VEGA3311;
-			streams[i]->width         = opts->width;
-			streams[i]->height        = opts->height;
-			streams[i]->timebase_num  = opts->timebase_num;
-			streams[i]->timebase_den  = opts->timebase_den;
-			streams[i]->csp           = AV_PIX_FMT_QSV; /* Special tag. We're providing NALS not raw video. */
-			streams[i]->interlaced    = opts->interlaced;
-			streams[i]->tff           = 1; /* NTSC is bff in baseband but coded as tff */
-			streams[i]->sar_num       = streams[i]->sar_den = 1; /* The user can choose this when encoding */
+			streams[cur_stream]->stream_type   = STREAM_TYPE_VIDEO;
+			streams[cur_stream]->stream_format = VIDEO_HEVC_VEGA3311;
+			streams[cur_stream]->width         = opts->width;
+			streams[cur_stream]->height        = opts->height;
+			streams[cur_stream]->timebase_num  = opts->timebase_num;
+			streams[cur_stream]->timebase_den  = opts->timebase_den;
+			streams[cur_stream]->csp           = AV_PIX_FMT_QSV; /* Special tag. We're providing NALS not raw video. */
+			streams[cur_stream]->interlaced    = opts->interlaced;
+			streams[cur_stream]->tff           = 1; /* NTSC is bff in baseband but coded as tff */
+			streams[cur_stream]->sar_num       = streams[i]->sar_den = 1; /* The user can choose this when encoding */
 		}
 		else if( i >= 1 ) {
 			/* TODO: various assumptions about audio being 48KHz need resolved.
          		 * Some sources could be 44.1 and this module will fall down badly.
 			 */
-			streams[i]->stream_type    = STREAM_TYPE_AUDIO;
-			streams[i]->stream_format  = AUDIO_PCM;
-			streams[i]->num_channels   = 2;
-			streams[i]->sample_format  = AV_SAMPLE_FMT_S32P;
-			streams[i]->sample_rate    = 48000;
-			streams[i]->sdi_audio_pair = i;
+			streams[cur_stream]->stream_type    = STREAM_TYPE_AUDIO;
+			streams[cur_stream]->stream_format  = AUDIO_PCM;
+			streams[cur_stream]->num_channels   = 2;
+			streams[cur_stream]->sample_format  = AV_SAMPLE_FMT_S32P;
+			streams[cur_stream]->sample_rate    = 48000;
+			streams[cur_stream]->sdi_audio_pair = i;
 		}
+                cur_stream++;
 	}
+
+#if 0
+        /* Add a new output stream type, a TABLE_SECTION mechanism.
+         * We use this to pass DVB table sections direct to the muxer,
+         * for SCTE35, and other sections in the future.
+         */
+        if (decklink_ctx->h->enable_scte35) {
+                ALLOC_STREAM(cur_stream);
+
+                pthread_mutex_lock(&h->device_list_mutex);
+                streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
+                pthread_mutex_unlock(&h->device_list_mutex);
+
+                streams[cur_stream]->stream_type = STREAM_TYPE_MISC;
+                streams[cur_stream]->stream_format = DVB_TABLE_SECTION;
+                streams[cur_stream]->pid = 0x123; /* TODO: hardcoded PID not currently used. */
+
+                if(add_non_display_services(non_display_parser, streams[cur_stream], USER_DATA_LOCATION_DVB_STREAM) < 0) {
+                        goto finish;
+                }
+                cur_stream++;
+        }
+#endif
+
+        /* Add a new output stream type, a SCTE2038 mechanism.
+         * We use this to pass PES direct to the muxer.
+         */
+        if (OPTION_ENABLED(smpte2038)) {
+                ALLOC_STREAM(cur_stream);
+
+                pthread_mutex_lock(&h->device_list_mutex);
+                streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
+                pthread_mutex_unlock(&h->device_list_mutex);
+
+                streams[cur_stream]->stream_type = STREAM_TYPE_MISC;
+                streams[cur_stream]->stream_format = SMPTE2038;
+                streams[cur_stream]->pid = 0x124; /* TODO: hardcoded PID not currently used. */
+
+                if(add_non_display_services(non_display_parser, streams[cur_stream], USER_DATA_LOCATION_DVB_STREAM) < 0) {
+                        fprintf(stderr, MODULE_PREFIX "Add non display service, failed\n");
+                }
+                cur_stream++;
+        }
 
 	device = new_device();
 	if (!device)
 		goto finish;
 
-	device->num_input_streams = num_streams;
+	device->num_input_streams = cur_stream;
 	memcpy(device->input_streams, streams, device->num_input_streams * sizeof(obe_int_input_stream_t**));
 	device->device_type = INPUT_DEVICE_VEGA3311;
 	memcpy(&device->user_opts, user_opts, sizeof(*user_opts));
@@ -1643,6 +1714,7 @@ static void *vega_open_input(void *ptr)
 	obe_t *h = input->h;
 	obe_device_t *device = input->device;
 	obe_input_t *user_opts = &device->user_opts;
+        obe_sdi_non_display_data_t *non_display_parser;
 	vega_ctx_t *ctx;
 
 	vega_opts_t *opts = (vega_opts_t *)calloc(1, sizeof(*opts));
@@ -1656,10 +1728,19 @@ static void *vega_open_input(void *ptr)
 	opts->num_audio_channels = MAX_AUDIO_CHANNELS;
 	opts->card_idx           = user_opts->card_idx;
 	opts->video_format       = user_opts->video_format;
+        opts->enable_smpte2038   = user_opts->enable_smpte2038;
+#if 0
+        opts->enable_vanc_cache = user_opts->enable_vanc_cache;
+        opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
+        opts->enable_patch1 = user_opts->enable_patch1;
+#endif
 
 	ctx         = &opts->ctx;
 	ctx->device = device;
 	ctx->h      = h;
+
+        non_display_parser = &ctx->non_display_parser;
+        non_display_parser->device = device;
 
         if (configureCodec(opts) < 0) {
                 fprintf(stderr, MODULE_PREFIX "invalid encoder parameters, aborting.\n");
