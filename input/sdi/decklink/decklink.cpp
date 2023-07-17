@@ -2748,7 +2748,7 @@ static void *probe_stream( void *ptr )
     streams[cur_stream] = (obe_int_input_stream_t*)calloc(1, sizeof(*streams[cur_stream])); \
     if (!streams[cur_stream]) goto finish;
 
-    ALLOC_STREAM(cur_stream]);
+    ALLOC_STREAM(cur_stream);
     pthread_mutex_lock(&h->device_list_mutex);
     streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
     pthread_mutex_unlock(&h->device_list_mutex);
@@ -2771,7 +2771,7 @@ static void *probe_stream( void *ptr )
     for (int i = 0; i < MAX_AUDIO_PAIRS; i++) {
         struct audio_pair_s *pair = &decklink_ctx->audio_pairs[i];
 
-        ALLOC_STREAM(cur_stream]);
+        ALLOC_STREAM(cur_stream);
         streams[cur_stream]->sdi_audio_pair = i + 1;
 
         pthread_mutex_lock(&h->device_list_mutex);
