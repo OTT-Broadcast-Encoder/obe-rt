@@ -171,4 +171,12 @@ void vega3311_audio_callback(uint32_t u32DevId,
         API_VEGA3311_CAPTURE_FORMAT_T *st_input_info,
         void* pv_user_arg);
 
+void vega3311_video_capture_callback(uint32_t u32DevId,
+        API_VEGA3311_CAP_CHN_E eCh,
+        API_VEGA3311_CAPTURE_FRAME_INFO_T *st_frame_info,
+        API_VEGA3311_CAPTURE_FORMAT_T *st_input_info,
+        void *pv_user_arg);
+
+void vega3311_video_compressed_callback(API_VEGA_BQB_HEVC_CODED_PICT_T *p_pict, void *args);
+
 #endif /* LTN_VEGA_H */
