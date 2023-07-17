@@ -1498,7 +1498,7 @@ printf("%d\n", *p);
 
                 printf(MODULE_PREFIX "Configuring ANC Interface\n");
 
-                capret = VEGA3311_CAP_RegisterAncdCallback(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, callback__anc_capture_cb_func, opts);
+                capret = VEGA3311_CAP_RegisterAncdCallback(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, vega3311_vanc_callback, opts);
                 if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
                         fprintf(stderr, MODULE_PREFIX "ERROR: failed to anc register callback\n");
                         return -1;

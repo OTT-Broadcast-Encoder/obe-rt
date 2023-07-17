@@ -133,7 +133,7 @@ typedef struct
 
 } vega_opts_t;
 
-void callback__anc_capture_cb_func(uint32_t u32DevId,
+void vega3311_vanc_callback(uint32_t u32DevId,
         API_VEGA3311_CAP_CHN_E eCh,
         API_VEGA3311_CAPTURE_FRAME_INFO_T* st_frame_info,
         API_VEGA3311_CAPTURE_FORMAT_T* st_input_info,
