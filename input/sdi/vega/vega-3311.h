@@ -50,4 +50,87 @@ int lookupVegaFramerate(int num, int den, API_VEGA_BQB_FPS_E *fps);
 
 void klvanc_packet_header_dump_console(struct klvanc_packet_header_s *pkt);
 
+typedef struct
+{
+	/* Device input related */
+	obe_device_t *device;
+	obe_t *h;
+
+        /* Capture layer and encoder layer configuration management */
+        API_VEGA_BQB_INIT_PARAM_T init_params;
+        API_VEGA_BQB_INIT_PARAM_T init_paramsMACRO;      /* TODO fix this during confirmance checking */
+        API_VEGA_BQB_INIT_PARAM_T init_paramsMACROULL;   /* TODO fix this during confirmance checking */
+        API_VEGA3311_CAP_INIT_PARAM_T ch_init_param;
+
+        uint32_t framecount;
+        int bLastFrame;
+
+        /* VANC Handling, attached the klvanc library for processing and parsing. */
+        struct klvanc_context_s *vanchdl;
+
+        /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
+        struct SwrContext *avr;
+
+        /* Video timing tracking */
+        int64_t videoLastPCR;
+        int64_t videoLastDTS, videoLastPTS;
+        int64_t videoDTSOffset;
+        int64_t videoPTSOffset;
+        int64_t lastAdjustedPicDTS;
+        int64_t lastAdjustedPicPTS;
+        int64_t lastcorrectedPicPTS;
+        int64_t lastcorrectedPicDTS;
+
+        /* Audio timing tracking */
+        int64_t audioLastPCR;
+        struct ltn_histogram_s *hg_callback_audio;
+        struct ltn_histogram_s *hg_callback_video;
+
+} vega_ctx_t;
+
+typedef struct
+{
+    vega_ctx_t ctx;
+
+    /* Input */
+    int  brd_idx;       /* Board instance # */
+    int card_idx;                       /* Port index # */
+
+    int video_format;                   /* Eg. INPUT_VIDEO_FORMAT_720P_5994 */
+    int num_audio_channels;             /* MAX_AUDIO_CHANNELS */
+
+    int probe;                          /* Boolean. True if the hardware is currently in probe mode. */
+
+    int probe_success;                  /* Boolean. Signal to the outer OBE core that probing is done. */
+
+    int width;                          /* Eg. 1280 */
+    int height;                         /* Eg. 720 */
+    int timebase_num;                   /* Eg.  1001 */
+    int timebase_den;                   /* Eg. 60000 */
+
+    int interlaced;                     /* Boolean */
+    //int tff;                            /* Boolean */
+
+    /* configuration for the codec. */
+    struct {
+            int                             interlaced;
+            int bitrate_kbps;
+            API_VEGA_BQB_GOP_SIZE_E         gop_size;
+            API_VEGA_BQB_B_FRAME_NUM_E      bframes;
+            int width;
+            int height;
+            API_VEGA_BQB_RESOLUTION_E       encodingResolution;
+            API_VEGA_BQB_IMAGE_FORMAT_E     eFormat;
+            API_VEGA_BQB_FPS_E              fps;
+            API_VEGA_BQB_CHROMA_FORMAT_E    chromaFormat;
+            API_VEGA_BQB_BIT_DEPTH_E        bitDepth;
+            API_VEGA3311_CAP_INPUT_MODE_E   inputMode;
+            API_VEGA3311_CAP_INPUT_SOURCE_E inputSource;
+            API_VEGA3311_CAP_SDI_LEVEL_E    sdiLevel;
+            API_VEGA3311_CAP_AUDIO_LAYOUT_E audioLayout;
+            API_VEGA3311_CAP_IMAGE_FORMAT_E pixelFormat;
+    } codec;
+
+} vega_opts_t;
+
 #endif /* LTN_VEGA_H */
