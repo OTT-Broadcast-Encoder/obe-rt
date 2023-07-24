@@ -95,6 +95,7 @@ obecli_SOURCES += ../input/sdi/vega/vega-3311-misc.cpp
 obecli_SOURCES += ../input/sdi/vega/vega-3311-vanc.cpp
 obecli_SOURCES += ../input/sdi/vega/vega-3311-audio.cpp
 obecli_SOURCES += ../input/sdi/vega/vega-3311-video.cpp
+obecli_SOURCES += ../input/sdi/vega/vega-3311-sei.cpp
 endif
 
 if AVFOUNDATION
