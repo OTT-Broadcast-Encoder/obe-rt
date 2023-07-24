@@ -34,7 +34,6 @@
 #include <fcntl.h>
 #include <semaphore.h>
 #include <time.h>
-#include <encoders/video/sei-timestamp.h>
 #include <input/sdi/yuv422p10le.h>
 #include <sys/stat.h>
 #include "vega-3311.h"
@@ -465,39 +464,10 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
         img.pts         = pcr / 300LL;
         img.eTimeBase   = API_VEGA_BQB_TIMEBASE_90KHZ;
         img.bLastFrame  = ctx->bLastFrame;
+        img.u32SeiNum   = 0;
 
         if (g_sei_timestamping) {
-
-                // WARNING..... DON'T TRAMPLE THE HDR SEI
-
-                /* Create the SEI for the LTN latency tracking. */
-                img.u32SeiNum = 1;
-                img.bSeiPassThrough = true;
-                img.tSeiParam[0].ePayloadLoc   = API_VEGA_BQB_SEI_PAYLOAD_LOC_PICTURE;
-                img.tSeiParam[0].ePayloadType  = API_VEGA_BQB_SEI_PAYLOAD_TYPE_USER_DATA_UNREGISTERED;
-                img.tSeiParam[0].u8PayloadSize = SEI_TIMESTAMP_PAYLOAD_LENGTH;
-
-                struct timeval tv;
-                gettimeofday(&tv, NULL);
-
-                unsigned char *p = &img.tSeiParam[0].u8PayloadData[0];
-
-                if (sei_timestamp_init(p, SEI_TIMESTAMP_PAYLOAD_LENGTH) < 0) {
-                        /* This should never happen unless the vega SDK sei header shrinks drastically. */
-                        fprintf(stderr, MODULE_PREFIX "SEI space too small\n");
-                        return;
-                }
-
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 1, ctx->framecount);
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 2, tv.tv_sec);  /* Rx'd from hw/ */
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 3, tv.tv_usec);
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 4, tv.tv_sec);  /* Tx'd to codec */
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 5, tv.tv_usec);
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 6, 0); /* time exit from compressor seconds/useconds. */
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 7, 0); /* time exit from compressor seconds/useconds. */
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 8, 0); /* time transmit to udp seconds/useconds. */
-                sei_timestamp_field_set(p, SEI_TIMESTAMP_PAYLOAD_LENGTH, 9, 0); /* time transmit to udp seconds/useconds. */
-                /* SEI: End */
+                vega_sei_append_ltn_timing(ctx);
         }
 
         /* Append any queued SEI (captions typically), from sei index 1 onwards */
@@ -505,7 +475,7 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
                 vega_sei_lock(ctx);
                 if (ctx->seiCount) {
                         for (int i = 0; i < ctx->seiCount; i++) {
-                                memcpy(&img.tSeiParam[1 + i], &ctx->sei[i], sizeof(API_VEGA_BQB_SEI_PARAM_T));
+                                memcpy(&img.tSeiParam[i], &ctx->sei[i], sizeof(API_VEGA_BQB_SEI_PARAM_T));
 
                         }
                         img.u32SeiNum += ctx->seiCount;

@@ -18,6 +18,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 #include <libswresample/swresample.h>
 #include <libavutil/opt.h>
+#include <encoders/video/sei-timestamp.h>
 }
 
 #define MAX_VEGA_AUDIO_CHANNELS 16
@@ -113,6 +114,7 @@ void vega_sei_init(vega_ctx_t *ctx);
 void vega_sei_lock(vega_ctx_t *ctx);
 void vega_sei_unlock(vega_ctx_t *ctx);
 int  vega_sei_append(vega_ctx_t *ctx, API_VEGA_BQB_SEI_PARAM_T *item);
+void vega_sei_append_ltn_timing(vega_ctx_t *ctx);
 
 typedef struct
 {
