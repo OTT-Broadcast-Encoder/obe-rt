@@ -500,6 +500,20 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
                 /* SEI: End */
         }
 
+        /* Append any queued SEI (captions typically), from sei index 1 onwards */
+        {
+                vega_sei_lock(ctx);
+                if (ctx->seiCount) {
+                        for (int i = 0; i < ctx->seiCount; i++) {
+                                memcpy(&img.tSeiParam[1 + i], &ctx->sei[i], sizeof(API_VEGA_BQB_SEI_PARAM_T));
+
+                        }
+                        img.u32SeiNum += ctx->seiCount;
+                        ctx->seiCount = 0;
+                }
+                vega_sei_unlock(ctx);
+        }
+
         /* Capture an output frame to disk, for debug, when you touch this file. */
         {
                 struct stat s;
@@ -526,8 +540,8 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
                 free(dst[0]); /* Free the CSCd frame */
 
 #if LOCAL_DEBUG
-        printf(MODULE_PREFIX "pushed raw video frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 "\n",
-                pcr, img.pts);
+        printf(MODULE_PREFIX "pushed raw video frame to encoder, PCR %016" PRIi64 ", PTS %012" PRIi64 ", sei msgs = %d\n",
+                pcr, img.pts, img.u32SeiNum);
 #endif
 
 #if 0

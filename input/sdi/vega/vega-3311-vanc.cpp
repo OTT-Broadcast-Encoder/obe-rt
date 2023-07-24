@@ -95,12 +95,75 @@ static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *vanchdl,
         vega_opts_t *opts = (vega_opts_t *)callback_context;
         vega_ctx_t *ctx = &opts->ctx;
 
-        printf(MODULE_PREFIX "%s\n", __func__);
-
 	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
 		printf("%s:%s()\n", __FILE__, __func__);
 		klvanc_dump_EIA_708B(vanchdl, pkt); /* vanc lib helper */
 	}
+
+        /* Make a vega full formed SEI message and queue it.
+         * Convert the klvanc_packet_eia_708b_s into a vega SEI frame.
+         * During the next video frame callback, it will be assied to that frame and passed to the compression codec.
+         * * See https://en.wikipedia.org/wiki/CTA-708
+         */
+        API_VEGA_BQB_SEI_PARAM_T s;
+        memset(&s, 0, sizeof(s));
+
+        s.ePayloadLoc   = API_VEGA_BQB_SEI_PAYLOAD_LOC_PICTURE;
+        s.ePayloadType  = API_VEGA_BQB_SEI_PAYLOAD_TYPE_USER_DATA_REGISTERED_ITU_T_T35;
+        s.u8PayloadSize = 0; //bytecount;
+        uint8_t *p = &s.u8PayloadData[0];
+
+        /* Preamble */
+        *(p++) = 0x00;
+        *(p++) = 0x00;
+        *(p++) = 0x01;
+
+        if (1) {
+                /* HEVC Specific. PREFIX_NAL_UNIT */
+                *(p++) = 0x4e;
+                *(p++) = 0x01;
+                *(p++) = 0x04;
+                *(p++) = 0x47; // itu_t_t35_provider_code
+                *(p++) = 0xb5; // itu_t_t35_country_code 
+                *(p++) = 0x00; // ?
+                *(p++) = 0x31; // ? 
+                *(p++) = 'G';
+                *(p++) = 'A';
+                *(p++) = '9';
+                *(p++) = '4';
+                *(p++) = 0x03; // ATSC1_data_user_data_type_code 
+                *(p++) = (1 << 7 /* reserved */) |
+                         (1 << 6 /* process_cc_data_flag */) | (pkt->ccdata.cc_count & 0x1f);
+                *(p++) = 0xff; /* Marker */
+        } else {
+                /* H264 */
+                return -1;
+        }
+
+        for (int i = 0; i < pkt->ccdata.cc_count; i++) {
+                *(p)    = 0xf8; /* Marker bits */
+                *(p)   |= (pkt->ccdata.cc[i].cc_valid << 2);
+                *(p++) |= pkt->ccdata.cc[i].cc_type;
+                *(p++)  = pkt->ccdata.cc[i].cc_data[0];
+                *(p++)  = pkt->ccdata.cc[i].cc_data[1];
+        }
+
+        *(p++) = 0xff; /* Marker */
+
+        /* Wrap up the struct */
+        s.u8PayloadSize = p - &s.u8PayloadData[0];
+
+        if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+                printf(MODULE_PREFIX "Adding SEI: ");
+                for (int i = 0; i < s.u8PayloadSize; i++) {
+                        printf("%02x ", s.u8PayloadData[i]);
+                }
+                printf("\n");
+        }
+
+        if (vega_sei_append(ctx, &s) < 0) {
+                fprintf(stderr, MODULE_PREFIX "Unable to create new SEI 708 entry, skipping\n");
+        }
 
 	return 0;
 }
