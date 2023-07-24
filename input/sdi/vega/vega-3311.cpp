@@ -1065,6 +1065,7 @@ static void *vega_open_input(void *ptr)
 	ctx         = &opts->ctx;
 	ctx->device = device;
 	ctx->h      = h;
+        vega_sei_init(ctx);
 
         non_display_parser = &ctx->non_display_parser;
         non_display_parser->device = device;

@@ -84,6 +84,11 @@ typedef struct
         /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
         struct SwrContext *avr;
 
+        /* SEI handling -- all managed through vega_sei_calls, no direct access for writes (only reads with a lock) */
+        pthread_mutex_t          seiLock;
+        int                      seiCount;
+        API_VEGA_BQB_SEI_PARAM_T sei[API_MAX_SEI_NUM];
+
         /* SMPTE2038 packetizer */
         struct klvanc_smpte2038_packetizer_s *smpte2038_ctx;
         obe_sdi_non_display_data_t non_display_parser;
@@ -104,6 +109,10 @@ typedef struct
         struct ltn_histogram_s *hg_callback_video;
 
 } vega_ctx_t;
+void vega_sei_init(vega_ctx_t *ctx);
+void vega_sei_lock(vega_ctx_t *ctx);
+void vega_sei_unlock(vega_ctx_t *ctx);
+int  vega_sei_append(vega_ctx_t *ctx, API_VEGA_BQB_SEI_PARAM_T *item);
 
 typedef struct
 {
