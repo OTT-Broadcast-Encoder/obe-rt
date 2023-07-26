@@ -477,6 +477,10 @@ static int open_device(vega_opts_t *opts, int probe)
                 opts->interlaced ? 'i' : 'p',
 		opts->timebase_den, opts->timebase_num);
 
+        if (probe) {
+                return 0; /* Success */
+        }
+        
 	if (probe == 0) {
 
                 ctx->avr = swr_alloc();
@@ -866,7 +870,7 @@ printf("%d\n", *p);
                 }
 
                 printf(MODULE_PREFIX "The vega encoder device#0 port%d was started\n", opts->card_idx);
-	}
+	} // probe == 0
 
 	return 0; /* Success */
 }
