@@ -521,10 +521,6 @@ static int open_device(vega_opts_t *opts, int probe)
         ctx->init_params.tHevcParam.eResolution      = opts->codec.encodingResolution;
         ctx->init_params.tHevcParam.eAspectRatioIdc  = API_VEGA_BQB_HEVC_ASPECT_RATIO_IDC_1;
 
-//
-// TODO
-//
-//
         ctx->init_params.tHevcParam.u32SarWidth     = opts->width;
         ctx->init_params.tHevcParam.u32SarHeight    = opts->height;
         ctx->init_params.tHevcParam.bDisableVpsTimingInfoPresent = false;
