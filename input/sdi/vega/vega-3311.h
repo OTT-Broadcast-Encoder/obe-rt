@@ -63,6 +63,9 @@ const struct obe_to_vega_video *lookupVegaStandardByResolution(int width, int he
 int lookupVegaFramerate(int num, int den, API_VEGA_BQB_FPS_E *fps);
 
 void klvanc_packet_header_dump_console(struct klvanc_packet_header_s *pkt);
+void vega_dump_signals_to_console(
+        API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info,
+        API_VEGA3311_CAPTURE_FORMAT_T input_src_info);
 
 typedef struct
 {
