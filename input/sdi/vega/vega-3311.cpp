@@ -837,12 +837,7 @@ API_VEGA_BQB_FPS_60,
         printf("capture.bAudioAutoRestartEn = %2d\n", ctx->ch_init_param.bAudioAutoRestartEn);
         printf("capture.eAudioLayouts       = %2d %s\n", ctx->ch_init_param.eAudioLayouts, lookupVegaAudioLayoutName(ctx->ch_init_param.eAudioLayouts));
         printf("---\n");
-#if 0
-/* Intensional segfault */
-printf("Segfaulting to debug, gdb print this: ctx->ch_init_param or ctx->init_paramsMACRO, ctx->init_paramsMACROULL\n");
-char *p = 0;
-printf("%d\n", *p);
-#endif
+
         printf(MODULE_PREFIX "Configuring Capture Interface\n");
 
         capret = VEGA3311_CAP_Config(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, &ctx->ch_init_param);
