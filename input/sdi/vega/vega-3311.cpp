@@ -378,8 +378,8 @@ static int open_device(vega_opts_t *opts, int probe)
         ltn_histogram_alloc_video_defaults(&ctx->hg_callback_video, "video arrival latency");
 
         /* Give libswresample a made up channel map.
-                * Convert S16 interleaved to S32P planar.
-                */
+         * Convert S16 interleaved to S32P planar.
+         */
         av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_audio_channels) - 1, 0 );
         av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
         av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
@@ -594,6 +594,9 @@ API_VEGA_BQB_FPS_60,
                 ctx->init_params.tHevcParam.tVideoSignalType.tColorDesc.eMatrixCoeff = API_VEGA_BQB_MATRIX_COEFFS_BT2020NC;
 
 #if 1
+                /* We assume this to mean, don't automatically put the HDR SEI in the GOP automatically,
+                 * we'll do this later by hand as a result of the VANC callbacks.
+                 */
                 ctx->init_params.tHevcParam.tHdrConfig.bEnable = false;
 #else
                 /* DO we need to configure the HDR metadata, if we're attaching it to each GOP with vanc callbacks? */
