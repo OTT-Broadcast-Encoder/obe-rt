@@ -175,6 +175,7 @@ typedef struct
 
     /* VBI */
     int vbi_ntsc;
+    int is_hdr;
 } obe_int_input_stream_t;
 
 typedef struct

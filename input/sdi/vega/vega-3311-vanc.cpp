@@ -373,6 +373,59 @@ static int cb_VANC_TYPE_KL_UINT64_COUNTER(void *callback_context, struct klvanc_
         return 0;
 }
 
+static int cb_SMPTE2108_1(void *callback_context, struct klvanc_context_s *vanchdl, struct klvanc_packet_smpte_2108_1_s *pkt)
+{
+        vega_opts_t *opts = (vega_opts_t *)callback_context;
+        vega_ctx_t *ctx = &opts->ctx;
+
+	if (ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+		printf("%s()\n", __func__);
+                klvanc_dump_SMPTE_2108_1(vanchdl, pkt);
+	}
+
+        /* Create SEI frames for the 2108 frame types we understand. */
+        for (int i = 0; i < pkt->num_frames; i++) {
+
+                API_VEGA_BQB_SEI_PARAM_T s;
+                memset(&s, 0, sizeof(s));
+
+                switch(pkt->frames[i].frame_type) {
+                case KLVANC_HDR_STATIC1:
+                        VEGA_BQB_ENC_MakeMasteringDisplayColourVolumeSei(
+                                &s,
+                                pkt->frames[i].static1.display_primaries_x[0],
+                                pkt->frames[i].static1.display_primaries_y[0],
+                                pkt->frames[i].static1.display_primaries_x[1],
+                                pkt->frames[i].static1.display_primaries_y[1],
+                                pkt->frames[i].static1.display_primaries_x[2],
+                                pkt->frames[i].static1.display_primaries_y[2],
+                                pkt->frames[i].static1.white_point_x,
+                                pkt->frames[i].static1.white_point_y,
+                                pkt->frames[i].static1.max_display_mastering_luminance,
+                                pkt->frames[i].static1.min_display_mastering_luminance
+                        );
+                        break;
+                case KLVANC_HDR_STATIC2:
+                        VEGA_BQB_ENC_MakeContentLightInfoSei(
+                                &s,
+                                API_VEGA_BQB_SEI_PAYLOAD_LOC_GOP,
+                                pkt->frames[i].static2.max_content_light_level,
+                                pkt->frames[i].static2.max_pic_average_light_level
+                        );
+                        break;
+                default:
+                        continue;
+                }
+
+                if (vega_sei_append(ctx, &s) < 0) {
+                        fprintf(stderr, MODULE_PREFIX "Unable to create new SEI HDR entry, skipping\n");
+                }
+
+        } // for each frame...
+
+        return 0;
+}
+
 struct klvanc_callbacks_s vega3311_vanc_callbacks = 
 {
 	.afd			= NULL,
@@ -382,6 +435,8 @@ struct klvanc_callbacks_s vega3311_vanc_callbacks =
 	.all			= cb_all,
 	.kl_i64le_counter       = cb_VANC_TYPE_KL_UINT64_COUNTER,
 	.sdp			= NULL,
+        .smpte_12_2             = NULL,
+        .smpte_2108_1           = cb_SMPTE2108_1,
 };
 /* End: VANC Callbacks */
 

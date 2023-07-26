@@ -232,52 +232,6 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
                 }
         }
 
-#if INSERT_HDR
-    API_VEGA_BQB_SEI_PARAM_T *p_sei = NULL;
-    API_VEGA_BQB_HDR_PARAM_T *p_hdr = &t_init_param.tHevcParam.tHdrConfig;
-   
-    pPicInfo->u32PictureNumber = args->u32CaptureCounter;
-
-    p_sei = &pPicInfo->tSeiParam[pPicInfo->u32SeiNum];
-    uint16_t u16MaxContentLightLevel = p_hdr->u16MaxContentLightLevel;
-    uint16_t u16MaxPictureAvgLightLevel = p_hdr->u16MaxPictureAvgLightLevel;
-    VEGA_BQB_ENC_MakeContentLightInfoSei
-    (
-        p_sei,
-        API_VEGA_BQB_SEI_PAYLOAD_LOC_GOP,
-        u16MaxContentLightLevel,
-        u16MaxPictureAvgLightLevel
-    );
-    pPicInfo->u32SeiNum++;
-
-    p_sei = &pPicInfo->tSeiParam[pPicInfo->u32SeiNum];
-    uint16_t u16DisplayPrimariesX0 = p_hdr->u16DisplayPrimariesX0;
-    uint16_t u16DisplayPrimariesY0 = p_hdr->u16DisplayPrimariesY0;
-    uint16_t u16DisplayPrimariesX1 = p_hdr->u16DisplayPrimariesX1;
-    uint16_t u16DisplayPrimariesY1 = p_hdr->u16DisplayPrimariesY1;
-    uint16_t u16DisplayPrimariesX2 = p_hdr->u16DisplayPrimariesX2;
-    uint16_t u16DisplayPrimariesY2 = p_hdr->u16DisplayPrimariesY2;
-    uint16_t u16WhitePointX = p_hdr->u16WhitePointX;
-    uint16_t u16WhitePointY = p_hdr->u16WhitePointY;
-    uint32_t u32MaxDisplayMasteringLuminance = p_hdr->u32MaxDisplayMasteringLuminance;
-    uint32_t u32MinDisplayMasteringLuminance = p_hdr->u32MinDisplayMasteringLuminance;
-    VEGA_BQB_ENC_MakeMasteringDisplayColourVolumeSei
-    (
-        p_sei,
-        u16DisplayPrimariesX0,
-        u16DisplayPrimariesY0,
-        u16DisplayPrimariesX1,
-        u16DisplayPrimariesY1,
-        u16DisplayPrimariesX2,
-        u16DisplayPrimariesY2,
-        u16WhitePointX,
-        u16WhitePointY,
-        u32MaxDisplayMasteringLuminance,
-        u32MinDisplayMasteringLuminance
-    );
-    pPicInfo->u32SeiNum++;
-#endif
-
 	ltn_histogram_interval_update(ctx->hg_callback_video);
 	if (g_decklink_histogram_print_secs > 0) {
 		ltn_histogram_interval_print(STDOUT_FILENO, ctx->hg_callback_video, g_decklink_histogram_print_secs);

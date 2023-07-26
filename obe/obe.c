@@ -926,6 +926,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
             memcpy( &stream_out->csp, &stream_in->csp, offsetof( obe_input_stream_t, timebase_num ) - offsetof( obe_input_stream_t, csp ) );
             stream_out->timebase_num = stream_in->timebase_num;
             stream_out->timebase_den = stream_in->timebase_den;
+            stream_out->is_hdr = stream_in->is_hdr;
         }
         else if( stream_in->stream_type == STREAM_TYPE_AUDIO )
         {

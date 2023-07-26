@@ -162,6 +162,7 @@ typedef struct
 #define OPTION_ENABLED(opt) (opts->enable_##opt)
 #define OPTION_ENABLED_(opt) (opts_->enable_##opt)
     int enable_smpte2038;
+    int enable_hdr;
 #if 0
     int enable_vanc_cache;
     int enable_bitstream_audio;

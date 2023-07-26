@@ -140,7 +140,7 @@ static int configureCodec(vega_opts_t *opts)
         }
 
 #if FORCE_10BIT
-#pragma message "Force compile into 10bit only mode"
+#pragma message "VEGA - Force compile into 10bit only mode"
         // Manually enable 10bit.
         p->i_csp |= X264_CSP_HIGH_DEPTH;
 #endif
@@ -293,8 +293,15 @@ static int open_device(vega_opts_t *opts, int probe)
                 if (klvanc_smpte2038_packetizer_alloc(&ctx->smpte2038_ctx) < 0) {
                         fprintf(stderr, MODULE_PREFIX "Unable to allocate a SMPTE2038 context.\n");
                 }
-                printf(MODULE_PREFIX "2038 HANDLE %p\n", ctx->smpte2038_ctx);
         }
+
+        if (OPTION_ENABLED(hdr)) {
+                klsyslog_and_stdout(LOG_INFO, MODULE_PREFIX "Enabling option HDR");
+        } else {
+                /* Disable parsing callbacks, configuration optimization. */
+                vega3311_vanc_callbacks.smpte_2108_1 = NULL;
+        }
+
 
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info;
         API_VEGA3311_CAPTURE_FORMAT_T input_src_info;
@@ -691,35 +698,41 @@ API_VEGA_BQB_FPS_60,
                 );
                 ctx->init_paramsMACRO.eOutputFmt = API_VEGA_BQB_STREAM_OUTPUT_FORMAT_ES;
 
-#if INSERT_HDR
-            pInitParam->tHevcParam.tVideoSignalType.bPresentFlag = true;
-            pInitParam->tHevcParam.tVideoSignalType.bVideoFullRange = false;
-            pInitParam->tHevcParam.tVideoSignalType.eVideoFormat = API_VEGA_BQB_VIDEO_FORMAT_UNSPECIFIED;
-            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.bPresentFlag = true;
-            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eColorPrimaries = API_VEGA_BQB_COLOR_PRIMARY_BT2020;
-            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_SMPTE_ST_2084;
-            pInitParam->tHevcParam.tVideoSignalType.tColorDesc.eMatrixCoeff = API_VEGA_BQB_MATRIX_COEFFS_BT2020NC;
+                /* Configure HDR */
+                if (OPTION_ENABLED(hdr)) {
+                        ctx->init_params.tHevcParam.tVideoSignalType.bPresentFlag = true;
+                        ctx->init_params.tHevcParam.tVideoSignalType.bVideoFullRange = false;
+                        ctx->init_params.tHevcParam.tVideoSignalType.eVideoFormat = API_VEGA_BQB_VIDEO_FORMAT_UNSPECIFIED;
+                        ctx->init_params.tHevcParam.tVideoSignalType.tColorDesc.bPresentFlag = true;
+                        ctx->init_params.tHevcParam.tVideoSignalType.tColorDesc.eColorPrimaries = API_VEGA_BQB_COLOR_PRIMARY_BT2020;
+                        ctx->init_params.tHevcParam.tVideoSignalType.tColorDesc.eTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_SMPTE_ST_2084;
+                        ctx->init_params.tHevcParam.tVideoSignalType.tColorDesc.eMatrixCoeff = API_VEGA_BQB_MATRIX_COEFFS_BT2020NC;
 
-            pInitParam->tHevcParam.tHdrConfig.bEnable = true;
-            pInitParam->tHevcParam.tHdrConfig.u8LightContentLocation = 0;
-            pInitParam->tHevcParam.tHdrConfig.u16MaxContentLightLevel = 10000;
-            pInitParam->tHevcParam.tHdrConfig.u16MaxPictureAvgLightLevel = 4000;
+#if 1
+                        ctx->init_params.tHevcParam.tHdrConfig.bEnable = false;
+#else
+                        /* DO we need to configure the HDR metadata, if we're attaching it to each GOP with vanc callbacks? */
+                        ctx->init_params.tHevcParam.tHdrConfig.bEnable = true;
+                        ctx->init_params.tHevcParam.tHdrConfig.u8LightContentLocation = 0;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16MaxContentLightLevel = 10000;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16MaxPictureAvgLightLevel = 4000;
 
-            pInitParam->tHevcParam.tHdrConfig.u8AlternativeTransferCharacteristicsLocation = 1;
-            pInitParam->tHevcParam.tHdrConfig.eAlternativeTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_BT2020_10;
+                        ctx->init_params.tHevcParam.tHdrConfig.u8AlternativeTransferCharacteristicsLocation = 1;
+                        ctx->init_params.tHevcParam.tHdrConfig.eAlternativeTransferCharacteristics = API_VEGA_BQB_TRANSFER_CHAR_BT2020_10;
 
-            pInitParam->tHevcParam.tHdrConfig.u8MasteringDisplayColourVolumeLocation = 2;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX0 = 13250;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY0 = 34500;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX1 = 7500;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY1 = 3000;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesX2 = 34000;
-            pInitParam->tHevcParam.tHdrConfig.u16DisplayPrimariesY2 = 16000;
-            pInitParam->tHevcParam.tHdrConfig.u16WhitePointX = 15635;
-            pInitParam->tHevcParam.tHdrConfig.u16WhitePointY = 16450;
-            pInitParam->tHevcParam.tHdrConfig.u32MaxDisplayMasteringLuminance = 10000000;
-            pInitParam->tHevcParam.tHdrConfig.u32MinDisplayMasteringLuminance = 500;
+                        ctx->init_params.tHevcParam.tHdrConfig.u8MasteringDisplayColourVolumeLocation = 2;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesX0 = 13250;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesY0 = 34500;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesX1 = 7500;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesY1 = 3000;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesX2 = 34000;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16DisplayPrimariesY2 = 16000;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16WhitePointX = 15635;
+                        ctx->init_params.tHevcParam.tHdrConfig.u16WhitePointY = 16450;
+                        ctx->init_params.tHevcParam.tHdrConfig.u32MaxDisplayMasteringLuminance = 10000000;
+                        ctx->init_params.tHevcParam.tHdrConfig.u32MinDisplayMasteringLuminance = 500;
 #endif
+                }
 
                 if (VEGA_BQB_ENC_IsDeviceModeConfigurable((API_VEGA_BQB_DEVICE_E)opts->brd_idx)) {
                      fprintf(stderr, "DEVICE MODE IS CONFIGURABLE\n");
@@ -902,6 +915,7 @@ static void *vega_probe_stream(void *ptr)
 	opts->card_idx = user_opts->card_idx;
 	opts->video_format = user_opts->video_format;
         opts->enable_smpte2038 = user_opts->enable_smpte2038;
+        opts->enable_hdr = user_opts->enable_hdr;
 #if 0
         opts->enable_vanc_cache = user_opts->enable_vanc_cache;
         opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
@@ -957,6 +971,7 @@ static void *vega_probe_stream(void *ptr)
 			streams[cur_stream]->interlaced    = opts->interlaced;
 			streams[cur_stream]->tff           = 1; /* NTSC is bff in baseband but coded as tff */
 			streams[cur_stream]->sar_num       = streams[i]->sar_den = 1; /* The user can choose this when encoding */
+                        streams[cur_stream]->is_hdr        = OPTION_ENABLED(hdr); /* User is telling if HDR is enabled or not - we're not detecting */
 		}
 		else if( i >= 1 ) {
 			/* TODO: various assumptions about audio being 48KHz need resolved.
@@ -1056,6 +1071,7 @@ static void *vega_open_input(void *ptr)
 	opts->card_idx           = user_opts->card_idx;
 	opts->video_format       = user_opts->video_format;
         opts->enable_smpte2038   = user_opts->enable_smpte2038;
+        opts->enable_hdr         = user_opts->enable_hdr;
 #if 0
         opts->enable_vanc_cache = user_opts->enable_vanc_cache;
         opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;

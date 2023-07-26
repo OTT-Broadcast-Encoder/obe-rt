@@ -155,6 +155,7 @@ static const char * input_opts[]  = { "location", "card-idx", "video-format", "v
                                       "frame-injection", /* 11 */
                                       "allow-1080p60", /* 12 */
                                       "name", /* 13 */
+                                      "hdr", /* 14 */
                                       NULL };
 static const char * add_opts[] =    { "type" };
 /* TODO: split the stream options into general options, video options, ts options */
@@ -646,6 +647,7 @@ static int set_input( char *command, obecli_command_t *child )
         char *frame_injection = obe_get_option(input_opts[11], opts);
         char *allow_1080p60 = obe_get_option(input_opts[12], opts);
         char *name = obe_get_option(input_opts[13], opts);
+        char *hdr = obe_get_option( input_opts[14], opts );
 
         FAIL_IF_ERROR( video_format && ( check_enum_value( video_format, input_video_formats ) < 0 ),
                        "Invalid video format\n" );
@@ -675,6 +677,7 @@ static int set_input( char *command, obecli_command_t *child )
         cli.input.enable_patch1 = obe_otoi( patch1, cli.input.enable_patch1 );
         cli.input.enable_bitstream_audio = obe_otoi( bitstream_audio, cli.input.enable_bitstream_audio );
         cli.input.enable_smpte2038 = obe_otoi( smpte2038, cli.input.enable_smpte2038 );
+        cli.input.enable_hdr = obe_otoi( hdr, cli.input.enable_hdr );
         cli.input.enable_scte35 = obe_otoi( scte35, cli.input.enable_scte35 );
         cli.h->enable_scte35 = cli.input.enable_scte35; /* Put this on the core cache, no just in the input content. */
 
@@ -2047,9 +2050,10 @@ static int show_input_streams( char *command, obecli_command_t *child )
         if( stream->stream_type == STREAM_TYPE_VIDEO )
         {
             /* TODO: show profile, level, csp etc */
-            printf( "Input-stream-id: %d - Video: %s %dx%d%s %d/%dfps \n", stream->input_stream_id,
+            printf( "Input-stream-id: %d - Video: %s %dx%d%s %d/%dfps %s\n", stream->input_stream_id,
                     format_name, stream->width, stream->height, stream->interlaced ? "i" : "p",
-                    stream->timebase_den, stream->timebase_num );
+                    stream->timebase_den, stream->timebase_num,
+                    stream->is_hdr ? "HDR" : "SDR");
 
             for( int j = 0; j < stream->num_frame_data; j++ )
             {

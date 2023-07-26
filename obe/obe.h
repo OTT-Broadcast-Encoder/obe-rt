@@ -139,6 +139,7 @@ typedef struct
     int enable_los_exit_ms;
     int enable_frame_injection;
     int enable_allow_1080p60;
+    int enable_hdr;
 } obe_input_t;
 
 /**** Stream Formats ****/
@@ -217,6 +218,7 @@ typedef struct
 
     /** Misc **/
     int source; /* e.g. VBI/VANC */
+    int is_hdr;
 }obe_input_stream_t;
 
 typedef struct
