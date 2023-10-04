@@ -28,6 +28,8 @@
 
 #define READ_8(x) ((x) & 0xff)
 
+int g_ancillary_disable_captions = 0;
+
 static int get_vanc_type( uint8_t did, uint8_t sdid )
 {
     for( int i = 0; vanc_identifiers[i].did != 0; i++ )
@@ -386,10 +388,14 @@ int parse_vanc_line( obe_t *h, obe_sdi_non_display_data_t *non_display_data, obe
                         parse_afd( h, non_display_data, raw_frame, &pkt_start[2], line_number, len );
                         break;
                     case VANC_DVB_SCTE_VBI:
-                        parse_dvb_scte_vbi( h, non_display_data, raw_frame, &pkt_start[2], line_number, len );
+                        if (g_ancillary_disable_captions == 0) {
+                            parse_dvb_scte_vbi( h, non_display_data, raw_frame, &pkt_start[2], line_number, len );
+                        }
                         break;
                     case CAPTIONS_CEA_708:
-                        parse_cdp( h, non_display_data, raw_frame, &pkt_start[2], line_number, len );
+                        if (g_ancillary_disable_captions == 0) {
+                            parse_cdp( h, non_display_data, raw_frame, &pkt_start[2], line_number, len );
+                        }
                         break;
                     default:
                         break;

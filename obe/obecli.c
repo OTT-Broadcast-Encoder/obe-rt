@@ -1380,6 +1380,9 @@ extern int g_core_runtime_terminate_after_seconds;
 extern int g_filter_audio_effect_pcm;
 extern int g_filter_video_fullsize_jpg;
 
+/* Ancillary data */
+extern int g_ancillary_disable_captions;
+
 void display_variables()
 {
 extern int    g_decklink_missing_audio_count;
@@ -1423,6 +1426,8 @@ extern time_t g_decklink_missing_video_last_time;
         g_decklink_histogram_reset);
     printf("sdi_input.histogram_print_secs = %d\n",
         g_decklink_histogram_print_secs);
+    printf("ancillary.disable_captions = %d\n",
+        g_ancillary_disable_captions);
 
     printf("audio_encoder.ac3_offset_ms = %" PRIi64 "\n", ac3_offset_ms);
     printf("audio_encoder.mp2_offset_ms = %" PRIi64 "\n", mp2_offset_ms);
@@ -1728,6 +1733,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "filter.video.create_fullsize_jpg") == 0) {
         g_filter_video_fullsize_jpg = val;
+    } else
+    if (strcasecmp(var, "ancillary.disable_captions") == 0) {
+        g_ancillary_disable_captions = val;
     } else {
         printf("illegal variable name.\n");
         return -1;
