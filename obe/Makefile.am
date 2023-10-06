@@ -135,6 +135,7 @@ obecli_SOURCES += ../common/common_lavc.c
 obecli_SOURCES += ../common/queue.c
 obecli_SOURCES += ../common/metadata.c
 obecli_SOURCES += ../common/vancprocessor.c
+obecli_SOURCES += ../common/scte104filtering.c
 obecli_SOURCES += ltn_ws.c
 obecli_SOURCES += osd.c
 obecli_SOURCES += x86_sdi.o
