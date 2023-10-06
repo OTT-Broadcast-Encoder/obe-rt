@@ -2414,8 +2414,6 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         }
     }
 
-    decklink_ctx->h->verbose_bitmask = INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104;
-
     decklink_ctx->dec = avcodec_find_decoder( AV_CODEC_ID_V210 );
     if( !decklink_ctx->dec )
     {
