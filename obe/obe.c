@@ -30,6 +30,7 @@
 #include "encoders/audio/audio.h"
 #include "mux/mux.h"
 #include "output/output.h"
+#include "obecli-shared.h"
 
 /* Avoid a minor compiler warning and defining GNU_SOURCE */
 #if defined(__linux__)

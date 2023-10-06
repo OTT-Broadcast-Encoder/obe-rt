@@ -48,6 +48,7 @@ extern "C"
 {
 #include "common/common.h"
 #include "common/lavc.h"
+#include "common/scte104filtering.h"
 #include "input/input.h"
 #include "input/sdi/sdi.h"
 #include "input/sdi/ancillary.h"
@@ -2031,26 +2032,30 @@ static int cb_EIA_608(void *callback_context, struct klvanc_context_s *ctx, stru
 	return 0;
 }
 
-static int findOutputStreamIdByFormat(decklink_ctx_t *decklink_ctx, enum stream_type_e stype, enum stream_formats_e fmt)
+/* For a given SCTE35 stream 0..N, find it */
+static int findOutputStreamIdByFormat(decklink_ctx_t *decklink_ctx, enum stream_type_e stype, enum stream_formats_e fmt, int instancenr)
 {
 	if (decklink_ctx && decklink_ctx->device == NULL)
 		return -1;
 
+    int instance = 0;
 	for(int i = 0; i < decklink_ctx->device->num_input_streams; i++) {
 		if ((decklink_ctx->device->input_streams[i]->stream_type == stype) &&
-			(decklink_ctx->device->input_streams[i]->stream_format == fmt))
-			return i;
+			(decklink_ctx->device->input_streams[i]->stream_format == fmt)) {
+			    if (instance++ == instancenr)
+                    return i;
+            }
         }
 
 	return -1;
 }
 
-/* We're given some VANC data, craete a SCTE104 metadata entry for it
- * and we'll send it to the encoder later, by an atachment to the video frame.
+/* We're given some VANC data, create a SCTE104 metadata entry for it
+ * and we'll send it to the encoder later, by an attachment to the video frame.
  */
 static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 	struct avmetadata_s *md,
-	uint8_t *section, uint32_t section_length, int lineNr)
+	uint8_t *section, uint32_t section_length, int lineNr, int streamId)
 {
 	/* Put the coded frame into an raw_frame attachment and discard the coded frame. */
 	int idx = md->count;
@@ -2068,9 +2073,6 @@ static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 	avmetadata_item_data_write(md->array[idx], section, section_length);
 	avmetadata_item_data_set_linenr(md->array[idx], lineNr);
 
-        int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION);
-        if (streamId < 0)
-                return 0;
 	avmetadata_item_data_set_outputstreamid(md->array[idx], streamId);
 
 	return 0;
@@ -2078,7 +2080,7 @@ static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 
 static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
 {
-	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, SMPTE2038);
+	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, SMPTE2038, 0);
 	if (streamId < 0)
 		return 0;
 
@@ -2096,12 +2098,46 @@ static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uin
 	return 0;
 }
 
+extern struct scte104_filtering_syntax_s g_scte104_filtering_context;
+
 static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, struct klvanc_packet_scte_104_s *pkt)
 {
+    /* 20231004 - Adding the ability to put specific 104 messages on specific SCTE35 pids */
+    /* See ANSI_SCTE-104-2019a-1582645426999.pdf */
+    /*
+     * scte35 pid = 56, 57    (enables two scte pids and these numbers will be used to filter below with additional syntax)
+     */
+    /* We going to filter 104 messages based on 104's interpretation of two fields:
+     * DPI_PID_index: uint16_r, 8.2.3.2. Format of the multiple_operation_message() structure
+     * AS_index field: uint8_t, 8.2.3.2. Format of the multiple_operation_message() structure
+     *   encoder controller cfg syntax for this will be (examples):
+     *      <SCTE35 filter> = pid = 56, AS_index = all,   DPI_PID_index = all
+     *      <SCTE35 filter> = pid = 56, AS_index = all,   DPI_PID_index = uint8
+     *      <SCTE35 filter> = pid = 56, AS_index = uint8, DPI_PID_index = all
+     *      <SCTE35 filter> = pid = 56, AS_index = uint8, DPI_PID_index = uint8
+     *      <SCTE35 filter> = pid = 57, AS_index = uint8, DPI_PID_index = all
+     * -
+     * # Set the SCTE 35 encoding pid number, if empty, pid is audio pid + 1
+     * # If multiple SCTE35 pids are required, with SCTE104 filters, talk to the video team
+     * # see the "SCTE35 filter" syntax for configuring SCTE104 filter details
+     * scte35 pid = 56, 57
+     * 
+     * # For every SCTE35 pid, apply an optional filter
+     * # no values implies no SCTE104 filtering, all messages will be handled.
+     * # See the video team for exact configuration syntax. 
+     * SCTE104 filter 1 = pid = 56, AS_index = all, DPI_PID_index = 1
+     * SCTE104 filter 2 = pid = 57, AS_index = all, DPI_PID_index = 80
+     * 
+     * This syntax will get passed directly by the controller into the encoder
+     * using set variable commands, immediately before the start call has been issues.
+     * set variable scte104.filter1 = pid = 56, AS_index = all, DPI_PID_index = 1
+     * set variable scte104.filter2 = pid = 57, AS_index = all, DPI_PID_index = 80
+     */
+
 	/* It should be impossible to get here until the user has asked to enable SCTE35 */
 
 	decklink_ctx_t *decklink_ctx = (decklink_ctx_t *)callback_context;
-	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY) {
+	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
 		printf("%s:%s()\n", __FILE__, __func__);
 		klvanc_dump_SCTE_104(ctx, pkt); /* vanc library helper */
 	}
@@ -2111,11 +2147,65 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, str
 		return 0;
 	}
 
-	/* Append all the original VANC to the metadata object, we'll process it later. */
-	add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
-		(uint8_t *)&pkt->hdr.raw[0],
-		pkt->hdr.rawLengthWords * 2,
-		pkt->hdr.lineNr);
+    if (scte104filter_count(&g_scte104_filtering_context) == 0) {
+        /* no filters at all, as in the default use case, just pass everything downstream */
+        int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, DVB_TABLE_SECTION, 0);
+        if (streamId < 0)
+            return 0;
+
+        printf("Unfiltered: Sending SCTE104 MOM to default SCTE35 pid via streamId %d\n", streamId);
+
+        /* Append all the original VANC to the metadata object, we'll process it later. */
+        /* TODO, pass a SCTE instance here, or refactor the stream lookup by PID nr */
+        add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
+            (uint8_t *)&pkt->hdr.raw[0],
+            pkt->hdr.rawLengthWords * 2,
+            pkt->hdr.lineNr, streamId);
+
+    } else {
+        /* Some filters, lets run through the table */
+
+        /* Obtain a list of pids that needs this SCTE35 Message */
+        uint16_t *pids = NULL;
+        uint8_t pidcount = 0;
+        int ret = scte104filter_lookup_scte35_pids(&g_scte104_filtering_context, &pkt->mo_msg, &pids, &pidcount);
+        if (ret < 0)
+            return 0;
+#if 1
+        if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
+            printf("%s() SCTE104 AS_Index %d DPI_PID_index %d\n",
+                __func__,
+                pkt->mo_msg.AS_index, pkt->mo_msg.DPI_PID_index);
+
+            for (int i = 0; i < pidcount; i++) {
+                printf("%s() the following pids need SCTE104 output, any others do not:\n", __func__);
+                printf("%s() array[%d] = 0x%04x (%4d)\n", __func__, i, pids[i], pids[i]);
+            }
+        }
+#endif
+        for (int i = 0; i < pidcount; i++) {
+            int streamId = obe_core_findOutputStreamIdByPID(pids[i]);
+            if (streamId < 0)
+                continue;
+
+            if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
+                printf("Filtered: Sending SCTE104 MOM to pid 0x%04x via streamId %d\n",
+                    pids[i], streamId);
+            }
+
+            /* Append all the original VANC to the metadata object, we'll process it later. */
+            /* TODO, pass a SCTE instance here, or refactor the stream lookup by PID nr */
+            add_metadata_scte104_vanc_section(decklink_ctx, &decklink_ctx->metadataVANC,
+                (uint8_t *)&pkt->hdr.raw[0],
+                pkt->hdr.rawLengthWords * 2,
+                pkt->hdr.lineNr, streamId);
+        }
+
+        if (pids) {
+            free(pids);
+            pids = NULL;
+        }
+    }
 
 	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104) {
 		static time_t lastErrTime = 0;
@@ -2291,7 +2381,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     }
 
     if (decklink_ctx->h->enable_scte35) {
-        klsyslog_and_stdout(LOG_INFO, "Enabling option SCTE35");
+        klsyslog_and_stdout(LOG_INFO, "Enabling option SCTE35 with %d streams", decklink_ctx->h->enable_scte35);
     } else
 	callbacks.scte_104 = NULL;
 
@@ -2808,20 +2898,24 @@ static void *probe_stream( void *ptr )
      * We use this to pass DVB table sections direct to the muxer,
      * for SCTE35, and other sections in the future.
      */
-    if (decklink_ctx->h->enable_scte35)
-    {
-        ALLOC_STREAM(cur_stream);
+    if (decklink_ctx->h->enable_scte35) {
+        int i = decklink_ctx->h->enable_scte35;
+        while (i-- != 0)
+        {
+            /* Create N SCTE35 streams */
+            ALLOC_STREAM(cur_stream);
 
-        pthread_mutex_lock(&h->device_list_mutex);
-        streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
-        pthread_mutex_unlock(&h->device_list_mutex);
+            pthread_mutex_lock(&h->device_list_mutex);
+            streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
+            pthread_mutex_unlock(&h->device_list_mutex);
 
-        streams[cur_stream]->stream_type = STREAM_TYPE_MISC;
-        streams[cur_stream]->stream_format = DVB_TABLE_SECTION;
-        streams[cur_stream]->pid = 0x123; /* TODO: hardcoded PID not currently used. */
-        if(add_non_display_services(non_display_parser, streams[cur_stream], USER_DATA_LOCATION_DVB_STREAM) < 0 )
-            goto finish;
-        cur_stream++;
+            streams[cur_stream]->stream_type = STREAM_TYPE_MISC;
+            streams[cur_stream]->stream_format = DVB_TABLE_SECTION;
+            streams[cur_stream]->pid = 0x130 + i; /* TODO: hardcoded PID not currently used. */
+            if(add_non_display_services(non_display_parser, streams[cur_stream], USER_DATA_LOCATION_DVB_STREAM) < 0 )
+                goto finish;
+            cur_stream++;
+        }
     }
 
     /* Add a new output stream type, a SCTE2038 mechanism.

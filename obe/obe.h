@@ -458,7 +458,8 @@ typedef struct
     int program_num;
     int pmt_pid;
     int pcr_pid;
-    int scte35_pid;
+#define MAX_SCTE35_PIDS 4
+    int scte35_pids[MAX_SCTE35_PIDS];
     int smpte2038_pid;
 
     int pcr_period;

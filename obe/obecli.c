@@ -29,6 +29,7 @@
 #include <getopt.h>
 #include <ctype.h>
 #include <include/DeckLinkAPIVersion.h>
+#include <common/scte104filtering.h>
 
 #include <signal.h>
 #define _GNU_SOURCE
@@ -42,6 +43,7 @@
 
 #include "obe.h"
 #include "obecli.h"
+#include "obecli-shared.h"
 #include "common/common.h"
 #include "ltn_ws.h"
 
@@ -60,23 +62,7 @@ extern char *vega3311_sdk_version;
 
 #define MODULE_PREFIX "[core]: "
 
-typedef struct
-{
-    obe_t *h;
-    obe_input_t input;
-    obe_input_program_t program;
-
-    /* Configuration params from the command line configure these output streams.
-     * before they're finally cloned into the obe_t struct as 'output_streams'.
-     * See obe_setup_streams() for the cloning action.
-     */
-    int num_output_streams;
-    obe_output_stream_t *output_streams;
-    obe_mux_opts_t mux_opts;
-    obe_output_opts_t output;
-    int avc_profile;
-} obecli_ctx_t;
-
+/* The is the master outer global context for the entire application */
 obecli_ctx_t cli;
 
 #if LTN_WS_ENABLE
@@ -1225,7 +1211,40 @@ static int set_muxer( char *command, obecli_command_t *child )
         cli.mux_opts.pcr_pid    = obe_otoi( pcr_pid, cli.mux_opts.pcr_pid  ) & 0x1fff;
         cli.mux_opts.pcr_period = obe_otoi( pcr_period, cli.mux_opts.pcr_period );
         cli.mux_opts.pat_period = obe_otoi( pat_period, cli.mux_opts.pat_period );
+#if MULTIPLE_SCTE35_PIDS
+        /* Support parsing of multiple pids */
+        if (scte35_pid)
+        {
+            int pidnr = 0;
+            if (strstr(scte35_pid, ":") == 0) {
+                cli.mux_opts.scte35_pids[0] = obe_otoi( scte35_pid, cli.mux_opts.scte35_pids[0] ) & 0x1fff;
+                printf("sPID 0x%04x\n", pidnr);
+                cli.h->enable_scte35 = 1;
+            } else {
+                cli.h->enable_scte35 = 0;
+                char arg[255] = { 0 };
+                strncpy(arg, scte35_pid, sizeof(arg));
+
+                int index = 0;
+
+                char *save;
+                char *tok = strtok_r(&arg[0], ":", &save);
+                while (tok != NULL) {
+                    pidnr = atoi(tok) & 0x1fff;
+                    printf("mPID 0x%04x\n", pidnr);
+                    cli.mux_opts.scte35_pids[index++] = pidnr;
+                    cli.h->enable_scte35++;
+                    if (index == MAX_SCTE35_PIDS)
+                        break;
+
+                    tok = strtok_r(NULL, ":", &save);
+                }
+            }
+//            exit(0);
+        }
+#else
         cli.mux_opts.scte35_pid = obe_otoi( scte35_pid, cli.mux_opts.scte35_pid ) & 0x1fff;
+#endif
         cli.mux_opts.smpte2038_pid = obe_otoi( smpte2038_pid, cli.mux_opts.smpte2038_pid ) & 0x1fff;
         cli.mux_opts.section_padding = obe_otoi( sect_padding, cli.mux_opts.section_padding );
 
@@ -1549,12 +1568,28 @@ extern time_t g_decklink_missing_video_last_time;
     printf("\n");
     printf("filter.video.create_fullsize_jpg   = %d\n",
         g_filter_video_fullsize_jpg);
+
+    /* SCTE 104 / 35 filtering */
+    printf("scte104.filters.clear              = 0\n");
+    printf("scte104.filtercount                = %d\n", g_scte104_filtering_context.count);
+
+    for (int i = 0; i < g_scte104_filtering_context.count; i++) {
+        printf("scte104.filter[%d] = PID: 0x%04x (%5d) AS_index:%5d DPI_PID_index:%6d\n",
+            i,
+            g_scte104_filtering_context.array[i].pid,
+            g_scte104_filtering_context.array[i].pid,
+            g_scte104_filtering_context.array[i].AS_index,
+            g_scte104_filtering_context.array[i].DPI_PID_index);
+    }
 }
+
+extern char *strcasestr(const char *haystack, const char *needle);
 
 static int set_variable(char *command, obecli_command_t *child)
 {
     int64_t val = 0;
     char var[128];
+    char vars[128];
 
     if (!strlen(command)) {
         /* Missing arg, display the current value. */
@@ -1563,8 +1598,13 @@ static int set_variable(char *command, obecli_command_t *child)
     }
 
     if (sscanf(command, "%s = %" PRIi64, &var[0], &val) != 2) {
-        printf("illegal variable name.\n");
-        return -1;
+        if (strncasecmp(var, "scte104.filter.add", 18) == 0) {
+            strcpy(&vars[0], &command[20]);
+            /* handle this below */
+        } else {
+            printf("illegal variable name.\n");
+            return -1;
+        }
     }
 
     if (strcasecmp(var, "sdi_input.fake_60sec_lost_payload") == 0) {
@@ -1736,6 +1776,71 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "ancillary.disable_captions") == 0) {
         g_ancillary_disable_captions = val;
+    } else
+    if (strcasecmp(var, "scte104.filters.clear") == 0) {
+        scte104filter_init(&g_scte104_filtering_context);
+    } else
+    if (strcasecmp(var, "scte104.filter.add") == 0) {
+        /* convert string pid = 56, AS_index = all, DPI_PID_index = 1 */
+
+        int asi = -2, dpi = -2, pid = -2;
+
+        char *save[2];
+        char *s = strtok_r(vars, ",", &save[0]);
+        while (s) {
+            //printf("s = %s\n", s);
+            char *key = strtok_r(s, "=", &save[1]);
+            char *val = strtok_r(NULL, "=", &save[1]);
+
+            //printf("key = %s\n", key);
+            //printf("val = %s\n", val);
+
+            if (strcasestr(key, "DPI_PID_index")) {
+                if (strcasestr(val, "all")) {
+                    dpi = -1;
+                } else {
+                    dpi = atoi(val);
+                    if (dpi < 0 || dpi > 65535) {
+                        printf("malformed dpi, aborting\n");
+                        return -1;
+                    }
+                }
+            } else
+            if (strcasestr(key, "AS_index")) {
+                if (strcasestr(val, "all")) {
+                    asi = -1;
+                } else {
+                    asi = atoi(val);
+                    if (asi < 0 || asi > 255) {
+                        printf("malformed asi, aborting\n");
+                        return -1;
+                    }
+                }
+            } else
+            if (strcasestr(key, "pid")) {
+                pid = atoi(val);
+                if (pid < 16 || pid > 8191) {
+                    printf("malformed pid, aborting\n");
+                    return -1;
+                }
+            } else {
+                printf("malformed command arguments, unable to parse fields\n");
+                return -1;
+            }
+
+            s = strtok_r(NULL, ",", &save[0]);
+        }
+
+        if (pid == -2 || asi == -2 || dpi == -2) {
+            printf("malformed command arguments, unable to parse fields\n");
+            return -1;
+        }
+        int ret = scte104filter_add_filter(&g_scte104_filtering_context, pid, asi, dpi);
+        if (ret < 0) {
+            printf("Malformed command, aborting\n");
+            return -1;
+        }
+
     } else {
         printf("illegal variable name.\n");
         return -1;
@@ -2168,6 +2273,7 @@ static int show_output_streams( char *command, obecli_command_t *child )
         }
         else if(input_stream->stream_type == STREAM_TYPE_MISC && input_stream->stream_format == DVB_TABLE_SECTION)
         {
+            /* SCTE35 - almost certainly */
             printf("PSIP: DVB_TABLE_SECTION\n");
         }
         else if(input_stream->stream_type == STREAM_TYPE_MISC && input_stream->stream_format == SMPTE2038)
@@ -2189,6 +2295,7 @@ static int start_encode( char *command, obecli_command_t *child )
     FAIL_IF_ERROR( g_running, "Encoder already running\n" );
     FAIL_IF_ERROR( !cli.program.num_streams, "No active devices\n" );
 
+    int scte_index = 0;
     for( int i = 0; i < cli.num_output_streams; i++ )
     {
         output_stream = &cli.output_streams[i];
@@ -2201,8 +2308,11 @@ static int start_encode( char *command, obecli_command_t *child )
                 output_stream->ts_opts.pid = cli.mux_opts.smpte2038_pid;
         } else
         if (input_stream->stream_format == DVB_TABLE_SECTION) {
-            if (cli.mux_opts.scte35_pid)
-                output_stream->ts_opts.pid = cli.mux_opts.scte35_pid;
+            if (cli.mux_opts.scte35_pids[scte_index]) {
+                output_stream->ts_opts.pid = cli.mux_opts.scte35_pids[scte_index];
+                printf("*************** stream - scte pid 0x%x\n", cli.mux_opts.scte35_pids[scte_index]);
+            }
+            scte_index++;
         }
 
         if( input_stream && input_stream->stream_type == STREAM_TYPE_VIDEO )
@@ -2557,6 +2667,10 @@ int main( int argc, char **argv )
     const char *syslogSuffix = NULL;
 
     obe_setProcessStartTime();
+
+#if MULTIPLE_SCTE35_PIDS
+    scte104filter_init(&g_scte104_filtering_context);
+#endif
 
 #if 0
 // APPLE
