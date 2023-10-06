@@ -2304,3 +2304,13 @@ void obe_muxed_data_print(obe_muxed_data_t *ptr, int nr)
 	printf(": %s", ctime(&ptr->ts));
 }
 
+int obe_core_findOutputStreamIdByPID(uint16_t pidnr)
+{
+	for(int i = 0; i < cli.num_output_streams; i++) {
+		if (cli.output_streams[i].ts_opts.pid == pidnr) {
+            return cli.output_streams[i].input_stream_id;
+        }
+    }
+
+	return -1;
+}
