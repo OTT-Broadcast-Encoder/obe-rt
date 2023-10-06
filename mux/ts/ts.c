@@ -631,6 +631,11 @@ void *open_muxer( void *ptr )
         else
         {
             output_stream->ts_opts.pid = stream->pid = output_stream->ts_opts.pid ? output_stream->ts_opts.pid : cur_pid++;
+
+            if ((input_stream->stream_type == STREAM_TYPE_MISC) && (input_stream->stream_format == DVB_TABLE_SECTION)) {
+                /* Detected a SCTE35 PID */
+            }
+
             if( input_stream->stream_type == STREAM_TYPE_AUDIO )
             {
                 stream->write_lang_code = !!strlen( output_stream->ts_opts.lang_code );
