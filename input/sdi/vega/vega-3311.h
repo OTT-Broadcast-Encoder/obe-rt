@@ -112,6 +112,9 @@ typedef struct
         struct ltn_histogram_s *hg_callback_audio;
         struct ltn_histogram_s *hg_callback_video;
 
+        /* Detected signals during probe */
+        API_VEGA3311_CAPTURE_FORMAT_T detectedFormat;
+
 } vega_ctx_t;
 void vega_sei_init(vega_ctx_t *ctx);
 void vega_sei_lock(vega_ctx_t *ctx);
