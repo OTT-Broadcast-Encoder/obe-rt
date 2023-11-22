@@ -304,7 +304,6 @@ static int open_device(vega_opts_t *opts, int probe)
 
 
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info;
-        API_VEGA3311_CAPTURE_FORMAT_T input_src_info;
 
         //VEGA3311_CAP_ResetChannel(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx);
         //sleep(3);
@@ -324,7 +323,7 @@ static int open_device(vega_opts_t *opts, int probe)
         }
 
         capret = VEGA3311_CAP_QueryStatus(opts->brd_idx,
-                (API_VEGA3311_CAP_CHN_E)opts->card_idx, &input_src_info);
+                (API_VEGA3311_CAP_CHN_E)opts->card_idx, &ctx->detectedFormat);
 
         if (capret != API_VEGA3311_CAP_RET_SUCCESS) {
                 fprintf(stderr, MODULE_PREFIX "failed to get signal properties\n");
@@ -332,19 +331,19 @@ static int open_device(vega_opts_t *opts, int probe)
         }
 
 	if (probe == 1) {
-                vega_dump_signals_to_console(st_dev_info, input_src_info);
+                vega_dump_signals_to_console(st_dev_info, ctx->detectedFormat);
 	}
 
-	if (input_src_info.eSourceSdiLocked != API_VEGA3311_CAP_SRC_STATUS_LOCKED) {
+	if (ctx->detectedFormat.eSourceSdiLocked != API_VEGA3311_CAP_SRC_STATUS_LOCKED) {
 		fprintf(stderr, MODULE_PREFIX "No signal found\n");
 		return -1;
 	}
 
 	/* We need to understand how much VANC we're going to be receiving. */
 	const struct obe_to_vega_video *std = lookupVegaCaptureResolution(
-                input_src_info.eSourceSdiResolution,
-                input_src_info.eSourceSdiFrameRate,
-                input_src_info.bSourceSdiInterlace);
+                ctx->detectedFormat.eSourceSdiResolution,
+                ctx->detectedFormat.eSourceSdiFrameRate,
+                ctx->detectedFormat.bSourceSdiInterlace);
 	if (std == NULL) {
 		fprintf(stderr, MODULE_PREFIX "No detected standard for vega aborting\n");
 		exit(0);
