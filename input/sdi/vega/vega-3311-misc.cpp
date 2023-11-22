@@ -382,4 +382,18 @@ void vega_dump_signals_to_console(
                 break;
         }
 }
+
+int vega_has_source_signal_changed(API_VEGA3311_CAPTURE_FORMAT_T *src, API_VEGA3311_CAPTURE_FORMAT_T *dst)
+{
+        if (src->eSourceSdiResolution != dst->eSourceSdiResolution)
+                return 1;
+        if (src->eSourceSdiFrameRate != dst->eSourceSdiFrameRate)
+                return 1;
+        if (src->bSourceSdiInterlace != dst->bSourceSdiInterlace)
+                return 1;
+
+        return 0; /* False */
+}
+
+
 #endif /* #if HAVE_VEGA3311_CAP_TYPES_H */
