@@ -136,6 +136,20 @@ void vega3311_audio_callback(uint32_t u32DevId,
                 return;
         }
 
+        if (vega_has_source_signal_changed(&ctx->detectedFormat, st_input_info)) {
+                /* We need to terminate the encoder, it will forced a restart and a new format */
+                static time_t lastMsg = 0;
+                time_t now = time(NULL);
+
+                if (lastMsg != now) {
+                        lastMsg = now;
+                        char ts[32];
+                        obe_getTimestamp(&ts[0], NULL);
+                        fprintf(stderr, MODULE_PREFIX "%s: input signal format changed. Dropping audio, waiting for the controller to restart process\n", ts);
+                }
+                return;
+        }
+
         if (g_decklink_record_audio_buffers) {
             g_decklink_record_audio_buffers--;
             static int aidx = 0;

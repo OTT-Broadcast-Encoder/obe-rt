@@ -232,6 +232,20 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
                 }
         }
 
+        if (vega_has_source_signal_changed(&ctx->detectedFormat, st_input_info)) {
+                /* We need to terminate the encoder, it will forced a restart and a new format */
+                static time_t lastMsg = 0;
+                time_t now = time(NULL);
+
+                if (lastMsg != now) {
+                        lastMsg = now;
+                        char ts[32];
+                        obe_getTimestamp(&ts[0], NULL);
+                        fprintf(stderr, MODULE_PREFIX "%s: input signal format changed. Dropping video, waiting for the controller to restart process\n", ts);
+                }
+                return;
+        }
+
 	ltn_histogram_interval_update(ctx->hg_callback_video);
 	if (g_decklink_histogram_print_secs > 0) {
 		ltn_histogram_interval_print(STDOUT_FILENO, ctx->hg_callback_video, g_decklink_histogram_print_secs);
