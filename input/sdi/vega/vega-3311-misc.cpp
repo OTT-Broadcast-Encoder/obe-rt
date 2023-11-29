@@ -263,21 +263,56 @@ void klvanc_packet_header_dump_console(struct klvanc_packet_header_s *pkt)
         printf("\tlen  -> %d\n", pkt->payloadLengthWords);
 }
 
+const char *lookupVegaCapState(API_VEGA3311_CAP_STATE_E s)
+{
+        if (s == API_VEGA3311_CAP_STATE_STANDBY)        return "STANDBY";
+        if (s == API_VEGA3311_CAP_STATE_CAPTURING)      return "CAPTURING";
+        if (s == API_VEGA3311_CAP_STATE_WAITING)        return "WAITING";
+
+        return "UNKNOWN";
+}
+
+const char *lookupVegaEnableState(API_VEGA3311_CAP_ENABLE_E s)
+{
+        if (s == API_VEGA3311_CAP_ENABLE_ON)        return "ON";
+        if (s == API_VEGA3311_CAP_ENABLE_OFF)       return "OFF";
+
+        return "UNKNOWN";
+}
+
 void vega_dump_signals_to_console(
         API_VEGA3311_CAPTURE_DEVICE_INFO_T st_dev_info,
         API_VEGA3311_CAPTURE_FORMAT_T input_src_info)
 {
+        printf("\tu8FpgaDriverVersion: %s\n", &st_dev_info.u8FpgaDriverVersion[0]);
+        printf("\tu8FpgaHardwareVersion: %s\n", &st_dev_info.u8FpgaHardwareVersion[0]);
+        printf("\tu8FpgaFirmwareVersion: %s\n", &st_dev_info.u8FpgaFirmwareVersion[0]);
+        printf("\tu8MBFirmwareVersion: %s\n", &st_dev_info.u8MBFirmwareVersion[0]);
+        printf("\teVideoState / enable: %s / %s\n", lookupVegaCapState(input_src_info.eVideoState), lookupVegaEnableState(input_src_info.eVideoEnable));
+        printf("\teAudioState / enable: %s / %s\n", lookupVegaCapState(input_src_info.eAudioState), lookupVegaEnableState(input_src_info.eAudioEnable));
+        printf("\teAncdState / enable: %s / %s\n", lookupVegaCapState(input_src_info.eAncdState), lookupVegaEnableState(input_src_info.eAncdEnable));
+         
         if (st_dev_info.eInputSource == API_VEGA3311_CAP_INPUT_SOURCE_SDI)
                 printf("\tinput source: SDI\n");
         else if (st_dev_info.eInputSource == API_VEGA3311_CAP_INPUT_SOURCE_HDMI)
                 printf("\tinput source: HDMI\n");
+        else if (st_dev_info.eInputSource == API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2022)
+                printf("\tinput source: 10G ethernet,use ST2022\n");
+        else if (st_dev_info.eInputSource == API_VEGA3311_CAP_INPUT_SOURCE_12G_SDI)
+                printf("\tinput source: 12G SDI\n");
+        else if (st_dev_info.eInputSource == API_VEGA3311_CAP_INPUT_SOURCE_10G_ETH_2110)
+                printf("\tinput source: 10G ethernet,use ST2110\n");
         else
-                printf("\tinput source: DisplayPort\n");
+                printf("\tinput source: Unknown\n");
 
-        if (st_dev_info.eInputMode == API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI)
-                printf("\tinput mode: 1 Channel UltraHD\n");
-        else
+        if (st_dev_info.eInputMode == API_VEGA3311_CAP_INPUT_MODE_1CHN_QUAD)
+                printf("\tinput mode: 1 Channel UltraHD QUAD\n");
+        else if (st_dev_info.eInputMode == API_VEGA3311_CAP_INPUT_MODE_1CHN_2SI)
+                printf("\tinput mode: 1 Channel UltraHD 2SI\n");
+        else if (st_dev_info.eInputMode == API_VEGA3311_CAP_INPUT_MODE_4CHN)
                 printf("\tinput mode: 4 Channel FullHD\n");
+        else
+                printf("\tinput mode: UNKNOWN\n");
 
         printf("\tAncillary data window settings:\n");
         printf("\t\tHANC      space: %d\n", st_dev_info.tAncWindowSetting.bHanc);
@@ -329,7 +364,9 @@ void vega_dump_signals_to_console(
         case API_VEGA3311_CAP_RESOLUTION_720x576:   printf("\tResolution: 720x576\n"); break;
         case API_VEGA3311_CAP_RESOLUTION_1280x720:  printf("\tResolution: 1280x720\n"); break;
         case API_VEGA3311_CAP_RESOLUTION_1920x1080: printf("\tResolution: 1920x1080\n"); break;
+        case API_VEGA3311_CAP_RESOLUTION_2048x1080: printf("\tResolution: 2048x1080\n"); break;
         case API_VEGA3311_CAP_RESOLUTION_3840x2160: printf("\tResolution: 3840x2160\n"); break;
+        case API_VEGA3311_CAP_RESOLUTION_4096x2160: printf("\tResolution: 4096x2160\n"); break;
         default:
                 printf("\tResolution: unknown\n");
                 break;
@@ -358,6 +395,17 @@ void vega_dump_signals_to_console(
                 }
         } else {
                 printf("\tSDI scan type: progressive\n");
+        }
+
+        switch (input_src_info.eSourceSdiMode) {
+        case API_VEGA3311_CAP_SDI_MODE_HD: printf("\tSDI Mode: HD\n"); break;
+        case API_VEGA3311_CAP_SDI_MODE_SD: printf("\tSDI Mode: SD\n"); break;
+        case API_VEGA3311_CAP_SDI_MODE_3G: printf("\tSDI Mode: 3G\n"); break;
+        case API_VEGA3311_CAP_SDI_MODE_6G: printf("\tSDI Mode: 6G\n"); break;
+        case API_VEGA3311_CAP_SDI_MODE_12G: printf("\tSDI Mode: 12G\n"); break;
+        default:
+                printf("\tSDI Mode: unknown\n");
+                break;
         }
 
         switch (input_src_info.eSourceSdiBitDepth) {
