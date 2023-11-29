@@ -209,29 +209,13 @@ static void close_device(vega_opts_t *opts)
 	printf(MODULE_PREFIX "Closing device#%d port#%d\n", opts->brd_idx, opts->card_idx);
 
         /* Stop all of the hardware */
-        //ctx->bLastFrame = true;
-        //usleep(100 * 1000);
-
-        /* TODO: card hangs afetr a while. Suspect I'm not closing it down properly. */
+        ctx->bLastFrame = true;
 
 	VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_VIDEO);
 	VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_AUDIO);
         VEGA3311_CAP_Stop(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx, API_VEGA3311_CAP_MEDIA_TYPE_ANC_DATA);
-
-#if 1
         VEGA_BQB_ENC_Stop((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx);
-#else
-        int i = 3000;
-        printf("calling stop\n");
-        while (VEGA_BQB_ENC_Stop(opts->brd_idx, (API_VEGA330X_CHN_E)opts->card_idx)) {
-                printf(".");
-                usleep(100 * 1000);
-                i -= 100;
-                if (i <= 0)
-                        break;
-        }
-        printf("calling stopped\n");
-#endif
+        sleep(2);
 
 	VEGA_BQB_ENC_Exit((API_VEGA_BQB_DEVICE_E)opts->brd_idx, (API_VEGA_BQB_CHN_E)opts->card_idx);
 	VEGA3311_CAP_Exit(opts->brd_idx, (API_VEGA3311_CAP_CHN_E)opts->card_idx);

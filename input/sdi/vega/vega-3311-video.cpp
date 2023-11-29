@@ -117,6 +117,10 @@ void vega3311_video_compressed_callback(API_VEGA_BQB_HEVC_CODED_PICT_T *p_pict, 
         vega_opts_t *opts = (vega_opts_t *)args;
 	vega_ctx_t *ctx = &opts->ctx;
 
+        if (ctx->bLastFrame) {
+                /* Encoder wants to shut down */
+                return;
+        }
 #if 0
         FILE *fh = fopen("/storage/ltn/vega/hevc-pic-data.bin", "a+");
         if (fh) {
@@ -214,6 +218,11 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
 {
         vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
 	vega_ctx_t *ctx = &opts->ctx;
+
+        if (ctx->bLastFrame) {
+                /* Encoder wants to shut down */
+                return;
+        }
 
         API_VEGA_BQB_IMG_T img;
         int64_t pcr = st_input_info->tCurrentPCR.u64Dword;

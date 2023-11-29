@@ -124,6 +124,11 @@ void vega3311_audio_callback(uint32_t u32DevId,
         vega_opts_t *opts = (vega_opts_t *)pv_user_arg;
 	vega_ctx_t *ctx = &opts->ctx;
 
+        if (ctx->bLastFrame) {
+                /* Encoder wants to shut down */
+                return;
+        }
+        
         if (st_frame_info->u32BufSize == 0) {
                 if (st_input_info->eAudioState == API_VEGA3311_CAP_STATE_CAPTURING) {
                         printf(MODULE_PREFIX "[DEV%u:CH%d] audio state change to capturing, source signal recovery\n", u32DevId, eCh);
