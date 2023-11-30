@@ -300,6 +300,7 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
         memset(&img, 0 , sizeof(img));
         uint8_t *dst[3] = { 0, 0, 0 };
 
+#if 0
 	/* Burnreader to validate frames on capture */
 	if (ctx->ch_init_param.eFormat == API_VEGA3311_CAP_IMAGE_FORMAT_Y210) {
 		/* These are the default constants in the burnwriter */
@@ -341,6 +342,7 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
 		}
 		framecnt = bits;
 	}
+#endif
 
         if (opts->codec.eFormat == API_VEGA_BQB_IMAGE_FORMAT_YUV422P10LE) {
                 /* If 10bit 422 .... Colorspace convert Y210 into yuv422p10le */
