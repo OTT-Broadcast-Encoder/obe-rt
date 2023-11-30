@@ -146,12 +146,22 @@ static void *vega_start_encoder( void *ptr )
 	ctx->enc_params = ptr;
 	ctx->h = ctx->enc_params->h;
 	ctx->encoder = ctx->enc_params->encoder;
+	obe_encoder_t *encoder = ctx->encoder;
 
 	printf(MESSAGE_PREFIX "Starting encoder: %s\n",
 		stream_format_name(obe_core_encoder_get_stream_format(ctx->encoder)));
 
 	/* Lock the mutex until we verify and fetch new parameters */
 	pthread_mutex_lock(&ctx->encoder->queue.mutex);
+
+	encoder->encoder_params = malloc( sizeof(ctx->enc_params->avc_param) );
+	if(!encoder->encoder_params)
+	{
+		pthread_mutex_unlock( &ctx->encoder->queue.mutex );
+		syslog(LOG_ERR, "Malloc failed\n" );
+		goto end;
+	}
+	memcpy( encoder->encoder_params, &ctx->enc_params->avc_param, sizeof(ctx->enc_params->avc_param) );
 
 	ctx->encoder->is_ready = 1;
 
@@ -209,6 +219,7 @@ static void *vega_start_encoder( void *ptr )
 
 	} /* While (1) */
 
+end:
 	free(ctx->enc_params);
 
 	return NULL;
