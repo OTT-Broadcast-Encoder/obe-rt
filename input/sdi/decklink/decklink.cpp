@@ -64,6 +64,10 @@ extern "C"
 #include "input/sdi/v210.h"
 }
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+
 #include <input/sdi/v210.h>
 #include <assert.h>
 #include <include/DeckLinkAPI.h>
@@ -1022,6 +1026,15 @@ int           g_decklink_render_walltime = 0;
 int           g_decklink_inject_scte104_preroll6000 = 0;
 int           g_decklink_inject_scte104_fragmented = 0;
 
+struct udp_vanc_receiver_s {
+    int active;
+    int skt;
+    struct sockaddr_in sin;
+    unsigned char *buf;
+    int bufmaxlen;
+} g_decklink_udp_vanc_receiver;
+int g_decklink_udp_vanc_receiver_port; /* UDP Port number to activate a VANC receiver on */
+
 static obe_raw_frame_t *cached = NULL;
 static void cache_video_frame(obe_raw_frame_t *frame)
 {
@@ -1558,6 +1571,83 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
         {
             syslog( LOG_ERR, "Malloc failed\n" );
             goto end;
+        }
+
+        /* VANC Receiver for Decklink injection */
+        struct udp_vanc_receiver_s *vr = &g_decklink_udp_vanc_receiver;
+        if (g_decklink_udp_vanc_receiver_port && vr->active == 0) {
+
+            /* Initialize the UDP socket */
+            do {
+
+                vr->bufmaxlen = 65536;
+                vr->buf = (unsigned char *)malloc(vr->bufmaxlen);
+                if (!vr->buf) {
+            		fprintf(stderr, "[decklink] unable to allocate vanc_receiver buffer\n");
+                    break;
+                }
+
+                vr->skt = socket(AF_INET, SOCK_DGRAM, 0);
+                if (vr->skt < 0) {
+            		fprintf(stderr, "[decklink] unable to allocate vanc_receiver socket\n");
+                    break;
+                }
+
+                int reuse = 1;
+                if (setsockopt(vr->skt, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+            		fprintf(stderr, "[decklink] unable to configure vanc_receiver socket\n");
+                    break;
+                }
+
+                vr->sin.sin_family = AF_INET;
+                vr->sin.sin_port = htons(g_decklink_udp_vanc_receiver_port);
+                vr->sin.sin_addr.s_addr = inet_addr("0.0.0.0");
+                if (bind(vr->skt, (struct sockaddr *)&vr->sin, sizeof(vr->sin)) < 0) {
+            		fprintf(stderr, "[decklink] unable to bind vanc_receiver socket\n");
+                    break;
+                }
+
+                /* Non-blocking required */
+                int fl = fcntl(vr->skt, F_GETFL, 0);
+                if (fcntl(vr->skt, F_SETFL, fl | O_NONBLOCK) < 0) {
+            		fprintf(stderr, "[decklink] unable to non-block vanc_receiver socket\n");
+                    break;
+                }
+
+                /* Success */
+                vr->active = 1;
+            } while (0);
+        }
+
+        if (g_decklink_udp_vanc_receiver_port && vr->active) {
+            /* Receive any pending message */
+            ssize_t len = recv(vr->skt, vr->buf, vr->bufmaxlen, 0);
+            if (len > 0) {
+                /* Padd the end of the message  */
+                for (int i = len; i < len + 8; i+= 2) {
+                    vr->buf[i + 0] = 0x40;
+                    vr->buf[i + 1] = 0x00;
+                }
+                len += 8;
+                printf("vanc_receiver recd: %d bytes [ ", (int)len);
+                for (int i = 0; i < len; i++) {
+                    printf("0x%02x ", vr->buf[i]);
+                }
+                printf("]\n");
+                endian_flip_array(vr->buf, len);
+                ret = _vancparse(decklink_ctx->vanchdl, vr->buf, len, 10);
+                if (ret < 0) {
+                    fprintf(stderr, "%s() Unable to parse vanc_receiver message\n", __func__);
+                } else {
+#if 0
+                    /* Paint a message in the V210, so we know per frame when an event was received. */
+                    videoframe->GetBytes(&frame_bytes);
+                    struct V210_painter_s painter;
+                    V210_painter_reset(&painter, (unsigned char *)frame_bytes, width, height, stride, 0);
+                    V210_painter_draw_ascii_at(&painter, 0, 3, "vanc_receiver msg injected");
+#endif
+                }
+            }
         }
 
         if (g_decklink_inject_scte104_preroll6000 > 0 && videoframe) {

@@ -1297,6 +1297,7 @@ extern int g_decklink_histogram_print_secs;
 extern int g_decklink_render_walltime;
 extern int g_decklink_inject_scte104_preroll6000;
 extern int g_decklink_inject_scte104_fragmented;
+extern int g_decklink_udp_vanc_receiver_port;
 
 /* Case 1 */
 extern int g_decklink_fake_lost_payload;
@@ -1581,6 +1582,8 @@ extern time_t g_decklink_missing_video_last_time;
             g_scte104_filtering_context.array[i].AS_index,
             g_scte104_filtering_context.array[i].DPI_PID_index);
     }
+
+    printf("vanc_receiver.udp_port             = %d\n", g_decklink_udp_vanc_receiver_port);
 }
 
 extern char *strcasestr(const char *haystack, const char *needle);
@@ -1699,6 +1702,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "udp_output.trim_ms") == 0) {
         g_mux_smoother_trim_ms = sanitizeParamTrim(val);
+    } else
+    if (strcasecmp(var, "vanc_receiver.udp_port") == 0) {
+        g_decklink_udp_vanc_receiver_port = val;
     } else
     if (strcasecmp(var, "codec.x265.monitor_bps") == 0) {
         g_x265_monitor_bps = val;
