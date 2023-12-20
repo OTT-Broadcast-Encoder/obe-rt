@@ -465,9 +465,17 @@ static void *aac_start_encoder(void *ptr)
             ctx->total_size_bytes = 0;
         }
 
+        /* Create some data planes that we'll fill with raw input audio samples.
+         * We'll pass these plans into the audio format convertor.
+         * We'll re-use these planes later again, when reading converted audio
+         * samples so they need to be capable of holding codec->frame_size samples.
+         * For AAC, frame_size is 1000, for AC3 its 1536. This number is given to us
+         * by libavcodec, and represents the minimum number of sames we must
+         * pass to the compression codec.
+         */
         if (av_samples_alloc(audio_planes, NULL,
                 av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
-                raw_frame->audio_frame.linesize, codec->sample_fmt, 0) < 0) {
+                codec->frame_size, codec->sample_fmt, 0) < 0) {
             fprintf(stderr, MODULE "Could not allocate audio samples\n");
             goto finish;
         }
