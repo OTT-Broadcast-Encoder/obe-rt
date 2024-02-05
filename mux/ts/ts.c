@@ -314,6 +314,7 @@ static const int mpegts_stream_info[][3] =
     { VBI_RAW,       LIBMPEGTS_DVB_VBI,      LIBMPEGTS_STREAM_ID_PRIVATE_1 },
     { DVB_TABLE_SECTION, LIBMPEGTS_TABLE_SECTION,  LIBMPEGTS_STREAM_ID_PRIVATE_1 },
     { SMPTE2038, LIBMPEGTS_ANCILLARY_2038, LIBMPEGTS_STREAM_ID_PRIVATE_1 },
+    { SMPTE2031, LIBMPEGTS_ANCILLARY_2031, LIBMPEGTS_STREAM_ID_PRIVATE_1 },
     { -1, -1, -1 },
 };
 
@@ -796,6 +797,13 @@ void *open_muxer( void *ptr )
             if( ts_setup_dvb_subtitles( w, stream->pid, has_dds, 1, &subtitles ) < 0 )
             {
                 fprintf( stderr, "[ts] Could not setup DVB Subtitle stream\n" );
+                goto end;
+            }
+        }
+        else if(stream_format == SMPTE2031)
+        {
+            if (ts_setup_dvb_teletext(w, stream->pid, output_stream->ts_opts.num_teletexts, (ts_dvb_ttx_t *)output_stream->ts_opts.teletext_opts ) < 0) {
+                fprintf( stderr, "[ts] Could not setup SMPTE2031 / Teletext stream\n" );
                 goto end;
             }
         }
