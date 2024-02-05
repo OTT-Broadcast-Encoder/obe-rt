@@ -140,6 +140,7 @@ typedef struct
     int enable_frame_injection;
     int enable_allow_1080p60;
     int enable_hdr;
+    int enable_smpte2031;
 } obe_input_t;
 
 /**** Stream Formats ****/
@@ -461,6 +462,7 @@ typedef struct
 #define MAX_SCTE35_PIDS 4
     int scte35_pids[MAX_SCTE35_PIDS];
     int smpte2038_pid;
+    int smpte2031_pid;
 
     int pcr_period;
     int pat_period;
