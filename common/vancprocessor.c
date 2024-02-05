@@ -158,7 +158,7 @@ int vancprocessor_write(struct vanc_processor_s *ctx, unsigned short arrayLength
 
 	int ret = klvanc_packet_parse(ctx->vh, lineNr, array, arrayLengthWords);
 	if (ret != 0) {
-		fprintf(stderr, MODULE_PREFIX "write returns %d\n", ret);
+		//fprintf(stderr, MODULE_PREFIX "write returns %d\n", ret);
 	}
 
 	return 0;
