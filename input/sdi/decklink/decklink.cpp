@@ -1026,6 +1026,8 @@ int           g_decklink_render_walltime = 0;
 int           g_decklink_inject_scte104_preroll6000 = 0;
 int           g_decklink_inject_scte104_fragmented = 0;
 
+int           g_decklink_op47_teletext_reverse = 1;
+
 struct udp_vanc_receiver_s {
     int active;
     int skt;

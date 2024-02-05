@@ -69,6 +69,8 @@ obecli_ctx_t cli;
 void *g_ltn_ws_handle = NULL;
 #endif
 
+extern int g_decklink_op47_teletext_reverse;
+
 int  runtime_statistics_start(void **ctx, obecli_ctx_t *cli);
 void runtime_statistics_stop(void *ctx);
 int  terminate_after_start(void **ctx, obecli_ctx_t *cli, int afterNSeconds);
@@ -142,6 +144,7 @@ static const char * input_opts[]  = { "location", "card-idx", "video-format", "v
                                       "allow-1080p60", /* 12 */
                                       "name", /* 13 */
                                       "hdr", /* 14 */
+                                      "smpte2031", /* 15 */
                                       NULL };
 static const char * add_opts[] =    { "type" };
 /* TODO: split the stream options into general options, video options, ts options */
@@ -172,11 +175,12 @@ static const char * stream_opts[] = { "action", "format",
                                       "video-codec", /* 44 */
                                       "tuning-name", /* 45 */
                                       "dialnorm", /* 46 */
+                                      "ttx-reverse", /* 47 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
                                       "pcr-period", "pat-period", "service-name", "provider-name", "scte35-pid", "smpte2038-pid",
-                                      "section-padding", NULL };
+                                      "section-padding", "smpte2031-pid", NULL };
 static const char * ts_types[]    = { "generic", "dvb", "cablelabs", "atsc", "isdb", NULL };
 static const char * output_opts[] = { "type", "target", "trim", NULL };
 
@@ -636,6 +640,7 @@ static int set_input( char *command, obecli_command_t *child )
         char *allow_1080p60 = obe_get_option(input_opts[12], opts);
         char *name = obe_get_option(input_opts[13], opts);
         char *hdr = obe_get_option( input_opts[14], opts );
+        char *smpte2031 = obe_get_option( input_opts[15], opts );
 
         FAIL_IF_ERROR( video_format && ( check_enum_value( video_format, input_video_formats ) < 0 ),
                        "Invalid video format\n" );
@@ -665,6 +670,7 @@ static int set_input( char *command, obecli_command_t *child )
         cli.input.enable_patch1 = obe_otoi( patch1, cli.input.enable_patch1 );
         cli.input.enable_bitstream_audio = obe_otoi( bitstream_audio, cli.input.enable_bitstream_audio );
         cli.input.enable_smpte2038 = obe_otoi( smpte2038, cli.input.enable_smpte2038 );
+        cli.input.enable_smpte2031 = obe_otoi( smpte2031, cli.input.enable_smpte2031 );
         cli.input.enable_hdr = obe_otoi( hdr, cli.input.enable_hdr );
         cli.input.enable_scte35 = obe_otoi( scte35, cli.input.enable_scte35 );
         cli.h->enable_scte35 = cli.input.enable_scte35; /* Put this on the core cache, no just in the input content. */
@@ -1154,6 +1160,54 @@ extern char g_video_encoder_tuning_name[64];
                     vbi_opts->wss = obe_otob( vbi_wss, vbi_opts->wss );
                 }
             }
+            else if (output_stream->stream_format == SMPTE2031)
+            {
+                /* NB: remap these if more encoding options are added - TODO: split them up */
+                char *ttx_lang = obe_get_option( stream_opts[32], opts );
+                char *ttx_type = obe_get_option( stream_opts[33], opts );
+                char *ttx_mag  = obe_get_option( stream_opts[34], opts );
+                char *ttx_page = obe_get_option( stream_opts[35], opts );
+                char *ttx_reverse = obe_get_option( stream_opts[47], opts );
+
+                FAIL_IF_ERROR(ttx_type && (check_enum_value(ttx_type, teletext_types) < 0 ),
+                               "Invalid Teletext type\n" );
+
+                /* TODO: find a nice way of supporting multiple teletexts in the CLI */
+                cli.output_streams[output_stream_id].ts_opts.num_teletexts = 1;
+
+                if (cli.output_streams[output_stream_id].ts_opts.teletext_opts) {
+                    free(cli.output_streams[output_stream_id].ts_opts.teletext_opts);
+                }
+
+                cli.output_streams[output_stream_id].ts_opts.teletext_opts = calloc(1, sizeof(*cli.output_streams[output_stream_id].ts_opts.teletext_opts));
+                FAIL_IF_ERROR(!cli.output_streams[output_stream_id].ts_opts.teletext_opts, "malloc failed\n");
+
+                obe_teletext_opts_t *ttx_opts = &cli.output_streams[output_stream_id].ts_opts.teletext_opts[0];
+
+                if (ttx_lang && strlen(ttx_lang) >= 3) {
+                    memcpy( ttx_opts->dvb_teletext_lang_code, ttx_lang, 3);
+                    ttx_opts->dvb_teletext_lang_code[3] = 0;
+                }
+
+                if (ttx_type)
+                    parse_enum_value(ttx_type, teletext_types, &ttx_opts->dvb_teletext_type);
+
+                ttx_opts->dvb_teletext_magazine_number = obe_otoi( ttx_mag, ttx_opts->dvb_teletext_magazine_number );
+                ttx_opts->dvb_teletext_page_number = obe_otoi( ttx_page, ttx_opts->dvb_teletext_page_number );
+
+                if (ttx_reverse) {
+                    g_decklink_op47_teletext_reverse = atoi( ttx_reverse );
+                }
+
+                printf("SMPTE2031 establishining: ttx-type=%s (%d) ttx-lang=%s ttx-page=0x%x ttx-mag=0x%x ttx-reverse=%d\n",
+                    ttx_opts->dvb_teletext_type == 2 ? "subtitle" : "undefined",
+                    ttx_opts->dvb_teletext_type,
+                    ttx_opts->dvb_teletext_lang_code,
+                    ttx_opts->dvb_teletext_page_number,
+                    ttx_opts->dvb_teletext_magazine_number,
+                    g_decklink_op47_teletext_reverse);
+
+            }
 
             cli.output_streams[output_stream_id].ts_opts.pid = obe_otoi( pid, cli.output_streams[output_stream_id].ts_opts.pid );
             obe_free_string_array( opts );
@@ -1196,6 +1250,7 @@ static int set_muxer( char *command, obecli_command_t *child )
         char *scte35_pid    = obe_get_option( muxer_opts[12], opts );
         char *smpte2038_pid = obe_get_option( muxer_opts[13], opts );
         char *sect_padding  = obe_get_option( muxer_opts[14], opts );
+        char *smpte2031_pid = obe_get_option( muxer_opts[15], opts );
 
         FAIL_IF_ERROR( ts_type && ( check_enum_value( ts_type, ts_types ) < 0 ),
                       "Invalid AVC profile\n" );
@@ -1248,6 +1303,7 @@ static int set_muxer( char *command, obecli_command_t *child )
         cli.mux_opts.scte35_pid = obe_otoi( scte35_pid, cli.mux_opts.scte35_pid ) & 0x1fff;
 #endif
         cli.mux_opts.smpte2038_pid = obe_otoi( smpte2038_pid, cli.mux_opts.smpte2038_pid ) & 0x1fff;
+        cli.mux_opts.smpte2031_pid = obe_otoi( smpte2031_pid, cli.mux_opts.smpte2031_pid ) & 0x1fff;
         cli.mux_opts.section_padding = obe_otoi( sect_padding, cli.mux_opts.section_padding );
 
         if( service_name )
@@ -1448,6 +1504,8 @@ extern time_t g_decklink_missing_video_last_time;
         g_decklink_histogram_reset);
     printf("sdi_input.histogram_print_secs = %d\n",
         g_decklink_histogram_print_secs);
+    printf("sdi_input.op47_teletext_reverse = %d\n",
+        g_decklink_op47_teletext_reverse); 
     printf("ancillary.disable_captions = %d\n",
         g_ancillary_disable_captions);
 
@@ -1660,6 +1718,9 @@ static int set_variable(char *command, obecli_command_t *child)
     if (strcasecmp(var, "sdi_input.histogram_print_secs") == 0) {
         g_decklink_histogram_print_secs = val;
     } else
+    if (strcasecmp(var, "sdi_input.op47_teletext_reverse") == 0) {
+        g_decklink_op47_teletext_reverse = val;
+    } else
     if (strcasecmp(var, "audio_encoder.ac3_offset_ms") == 0) {
         ac3_offset_ms = val;
     } else
@@ -1871,6 +1932,7 @@ static void display_verbose()
     /* INPUT SOURCES */
     DISPLAY_VERBOSE_MASK(bm, INPUTSOURCE__SDI_VANC_DISCOVERY_DISPLAY);
     DISPLAY_VERBOSE_MASK(bm, INPUTSOURCE__SDI_VANC_DISCOVERY_SCTE104);
+    DISPLAY_VERBOSE_MASK(bm, INPUTSOURCE__SDI_VANC_DISCOVERY_RDD8);
 
     /* MUXER */
     DISPLAY_VERBOSE_MASK(bm, MUX__DQ_HEXDUMP);
@@ -2224,6 +2286,10 @@ static int show_input_streams( char *command, obecli_command_t *child )
         {
             printf( "Input-stream-id: %d - PES_PRIVATE_1 SMPTE2038\n", stream->input_stream_id);
         }
+        else if(stream->stream_format == SMPTE2031)
+        {
+            printf( "Input-stream-id: %d - PES_PRIVATE_1 SMPTE2031\n", stream->input_stream_id);
+        }
         else
             printf( "Input-stream-id: %d \n", stream->input_stream_id );
     }
@@ -2288,6 +2354,10 @@ static int show_output_streams( char *command, obecli_command_t *child )
         {
             printf("PES_PRIVATE_1: SMPTE2038 packets\n");
         }
+        else if(input_stream->stream_type == STREAM_TYPE_MISC && input_stream->stream_format == SMPTE2031)
+        {
+            printf("PES_PRIVATE_1: SMPTE2031 packets\n");
+        }
 
     }
 
@@ -2314,6 +2384,10 @@ static int start_encode( char *command, obecli_command_t *child )
         if (input_stream->stream_type == STREAM_TYPE_MISC && input_stream->stream_format == SMPTE2038) {
             if (cli.mux_opts.smpte2038_pid)
                 output_stream->ts_opts.pid = cli.mux_opts.smpte2038_pid;
+        } else
+        if (input_stream->stream_type == STREAM_TYPE_MISC && input_stream->stream_format == SMPTE2031) {
+            if (cli.mux_opts.smpte2031_pid)
+                output_stream->ts_opts.pid = cli.mux_opts.smpte2031_pid;
         } else
         if (input_stream->stream_format == DVB_TABLE_SECTION) {
             if (cli.mux_opts.scte35_pids[scte_index]) {
