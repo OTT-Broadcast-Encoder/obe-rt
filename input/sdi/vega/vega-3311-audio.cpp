@@ -109,6 +109,13 @@ static void deliver_audio_frame(vega_opts_t *opts, unsigned char *plane, int siz
 	rf->release_frame = obe_release_frame;
 	rf->input_stream_id = 1; // TODO: Is this correct?
 
+#if LOCAL_DEBUG
+        static int64_t last_audio_pts = 0;
+        printf(MODULE_PREFIX "Pushing audio downstream PTS %012" PRIi64 ", delta %012" PRIi64 "\n",
+                rf->avfm.audio_pts,
+                rf->avfm.audio_pts - last_audio_pts);
+        last_audio_pts = rf->avfm.audio_pts;
+#endif
 	if (add_to_filter_queue(ctx->h, rf) < 0 ) {
 		fprintf(stderr, MODULE_PREFIX "Unable to add audio frame to the filter q.\n");
 	}
