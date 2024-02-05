@@ -62,6 +62,7 @@ extern "C"
 #include <libklvanc/vanc.h>
 #include <libklscte35/scte35.h>
 #include "input/sdi/v210.h"
+#include "common/bitstream.h"
 }
 
 #include <arpa/inet.h>
@@ -264,6 +265,7 @@ typedef struct
 #define OPTION_ENABLED(opt) (decklink_opts->enable_##opt)
 #define OPTION_ENABLED_(opt) (decklink_opts_->enable_##opt)
     int enable_smpte2038;
+    int enable_smpte2031;
     int enable_vanc_cache;
     int enable_bitstream_audio;
     int enable_patch1;
@@ -369,7 +371,7 @@ static void calculate_audio_sfc_window(decklink_opts_t *opts)
     //printf("%s() audio_sfc_min/max = %d/%d\n", __func__, opts->audio_sfc_min, opts->audio_sfc_max);
 }
 
-static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount);
+static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount, stream_formats_e stream_format);
 
 /* Take one line of V210 from VANC, colorspace convert and feed it to the
  * VANC parser. We'll expect our VANC message callbacks to happen on this
@@ -405,18 +407,20 @@ static void convert_colorspace_and_parse_vanc(decklink_ctx_t *decklink_ctx, stru
     if (decklink_ctx->smpte2038_ctx)
         klvanc_smpte2038_packetizer_begin(decklink_ctx->smpte2038_ctx);
 
-	if (decklink_ctx->vanchdl) {
-		int ret = klvanc_packet_parse(vanchdl, lineNr, decoded_words, sizeof(decoded_words) / (sizeof(unsigned short)));
-		if (ret < 0) {
+    if (decklink_ctx->vanchdl) {
+        int ret = klvanc_packet_parse(vanchdl, lineNr, decoded_words, sizeof(decoded_words) / (sizeof(unsigned short)));
+        if (ret < 0) {
       	  /* No VANC on this line */
-		}
-	}
+        } else
+        if (ret >= 1) {
+        }
+    }
 
     if (decklink_ctx->smpte2038_ctx) {
         if (klvanc_smpte2038_packetizer_end(decklink_ctx->smpte2038_ctx,
                                      decklink_ctx->stream_time / 300 + (10 * 90000)) == 0) {
             if (transmit_pes_to_muxer(decklink_ctx, decklink_ctx->smpte2038_ctx->buf,
-                                      decklink_ctx->smpte2038_ctx->bufused) < 0) {
+                                      decklink_ctx->smpte2038_ctx->bufused, SMPTE2038) < 0) {
                 fprintf(stderr, "%s() failed to xmit PES to muxer\n", __func__);
             }
         }
@@ -2170,9 +2174,9 @@ static int add_metadata_scte104_vanc_section(decklink_ctx_t *decklink_ctx,
 	return 0;
 }
 
-static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount)
+static int transmit_pes_to_muxer(decklink_ctx_t *decklink_ctx, uint8_t *buf, uint32_t byteCount, stream_formats_e stream_format)
 {
-	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, SMPTE2038, 0);
+	int streamId = findOutputStreamIdByFormat(decklink_ctx, STREAM_TYPE_MISC, stream_format, 0);
 	if (streamId < 0)
 		return 0;
 
@@ -2245,7 +2249,7 @@ static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx, str
         if (streamId < 0)
             return 0;
 
-        printf("Unfiltered: Sending SCTE104 MOM to default SCTE35 pid via streamId %d\n", streamId);
+        //printf("Unfiltered: Sending SCTE104 MOM to default SCTE35 pid via streamId %d\n", streamId);
 
         /* Append all the original VANC to the metadata object, we'll process it later. */
         /* TODO, pass a SCTE instance here, or refactor the stream lookup by PID nr */
@@ -2376,6 +2380,152 @@ static int cb_VANC_TYPE_KL_UINT64_COUNTER(void *callback_context, struct klvanc_
         return 0;
 }
 
+const uint8_t REVERSE[256] = {
+        0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
+        0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8,
+        0x04, 0x84, 0x44, 0xc4, 0x24, 0xa4, 0x64, 0xe4, 0x14, 0x94, 0x54, 0xd4, 0x34, 0xb4, 0x74, 0xf4,
+        0x0c, 0x8c, 0x4c, 0xcc, 0x2c, 0xac, 0x6c, 0xec, 0x1c, 0x9c, 0x5c, 0xdc, 0x3c, 0xbc, 0x7c, 0xfc,
+        0x02, 0x82, 0x42, 0xc2, 0x22, 0xa2, 0x62, 0xe2, 0x12, 0x92, 0x52, 0xd2, 0x32, 0xb2, 0x72, 0xf2,
+        0x0a, 0x8a, 0x4a, 0xca, 0x2a, 0xaa, 0x6a, 0xea, 0x1a, 0x9a, 0x5a, 0xda, 0x3a, 0xba, 0x7a, 0xfa,
+        0x06, 0x86, 0x46, 0xc6, 0x26, 0xa6, 0x66, 0xe6, 0x16, 0x96, 0x56, 0xd6, 0x36, 0xb6, 0x76, 0xf6,
+        0x0e, 0x8e, 0x4e, 0xce, 0x2e, 0xae, 0x6e, 0xee, 0x1e, 0x9e, 0x5e, 0xde, 0x3e, 0xbe, 0x7e, 0xfe,
+        0x01, 0x81, 0x41, 0xc1, 0x21, 0xa1, 0x61, 0xe1, 0x11, 0x91, 0x51, 0xd1, 0x31, 0xb1, 0x71, 0xf1,
+        0x09, 0x89, 0x49, 0xc9, 0x29, 0xa9, 0x69, 0xe9, 0x19, 0x99, 0x59, 0xd9, 0x39, 0xb9, 0x79, 0xf9,
+        0x05, 0x85, 0x45, 0xc5, 0x25, 0xa5, 0x65, 0xe5, 0x15, 0x95, 0x55, 0xd5, 0x35, 0xb5, 0x75, 0xf5,
+        0x0d, 0x8d, 0x4d, 0xcd, 0x2d, 0xad, 0x6d, 0xed, 0x1d, 0x9d, 0x5d, 0xdd, 0x3d, 0xbd, 0x7d, 0xfd,
+        0x03, 0x83, 0x43, 0xc3, 0x23, 0xa3, 0x63, 0xe3, 0x13, 0x93, 0x53, 0xd3, 0x33, 0xb3, 0x73, 0xf3,
+        0x0b, 0x8b, 0x4b, 0xcb, 0x2b, 0xab, 0x6b, 0xeb, 0x1b, 0x9b, 0x5b, 0xdb, 0x3b, 0xbb, 0x7b, 0xfb,
+        0x07, 0x87, 0x47, 0xc7, 0x27, 0xa7, 0x67, 0xe7, 0x17, 0x97, 0x57, 0xd7, 0x37, 0xb7, 0x77, 0xf7,
+        0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef, 0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff
+};
+
+static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct klvanc_packet_sdp_s *pkt)
+{
+	decklink_ctx_t *decklink_ctx = (decklink_ctx_t *)callback_context;
+	decklink_opts_t *decklink_opts = container_of(decklink_ctx, decklink_opts_t, decklink_ctx);
+
+	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_RDD8) {
+        klvanc_dump_SDP(ctx, pkt); /* vanc lib helper */
+    }
+
+    if (OPTION_ENABLED(smpte2031)) {
+
+        if (pkt->format_code != SDP_WSS_TELETEXT) {
+            return 0; /* Silently abort parsing */
+        }
+        if (pkt->identifier != 0x5115) {
+            return 0; /* Silently abort parsing */
+        }
+
+        bs_t bs;
+
+        /* 5 * 46 byte entries = 230. PLus the pes header and stuffing 39 bytes.
+         * need roughly 269 bytes of space worst case.
+         */
+        unsigned char buf[300];
+
+        bs_init(&bs, buf, sizeof(buf));
+        int cnt = 8 + 31;  /* PES_packet_length header 4 + stuffing payload + payload */
+
+        /* PES Header - Bug: bitstream can't write 32bit values */
+        bs_write(&bs, 24, 1);         /* packet_start_code_prefix */
+        bs_write(&bs,  8, 0xBD);      /* stream_id private_stream_1 */
+        bs_write(&bs, 16, 0);         /* PES_packet_length header 4 + stuffing payload + payload */
+        bs_write(&bs,  2, 2);         /* '10' fixed value */
+        bs_write(&bs,  2, 0);         /* PES_scrambling_control (not scrambled) */
+        bs_write(&bs,  1, 0);         /* PES_priority */
+        bs_write(&bs,  1, 1);         /* data_alignment_indicator (aligned) */
+        bs_write(&bs,  1, 0);         /* copyright (not-copyright) */
+        bs_write(&bs,  1, 0);         /* original-or-copy (copy) */
+        bs_write(&bs,  2, 2);         /* PTS_DTS_flags (PTS Present) */
+        bs_write(&bs,  1, 0);         /* ESCR_flag (not present) */
+        bs_write(&bs,  1, 0);         /* ES_RATE_flag (not present) */
+        bs_write(&bs,  1, 0);         /* DSM_TRICK_MODE_flag (not present) */
+        bs_write(&bs,  1, 0);         /* additional_copy_info_flag (not present) */
+        bs_write(&bs,  1, 0);         /* PES_CRC_flag (not present) */
+        bs_write(&bs,  1, 0);         /* PES_EXTENSION_flag (not present) */
+        bs_write(&bs,  8, 0x24);      /* PES_HEADER_DATA_length */
+        bs_write(&bs,  4, 2);         /* '0010' fixed value */
+
+        int64_t pts = decklink_ctx->stream_time / 300 + (10 * 90000);
+
+        bs_write(&bs,  3, (pts >> 30));           /* PTS[32:30] */
+        bs_write(&bs,  1, 1);                     /* marker_bit */
+        bs_write(&bs, 15, (pts >> 15) & 0x7fff);  /* PTS[29:15] */
+        bs_write(&bs,  1, 1);                     /* marker_bit */
+        bs_write(&bs, 15, (pts & 0x7fff));        /* PTS[14:0] */
+        bs_write(&bs,  1, 1);                     /* marker_bit */
+
+        for (int i = 0; i < 31; i++) {
+            bs_write(&bs, 8, 0xff);               /* stuffing byte */
+        }
+
+        /* See ETSI EN 301775 V1.2.1 page 8 Table 1. */
+        bs_write(&bs, 8, 0x10);               /* data_identifier */
+        cnt++;
+
+        for (int j = 0; j < 5; j++) {
+
+            /* Skip any illegal / undefined lines */
+            if (pkt->descriptors[j].line == 0)
+                continue;
+
+            uint8_t a[4];
+
+#if 0
+            for (int i = 0; i < 8; i++) {
+                printf("%02x ", pkt->descriptors[j].data[i]);
+            }
+            printf("\n");
+#endif
+
+            bs_write(&bs, 8, 0x03);               /* data_unit_id - EBU Teletext subtitle data */
+            bs_write(&bs, 8, 0x2c);               /* data_unit_length - fixed at 2c as per spec */
+
+            /* We only support data_unit_id = 0x03 */
+            /* txt_data_field */
+            a[0] = 0x03 << 6 | (pkt->descriptors[j].field & 0x01) << 5 | (pkt->descriptors[j].line & 0x1f);
+            a[1] = pkt->descriptors[j].data[2];  /* framing_code - EBU Teletext */
+            a[2] = pkt->descriptors[j].data[3];  /* mag */
+            a[3] = pkt->descriptors[j].data[4];  /* mag */
+
+            if (g_decklink_op47_teletext_reverse) {
+                for (int i = 0; i < 4; i++) {
+                    a[i] = REVERSE[a[i]];    
+                }            
+            }
+
+            /* Write the header */
+            for (int i = 0; i < 4; i++) {
+                bs_write(&bs, 8, a[i]);
+            }
+
+            /* And then the teletext 40 code body */
+            for (int i = 0; i < 40; i++) {
+                if (g_decklink_op47_teletext_reverse) {
+                    pkt->descriptors[j].data[i + 5] = REVERSE[pkt->descriptors[j].data[i + 5]];
+                }
+                bs_write(&bs, 8, pkt->descriptors[j].data[i + 5]);  /* txt_data_block */
+            }
+
+            cnt += (6 + 40);
+        }
+
+        /* Close (actually its 'align') the bitstream buffer */
+        bs_flush(&bs);
+
+        /* Correct the overall length */
+        buf[4] = cnt >> 8;
+        buf[5] = cnt & 0xff;
+
+        if (transmit_pes_to_muxer(decklink_ctx, buf, bs_pos(&bs) >> 3, SMPTE2031) < 0) {
+            fprintf(stderr, "%s() failed to xmit SMPTE2031 PES to muxer\n", __func__);
+        }
+    }
+
+    return 0;
+}
+
 static struct klvanc_callbacks_s callbacks = 
 {
 	.afd			= NULL,
@@ -2384,7 +2534,7 @@ static struct klvanc_callbacks_s callbacks =
 	.scte_104		= cb_SCTE_104,
 	.all			= cb_all,
 	.kl_i64le_counter       = cb_VANC_TYPE_KL_UINT64_COUNTER,
-	.sdp			= NULL,
+	.sdp			= cb_SDP,
 };
 /* End: VANC Callbacks */
 
@@ -2482,6 +2632,12 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         if (klvanc_smpte2038_packetizer_alloc(&decklink_ctx->smpte2038_ctx) < 0) {
             fprintf(stderr, "Unable to allocate a SMPTE2038 context.\n");
         }
+    }
+
+    if (OPTION_ENABLED(smpte2031)) {
+        klsyslog_and_stdout(LOG_INFO, "Enabling option SMPTE2031");
+    } else {
+    	callbacks.sdp = NULL;
     }
 
     ltn_histogram_alloc_video_defaults(&decklink_ctx->callback_hdl, "frame arrival latency");
@@ -2878,6 +3034,7 @@ static void *probe_stream( void *ptr )
     decklink_opts->audio_conn = user_opts->audio_connection;
     decklink_opts->video_format = user_opts->video_format;
     decklink_opts->enable_smpte2038 = user_opts->enable_smpte2038;
+    decklink_opts->enable_smpte2031 = user_opts->enable_smpte2031;
     decklink_opts->enable_vanc_cache = user_opts->enable_vanc_cache;
     decklink_opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
     decklink_opts->enable_patch1 = user_opts->enable_patch1;
@@ -3027,6 +3184,34 @@ static void *probe_stream( void *ptr )
         cur_stream++;
     }
 
+    /* Add a new output stream type, a SMPTE2031 / EN301775 mechanism.
+     * We use this to pass PES direct to the muxer.
+     */
+    if (OPTION_ENABLED(smpte2031))
+    {
+        ALLOC_STREAM(cur_stream);
+
+        pthread_mutex_lock(&h->device_list_mutex);
+        streams[cur_stream]->input_stream_id = h->cur_input_stream_id++;
+        pthread_mutex_unlock(&h->device_list_mutex);
+
+        streams[cur_stream]->stream_type = STREAM_TYPE_MISC;
+        streams[cur_stream]->stream_format = SMPTE2031;
+        streams[cur_stream]->pid = 0x125; /* TODO: hardcoded PID not currently used. */
+#if 0
+        streams[cur_stream]->lang_code[0] = 'e';
+        streams[cur_stream]->lang_code[1] = 'n';
+        streams[cur_stream]->lang_code[2] = 'g';
+        streams[cur_stream]->lang_code[3] = 0;
+        streams[cur_stream]->dvb_teletext_type = DVB_TTX_TYPE_SUB;
+        streams[cur_stream]->dvb_teletext_magazine_number = 0x8;
+        streams[cur_stream]->dvb_teletext_page_number = 0x88;
+#endif
+        if(add_non_display_services(non_display_parser, streams[cur_stream], USER_DATA_LOCATION_DVB_STREAM) < 0 )
+            goto finish;
+        cur_stream++;
+    }
+
     if( non_display_parser->has_vbi_frame )
     {
         ALLOC_STREAM(cur_stream);
@@ -3113,6 +3298,7 @@ static void *open_input( void *ptr )
     decklink_opts->video_format = user_opts->video_format;
     //decklink_opts->video_format = INPUT_VIDEO_FORMAT_PAL;
     decklink_opts->enable_smpte2038 = user_opts->enable_smpte2038;
+    decklink_opts->enable_smpte2031 = user_opts->enable_smpte2031;
     decklink_opts->enable_vanc_cache = user_opts->enable_vanc_cache;
     decklink_opts->enable_bitstream_audio = user_opts->enable_bitstream_audio;
     decklink_opts->enable_patch1 = user_opts->enable_patch1;
