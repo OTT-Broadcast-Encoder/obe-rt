@@ -152,14 +152,16 @@ static const char * stream_opts[] = { "action", "format",
                                       "interlaced", "tff", "frame-packing", "csp", "filler", "intra-refresh", "aspect-ratio",
                                       "width", "max-refs",
 
-                                      /* Audio options */
+                                      /* Audio options - 22-30 */
                                       "sdi-audio-pair", "channel-map", "mono-channel",
                                       /* AAC options */
                                       "aac-profile", "aac-encap",
                                       /* MP2 options */
                                       "mp2-mode",
                                       /* TS options */
-                                      "pid", "lang", "audio-type", "num-ttx", "ttx-lang", "ttx-type", "ttx-mag", "ttx-page",
+                                      "pid", "lang", "audio-type",
+                                      /* Teletext 31-35 */
+                                      "num-ttx", "ttx-lang", "ttx-type", "ttx-mag", "ttx-page",
                                       /* VBI options */
                                       "vbi-ttx", "vbi-inv-ttx", "vbi-vps", "vbi-wss",
 
