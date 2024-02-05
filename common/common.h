@@ -560,6 +560,7 @@ struct obe_t
 #define MUX__DQ_HEXDUMP                         (1 <<  4)
 #define MUX__PTS_REPORT_TIMES                   (1 <<  5)
 #define MUX__REPORT_Q                           (1 <<  6)
+#define INPUTSOURCE__SDI_VANC_DISCOVERY_RDD8    (1 <<  7)
     uint32_t verbose_bitmask;
     int is_active;
     int obe_system;
