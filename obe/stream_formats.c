@@ -45,6 +45,7 @@ const char *stream_format_name(enum stream_formats_e id)
 	case VIDEO_HEVC_GPU_NVENC_AVCODEC: return "VIDEO_HEVC_GPU_NVENC_AVCODEC";
 	case DVB_TABLE_SECTION: return "DVB_TABLE_SECTION";
 	case SMPTE2038: return "SMPTE2038";
+	case SMPTE2031: return "SMPTE2031";
 	default:
 		{
 		sprintf(lbl,  "UNDEFINED id %d", id);
