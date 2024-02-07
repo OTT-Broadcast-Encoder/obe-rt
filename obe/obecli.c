@@ -1192,7 +1192,7 @@ extern char g_video_encoder_tuning_name[64];
                 if (ttx_type)
                     parse_enum_value(ttx_type, teletext_types, &ttx_opts->dvb_teletext_type);
 
-                ttx_opts->dvb_teletext_magazine_number = obe_otoi( ttx_mag, ttx_opts->dvb_teletext_magazine_number );
+                ttx_opts->dvb_teletext_magazine_number = obe_otoi( ttx_mag, ttx_opts->dvb_teletext_magazine_number ) % 8;
                 ttx_opts->dvb_teletext_page_number = obe_otoi( ttx_page, ttx_opts->dvb_teletext_page_number );
 
                 if (ttx_reverse) {
