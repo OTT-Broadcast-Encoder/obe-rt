@@ -2421,12 +2421,39 @@ static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct k
             return 0; /* Silently abort parsing */
         }
 
+	int N_units = 0; /* See EN301755 or EN300472 Section 4.2 */
+        for (int j = 0; j < 5; j++) {
+
+            /* Skip any illegal / undefined lines */
+            if (pkt->descriptors[j].line == 0)
+                continue;
+
+		N_units++;
+	}
+
+	/* We could be here with N=0 and we'll need to stuff all data_units */
+	/* N can never be more than 5, so we're either prepping a pes for the muxer
+	 * to fit in either one or two TS packets.
+	 */
+
+	int stuffing_units;
+	if (N_units <= 3)
+		stuffing_units = 3 - N_units;
+	else
+		stuffing_units = 7 - N_units;
+
+	/* Total pes length will be:
+	 * header              45 bytes
+	 * data_identifier      1 byte
+         * N_units * 46         bytes
+         * stuffing_units * 46  bytes
+	 */
+	int PES_packet_length = ((1 + N_units + stuffing_units) * 46) - 6;
+
         bs_t bs;
 
-        /* 5 * 46 byte entries = 230. PLus the pes header and stuffing 39 bytes.
-         * need roughly 269 bytes of space worst case.
-         */
-        unsigned char buf[300];
+        /* Enough space for 45 + 1 + ((n + stuff) * 46) = 368 bytes */
+        unsigned char buf[380];
 
         bs_init(&bs, buf, sizeof(buf));
         int cnt = 8 + 31;  /* PES_packet_length header 4 + stuffing payload + payload */
@@ -2461,13 +2488,14 @@ static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct k
         bs_write(&bs,  1, 1);                     /* marker_bit */
 
         for (int i = 0; i < 31; i++) {
-            bs_write(&bs, 8, 0xff);               /* stuffing byte */
+            bs_write(&bs, 8, 0xff);               /* stuffing byte - Gets the PES header match spec 45 bytes */
         }
 
         /* See ETSI EN 301775 V1.2.1 page 8 Table 1. */
-        bs_write(&bs, 8, 0x10);               /* data_identifier */
+        bs_write(&bs, 8, 0x10);               /* data_identifier - EBU Data - EN400472 */
         cnt++;
 
+	/* Process each OP-47 data_unit */
         for (int j = 0; j < 5; j++) {
 
             /* Skip any illegal / undefined lines */
@@ -2483,10 +2511,10 @@ static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct k
             printf("\n");
 #endif
 
+            /* We only support data_unit_id = 0x03 */
             bs_write(&bs, 8, 0x03);               /* data_unit_id - EBU Teletext subtitle data */
             bs_write(&bs, 8, 0x2c);               /* data_unit_length - fixed at 2c as per spec */
 
-            /* We only support data_unit_id = 0x03 */
             /* txt_data_field */
             a[0] = 0x03 << 6 | (pkt->descriptors[j].field & 0x01) << 5 | (pkt->descriptors[j].line & 0x1f);
             a[1] = pkt->descriptors[j].data[2];  /* framing_code - EBU Teletext */
@@ -2515,10 +2543,27 @@ static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct k
             cnt += (6 + 40);
         }
 
+        /* Now take care of stuffing_units to ensure we're closing the PES at the end of a
+         * transport packet, when the mux finally packs it.
+         */
+        for (int i = 0; i < stuffing_units; i++) {
+            bs_write(&bs, 8, 0xff);               /* data_unit_id - stuffing - section 4.4 */
+            bs_write(&bs, 8, 0x2c);               /* fixed stuffing length to meet the 46 byte unit obligation */
+            for (int j = 0; j < 0x2c; j++) {
+                bs_write(&bs, 8, 0xff);           /* stuffing block - No need to reverse FF's */
+            }
+            cnt += (2 + 0x2c);
+        }
+
         /* Close (actually its 'align') the bitstream buffer */
         bs_flush(&bs);
 
-        /* Correct the overall length */
+        if (cnt != PES_packet_length) {
+            fprintf(stderr, PREFIX "Calculation error generating WST PES got %d wanted %d\n",
+                cnt, PES_packet_length);
+        }
+
+        /* Correct the overall length in the header */
         buf[4] = cnt >> 8;
         buf[5] = cnt & 0xff;
 
