@@ -2401,10 +2401,14 @@ const uint8_t REVERSE[256] = {
 
 static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct klvanc_packet_sdp_s *pkt)
 {
-	decklink_ctx_t *decklink_ctx = (decklink_ctx_t *)callback_context;
-	decklink_opts_t *decklink_opts = container_of(decklink_ctx, decklink_opts_t, decklink_ctx);
+    /* Its worth pointing out that with the exception of the PMT descriptor tag id, the
+     * actual PES structure of EN301775 and EN300472 are identical, one beingan older spec
+     * than the other.
+     */
+    decklink_ctx_t *decklink_ctx = (decklink_ctx_t *)callback_context;
+    decklink_opts_t *decklink_opts = container_of(decklink_ctx, decklink_opts_t, decklink_ctx);
 
-	if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_RDD8) {
+    if (decklink_ctx->h->verbose_bitmask & INPUTSOURCE__SDI_VANC_DISCOVERY_RDD8) {
         klvanc_dump_SDP(ctx, pkt); /* vanc lib helper */
     }
 
