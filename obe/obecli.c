@@ -719,11 +719,30 @@ static int set_stream( char *command, obecli_command_t *child )
         command[tok_len2] = 0;
 
         int output_stream_id = obe_otoi( command, -1 );
+#if 1
+        /* Enumerate all streams, looking for output_stream_id X in the array, don't assume
+         * that it's in position X, because the array is modified by the 'remove stream' command.
+         */
+        output_stream = NULL;
+
+        for (int i = 0; i < cli.num_output_streams; i++) {
+            if (cli.output_streams[i].output_stream_id == output_stream_id) {
+                output_stream = &cli.output_streams[i];
+            }
+        }
+        if (output_stream_id < 0 || output_stream == NULL) {
+            fprintf(stderr, "obecli: Invalid stream id %d\n", output_stream_id);
+            return -1;
+        }
+
+        input_stream = &cli.program.streams[output_stream->input_stream_id];
+#else
         FAIL_IF_ERROR( output_stream_id < 0 || output_stream_id > cli.num_output_streams-1,
                        "Invalid stream id\n" );
 
         input_stream = &cli.program.streams[cli.output_streams[output_stream_id].input_stream_id];
         output_stream = &cli.output_streams[output_stream_id];
+#endif
 
         if( str_len > str_len2 )
         {
