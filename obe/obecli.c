@@ -720,6 +720,10 @@ static int set_stream( char *command, obecli_command_t *child )
 
         int output_stream_id = obe_otoi( command, -1 );
 #if 1
+        int oid = output_stream_id;
+
+        printf("OUTPUT STREAM ID for set ups %d\n", output_stream_id);
+
         /* Enumerate all streams, looking for output_stream_id X in the array, don't assume
          * that it's in position X, because the array is modified by the 'remove stream' command.
          */
@@ -728,11 +732,18 @@ static int set_stream( char *command, obecli_command_t *child )
         for (int i = 0; i < cli.num_output_streams; i++) {
             if (cli.output_streams[i].output_stream_id == output_stream_id) {
                 output_stream = &cli.output_streams[i];
+                output_stream_id = i; /* Lots of code below used this in as an index into a statck list */
+                break;
             }
         }
         if (output_stream_id < 0 || output_stream == NULL) {
             fprintf(stderr, "obecli: Invalid stream id %d\n", output_stream_id);
             return -1;
+        }
+
+        if (output_stream_id != oid) {
+            printf("obecli: Adjusted output stream obejct selection from idx %d to %d (SMPTE2031)\n",
+                output_stream_id, oid);
         }
 
         input_stream = &cli.program.streams[output_stream->input_stream_id];
