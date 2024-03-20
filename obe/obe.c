@@ -1362,7 +1362,7 @@ int obe_start( obe_t *h )
             }
 #endif
 #if HAVE_VEGA3311_CAP_TYPES_H
-            else if (ostream->stream_format == VIDEO_HEVC_VEGA3311)
+            else if ((ostream->stream_format == VIDEO_HEVC_VEGA3311) || (ostream->stream_format == VIDEO_AVC_VEGA3311))
             {
                 x264_param_t *x264_param = &ostream->avc_param;
                 if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY )

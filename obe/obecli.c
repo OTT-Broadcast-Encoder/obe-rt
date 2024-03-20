@@ -829,6 +829,12 @@ static int set_stream( char *command, obecli_command_t *child )
                     /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
                     g_sei_timestamping = 1;
                 }
+                else
+                if (strcasecmp(video_codec, "AVC_VEGA3311") == 0) {
+                    video_codec_id = 0; /* AVC via VEGA 3311  */
+                    /* Enable SEI timestamping by default, for the code, but NOT for UDP output. */
+                    g_sei_timestamping = 1;
+                }
 #endif
 #if HAVE_X265_H
                 else
