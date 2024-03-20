@@ -103,15 +103,9 @@ using namespace std;
 
 const char *vega3311_sdk_version = VEGA_VERSION;
 
-static int configureCodec(vega_opts_t *opts)
+static int configureCodecAVC(vega_opts_t *opts, obe_output_stream_t *os)
 {
         vega_ctx_t *ctx = &opts->ctx;
-
-        obe_output_stream_t *os = obe_core_get_output_stream_by_index(ctx->h, 0);
-        if (os->stream_format != VIDEO_HEVC_VEGA3311) {
-		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters\n");
-		return -1;
-        }
 
         x264_param_t *p = &os->avc_param;
 
@@ -198,6 +192,115 @@ static int configureCodec(vega_opts_t *opts)
         printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
         printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, lookupVegaPixelFormatName(opts->codec.pixelFormat));
         printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
+
+        return 0; /* Success */
+}
+
+static int configureCodecHEVC(vega_opts_t *opts, obe_output_stream_t *os)
+{
+        vega_ctx_t *ctx = &opts->ctx;
+
+        x264_param_t *p = &os->avc_param;
+
+        opts->codec.inputMode    = API_VEGA3311_CAP_INPUT_MODE_4CHN;
+        opts->codec.inputSource  = API_VEGA3311_CAP_INPUT_SOURCE_SDI;
+        opts->codec.sdiLevel     = API_VEGA3311_CAP_SDI_LEVEL_A;
+        opts->codec.audioLayout  = API_VEGA3311_CAP_AUDIO_LAYOUT_16P0;
+        opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV16;
+        opts->codec.bitrate_kbps = p->rc.i_bitrate;
+        opts->codec.gop_size     = (API_VEGA_BQB_GOP_SIZE_E)p->i_keyint_max;
+        opts->codec.bframes      = (API_VEGA_BQB_B_FRAME_NUM_E)p->i_bframe;
+        opts->codec.width        = p->i_width;
+        opts->codec.height       = p->i_height;
+
+        const struct obe_to_vega_video *fmt = lookupVegaStandardByResolution(opts->codec.width, opts->codec.height, API_VEGA3311_CAP_FPS_60);
+        if (!fmt) {
+		fprintf(stderr, MODULE_PREFIX "unable to query encoder parameters for specific width, height and framerate\n");
+		return -1;
+        }
+        opts->codec.encodingResolution = (API_VEGA_BQB_RESOLUTION_E)fmt->vegaEncodingResolution;
+        opts->codec.interlaced = p->b_interlaced;
+
+        if (lookupVegaFramerate(p->i_fps_den, p->i_fps_num, &opts->codec.fps) < 0) {
+		fprintf(stderr, MODULE_PREFIX "unable to query encoder framerate %d, %d\n", p->i_fps_num, p->i_fps_den);
+		return -1;
+        }
+
+#if FORCE_10BIT
+#pragma message "VEGA - Force compile into 10bit only mode"
+        // Manually enable 10bit.
+        p->i_csp |= X264_CSP_HIGH_DEPTH;
+#endif
+
+        if ((p->i_csp & X264_CSP_I420) && ((p->i_csp & X264_CSP_HIGH_DEPTH) == 0)) {
+                /* 4:2:0 8bit via NV12 */
+                opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_420;
+                opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_8;
+                opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV12;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_NV12;
+                // OK
+        } else
+        if ((p->i_csp & X264_CSP_I420) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
+                /* 4:2:0 10bit via PP01 */
+		fprintf(stderr, MODULE_PREFIX "using colorspace 4:2:0 10bit (not supported)\n");
+                opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_420;
+                opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
+                opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_P010;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_PP01;
+        } else
+        if ((p->i_csp & X264_CSP_I422) && ((p->i_csp & X264_CSP_HIGH_DEPTH) == 0)) {
+                /* 4:2:2 8bit via NV16 */
+                opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
+                opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_8;
+                opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_NV16;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_NV16;
+                // NOT ok according to VLC
+        } else
+        if ((p->i_csp & X264_CSP_I422) && (p->i_csp & X264_CSP_HIGH_DEPTH)) {
+                /* 4:2:2 10bit via Y210 and colorspace conversion  */
+		fprintf(stderr, MODULE_PREFIX "using colorspace 4:2:2 10bit\n");
+                opts->codec.chromaFormat = API_VEGA_BQB_CHROMA_FORMAT_422;
+                opts->codec.bitDepth     = API_VEGA_BQB_BIT_DEPTH_10;
+                opts->codec.pixelFormat  = API_VEGA3311_CAP_IMAGE_FORMAT_Y210;
+                opts->codec.eFormat      = API_VEGA_BQB_IMAGE_FORMAT_YUV422P010;
+        } else {
+		fprintf(stderr, MODULE_PREFIX "unable to determine colorspace, i_csp = 0x%x\n", p->i_csp);
+		return -1;
+        }
+
+        printf(MODULE_PREFIX "encoder.device       = %d\n", opts->brd_idx);
+        printf(MODULE_PREFIX "encoder.eFormat      = %d\n", opts->codec.eFormat);
+        printf(MODULE_PREFIX "encoder.inputsource  = %d '%s'\n", opts->codec.inputSource, lookupVegaInputSourceName(opts->codec.inputSource));
+        printf(MODULE_PREFIX "encoder.inputport    = %d\n", opts->card_idx);
+        printf(MODULE_PREFIX "encoder.sdilevel     = %d '%s'\n", opts->codec.sdiLevel, lookupVegaSDILevelName(opts->codec.sdiLevel));
+        printf(MODULE_PREFIX "encoder.inputmode    = %d '%s'\n", opts->codec.inputMode, lookupVegaInputModeName(opts->codec.inputMode));
+        printf(MODULE_PREFIX "encoder.bitrate_kbps = %d\n", opts->codec.bitrate_kbps);
+        printf(MODULE_PREFIX "encoder.gop_size     = %d\n", opts->codec.gop_size);
+        printf(MODULE_PREFIX "encoder.bframes      = %d\n", opts->codec.bframes);
+        printf(MODULE_PREFIX "encoder.width        = %d\n", opts->codec.width);
+        printf(MODULE_PREFIX "encoder.height       = %d\n", opts->codec.height);
+        printf(MODULE_PREFIX "encoder.resolution   = %d '%s'\n", opts->codec.encodingResolution, lookupVegaEncodingResolutionName(opts->codec.encodingResolution));
+        printf(MODULE_PREFIX "encoder.fps          = %d\n", opts->codec.fps);
+        printf(MODULE_PREFIX "encoder.chroma       = %d '%s'\n", opts->codec.chromaFormat, lookupVegaEncodingChromaName(opts->codec.chromaFormat));
+        printf(MODULE_PREFIX "encoder.bitdepth     = %d '%s'\n", opts->codec.bitDepth, lookupVegaBitDepthName(opts->codec.bitDepth));
+        printf(MODULE_PREFIX "encoder.pixelformat  = %d '%s'\n", opts->codec.pixelFormat, lookupVegaPixelFormatName(opts->codec.pixelFormat));
+        printf(MODULE_PREFIX "encoder.interlaced   = %d\n", opts->codec.interlaced);
+
+        return 0; /* Success */
+}
+
+static int configureCodec(vega_opts_t *opts)
+{
+        vega_ctx_t *ctx = &opts->ctx;
+
+        obe_output_stream_t *os = obe_core_get_output_stream_by_index(ctx->h, 0);
+
+        switch(os->stream_format) {
+        case VIDEO_HEVC_VEGA3311:
+                return configureCodecHEVC(opts, os);
+        default:
+                return -1;
+        }
 
         return 0; /* Success */
 }
