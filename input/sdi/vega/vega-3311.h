@@ -200,5 +200,6 @@ void vega3311_video_capture_callback(uint32_t u32DevId,
         void *pv_user_arg);
 
 void vega3311_video_compressed_callback(API_VEGA_BQB_HEVC_CODED_PICT_T *p_pict, void *args);
+int  vega3311_video_configure_hevc(vega_opts_t *opts);
 
 #endif /* LTN_VEGA_H */
