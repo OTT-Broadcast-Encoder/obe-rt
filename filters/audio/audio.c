@@ -20,10 +20,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
  */
 
+#include <libavutil/eval.h>
+
 #include "common/common.h"
 #include "audio.h"
 
 #define LOCAL_DEBUG 0
+#define MODULE_PREFIX "[audio-filter]: "
 
 /* Bitmask:
  * 0 = mute right
@@ -38,6 +41,56 @@
  * 9 = clip left
  */
 int g_filter_audio_effect_pcm = 0;
+
+
+static double compute_dB__to_scaler(const char *dbval)
+{
+    static const char *const var_names[] = {
+        "volume",              ///< last set value
+        NULL
+    };
+
+    double var_values[4] = { 0 };
+
+    AVExpr *pexpr = NULL;
+    const char *expr = dbval;
+
+    int ret = av_expr_parse(&pexpr, expr, var_names, NULL, NULL, NULL, NULL, 0, NULL);
+    if (ret < 0) {
+        fprintf(stderr, "error evaluating volume expression\n");
+    }
+
+    double volume = 1.0;
+
+    if (pexpr) {
+
+        volume = av_expr_eval(pexpr, &var_values[0], NULL);
+        //printf("volume = %f\n", volume);
+
+        free(pexpr);
+        pexpr = NULL;
+    }
+
+    return volume;
+}
+
+/* Works for any number of channels and samples, but assumes S32P.
+ */
+static void applyGain(obe_output_stream_t *output_stream, obe_raw_frame_t *rf, double volumeScaler)
+{
+    /* Gain adjust audio gain for left and right channels - assumption 32bit samples S32P from decklink */
+    int32_t *data = (int32_t *)rf->audio_frame.audio_data[0];
+
+#if 0
+    printf("output_stream_id %d, applying gain of %f\n", output_stream->output_stream_id, volumeScaler);
+#endif
+
+    for (int i = 0; i < rf->audio_frame.num_samples * rf->audio_frame.num_channels; i++) {
+        double a = (double)data[i];
+        double b = a * volumeScaler;
+        data[i] = (int32_t)b;
+    }
+}
 
 static void applyEffects(obe_raw_frame_t *rf)
 {
@@ -129,6 +182,23 @@ static void *start_filter_audio( void *ptr )
     obe_output_stream_t *output_stream;
     int num_channels;
 
+    /* ignore the video track, process all PCM encoders first */
+    for (int i = 1; i < h->num_encoders; i++)
+    {
+        output_stream = get_output_stream_by_id(h, h->encoders[i]->output_stream_id);
+        if (output_stream->stream_format == AUDIO_AC_3_BITSTREAM)
+            continue; /* Ignore downstream AC3 bitstream encoders */
+
+        num_channels = av_get_channel_layout_nb_channels(output_stream->channel_layout);
+        output_stream->audioGain = 0.0;
+
+        if (num_channels == 2 && strlen(output_stream->gain_db) > 0) {
+            output_stream->audioGain = compute_dB__to_scaler(output_stream->gain_db);
+            printf(MODULE_PREFIX "pid %d, output_stream_id %d, applying audio gain of %f, num_encoders %d\n", getpid(), output_stream->output_stream_id, output_stream->audioGain, h->num_encoders);
+        }
+
+    }
+
     while( 1 )
     {
         pthread_mutex_lock( &filter->queue.mutex );
@@ -210,6 +280,10 @@ printf(" split_raw_frame->audio_frame.linesize %d", split_raw_frame->audio_frame
                             split_raw_frame->audio_frame.sample_fmt);
 
             applyEffects(split_raw_frame);
+
+            if (num_channels == 2 && strlen(output_stream->gain_db) > 0) {
+                applyGain(output_stream, split_raw_frame, output_stream->audioGain);
+            }
 
 #if LOCAL_DEBUG
             obe_raw_frame_printf(split_raw_frame);

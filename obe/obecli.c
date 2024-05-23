@@ -176,6 +176,7 @@ static const char * stream_opts[] = { "action", "format",
                                       "tuning-name", /* 45 */
                                       "dialnorm", /* 46 */
                                       "ttx-reverse", /* 47 */
+                                      "gain", /* 48 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
@@ -797,6 +798,9 @@ static int set_stream( char *command, obecli_command_t *child )
             /* MP2 options */
             char *mp2_mode    = obe_get_option( stream_opts[27], opts );
 
+            /* Audio Gain Options. 0dB is effectively no gain adjustment. Eg 0dB, 3dB -4dB, etc*/
+            char *gain_db    = obe_get_option( stream_opts[48], opts );
+
             /* NB: remap these and the ttx values below if more encoding options are added - TODO: split them up */
             char *pid         = obe_get_option( stream_opts[28], opts );
             char *lang        = obe_get_option( stream_opts[29], opts );
@@ -1105,6 +1109,15 @@ extern char g_video_encoder_tuning_name[64];
                     parse_enum_value( mono_channel, mono_channels, &cli.output_streams[output_stream_id].mono_channel );
 
                 channel_layout = channel_layouts[channel_map_idx];
+
+                if (gain_db) {
+                    /* Add the dB suffix so operators don't get this wrong */
+                    sprintf(&cli.output_streams[output_stream_id].gain_db[0], "%sdB", gain_db);
+                    cli.output_streams[output_stream_id].audioGain = 1.0;
+                } else {
+                    cli.output_streams[output_stream_id].gain_db[0] = 0;
+                    cli.output_streams[output_stream_id].audioGain = 0.0;
+                }
 
                 if( cli.output_streams[output_stream_id].stream_format == AUDIO_MP2 )
                 {

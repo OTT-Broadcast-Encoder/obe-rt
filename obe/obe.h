@@ -423,6 +423,10 @@ typedef struct
     /** Mux options **/
     /* MPEG-TS */
     obe_ts_stream_opts_t ts_opts;
+
+    char gain_db[16];
+    double audioGain;
+    
 } obe_output_stream_t;
 
 int obe_setup_streams( obe_t *h, obe_output_stream_t *output_streams, int num_streams );
