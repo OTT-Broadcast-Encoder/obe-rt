@@ -192,9 +192,15 @@ static void *start_filter_audio( void *ptr )
         num_channels = av_get_channel_layout_nb_channels(output_stream->channel_layout);
         output_stream->audioGain = 0.0;
 
-        if (num_channels == 2 && strlen(output_stream->gain_db) > 0) {
+        if ((num_channels == 2 || num_channels == 6) && strlen(output_stream->gain_db) > 0) {
             output_stream->audioGain = compute_dB__to_scaler(output_stream->gain_db);
-            printf(MODULE_PREFIX "pid %d, output_stream_id %d, applying audio gain of %f, num_encoders %d\n", getpid(), output_stream->output_stream_id, output_stream->audioGain, h->num_encoders);
+            printf(MODULE_PREFIX "pid %d, output_stream_id %d, applying audio gain of %f, num_encoders %d, num_channels %d\n",
+                getpid(), output_stream->output_stream_id, output_stream->audioGain, h->num_encoders,
+                num_channels);
+        } else
+        if (strlen(output_stream->gain_db) > 0) {
+            printf(MODULE_PREFIX "pid %d, output_stream_id %d, num_channels %d, ignoring gain request\n",
+                getpid(), output_stream->output_stream_id, num_channels);
         }
 
     }
@@ -281,7 +287,7 @@ printf(" split_raw_frame->audio_frame.linesize %d", split_raw_frame->audio_frame
 
             applyEffects(split_raw_frame);
 
-            if (num_channels == 2 && strlen(output_stream->gain_db) > 0) {
+            if ((num_channels == 2 || num_channels == 6) && strlen(output_stream->gain_db) > 0) {
                 applyGain(output_stream, split_raw_frame, output_stream->audioGain);
             }
 
