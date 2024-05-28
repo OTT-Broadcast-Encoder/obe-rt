@@ -1,3 +1,3 @@
 #!/bin/bash
 
-git tag -a vid.obe.4.1.1 -m "vid.obe.4.1.1"
+git tag -a vid.obe.4.1.2 -m "vid.obe.4.1.2"

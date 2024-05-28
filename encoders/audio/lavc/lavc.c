@@ -466,16 +466,37 @@ static void *aac_start_encoder(void *ptr)
         }
 
         /* Create some data planes that we'll fill with raw input audio samples.
-         * We'll pass these plans into the audio format convertor.
+         * We'll pass these planes into the audio format convertor.
          * We'll re-use these planes later again, when reading converted audio
          * samples so they need to be capable of holding codec->frame_size samples.
          * For AAC, frame_size is 1000, for AC3 its 1536. This number is given to us
-         * by libavcodec, and represents the minimum number of sames we must
+         * by libavcodec, and represents the minimum number of samples we must
          * pass to the compression codec.
+         * The slower the framerate, the higher the linesize is the more audio at 48Khz,
+         * is associated with a frame.
+         *
+         *                   raw_frame->audio_frame.linesize   codec->frame_size   Codec  Card
+         *  1080i29.97                                  6528                1024     AAC  duo2
+         *  1080i29.97                                  6528                1536     AC3  duo2
+         *   720p59.94                                  3328                1024     AAC  duo2
+         *   720p59.94                                  3328                1536     AC3  duo2
+         *  1080p24                                     8086                1024     AAC  duo2
+         *  1080p24                                     8086                1536     AC3  duo2
+         *  1080p30                                     1024                1536     AC3  vega
+         *  1080p30                                     1024                1024     AAC  vega
+         *  1080p59.94                                  1024                1536     AC3  vega
+         *  1080p59.94                                  1024                1024     AAC  vega
+         * 
+         * Instead of using raw_frame->audio_frame.linesize or codec->frame_size, lets
+         * create a massive buffer to handle very small and very large cases in a single size.
          */
+        int newlinesize = 8086 * 4;
+	    if (raw_frame->audio_frame.linesize > newlinesize) {
+		    newlinesize = raw_frame->audio_frame.linesize * 4;
+	    }
         if (av_samples_alloc(audio_planes, NULL,
                 av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
-                codec->frame_size, codec->sample_fmt, 0) < 0) {
+                newlinesize, codec->sample_fmt, 0) < 0) {
             fprintf(stderr, MODULE "Could not allocate audio samples\n");
             goto finish;
         }
