@@ -5,9 +5,11 @@ VERSION_MAJOR = 4
 VERSION_MINOR = 1
 VERSION_PATCH = 4
 
+FFMPEG_LIBS = libavdevice libavformat libavfilter libavcodec libswresample libswscale libavutil
+
 BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 
-# This will be ignored of libklmonitoring is not installed in the system.
+# This will be ignored if libklmonitoring is not installed in the system.
 #HISTOGRAMS = -DPRINT_HISTOGRAMS=1
 
 CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFSET_BITS=64 -O3 \
@@ -31,9 +33,12 @@ if LIBX265
 LDFLAGS += -lx265
 endif
 if LIBVA
+LIBVA_LIBS = x11 vdpau libva $(FFMPEG_LIBS)
 LDFLAGS += -L../../vaapi/libva-utils/common/.libs
-LDFLAGS += -lva -lva-display -llzma
+LDFLAGS += -lva-display -llzma
 CFLAGS += -I../../vaapi/libva-utils/common
+LDFLAGS += $(shell pkg-config --libs $(LIBVA_LIBS))
+CFLAGS += $(shell pkg-config --cflags $(LIBVA_LIBS))
 endif
 if BLUEFISH444
 BLUEFISH444_SDK=/home/stoth/BLUEFISH/EpochLinuxDriver_V5_11_0_27/release/driver
