@@ -1051,7 +1051,7 @@ int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t
         param->vui.i_colmatrix = 1;
     }
 
-    x264_param_apply_profile( param, X264_BIT_DEPTH == 10 ? "high10" : "high" );
+    x264_param_apply_profile( param, X264_BIT_DEPTH == 10 ? "high10" : "high", NULL );
 #if X264_BUILD < 148
     param->i_nal_hrd = X264_NAL_HRD_FAKE_VBR;
 #else

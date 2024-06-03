@@ -2459,7 +2459,7 @@ static int start_encode( char *command, obecli_command_t *child )
                 cli.output_streams[i].avc_param.rc.i_vbv_max_bitrate = cli.output_streams[i].avc_param.rc.i_bitrate;
 
             if( cli.avc_profile >= 0 )
-                x264_param_apply_profile( &cli.output_streams[i].avc_param, x264_profile_names[cli.avc_profile] );
+                x264_param_apply_profile( &cli.output_streams[i].avc_param, x264_profile_names[cli.avc_profile], NULL );
         }
         else if( input_stream && input_stream->stream_type == STREAM_TYPE_AUDIO )
         {

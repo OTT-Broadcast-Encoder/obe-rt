@@ -547,7 +547,7 @@ static void *x264_start_encoder( void *ptr )
 
 printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
 
-    x264_param_apply_profile(&param, "high");
+    x264_param_apply_profile(&param, "high", NULL);
 
     /* Shunt all of the params into the global space, just as if the
      * core had originally configured them.
@@ -597,7 +597,7 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
 
 printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
 
-    x264_param_apply_profile(&param, "high");
+    x264_param_apply_profile(&param, "high", NULL);
 
     /* Shunt all of the params into the global space, just as if the
      * core had originally configured them.
