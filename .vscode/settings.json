@@ -1,5 +1,9 @@
 {
     "files.associations": {
+        "*.ejs": "ejs",
+        "*.html": "html",
+        "*.vpy": "python",
+        "*.rs": "rust",
         "array": "cpp",
         "*.tcc": "cpp",
         "cctype": "cpp",
@@ -32,7 +36,14 @@
         "tuple": "cpp",
         "type_traits": "cpp",
         "utility": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "algorithm": "c",
+        "chrono": "c",
+        "optional": "c",
+        "system_error": "c",
+        "xlocmon": "c",
+        "xtr1common": "c",
+        "xutility": "c"
     },
     "files.exclude": {
         "**/.git": true,
