@@ -628,9 +628,8 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
     encoder->is_ready = 1;
     /* XXX: This will need fixing for soft pulldown streams */
     frame_duration = av_rescale_q( 1, (AVRational){enc_params->avc_param.i_fps_den, enc_params->avc_param.i_fps_num}, (AVRational){1, OBE_CLOCK} );
-#if X264_BUILD < 148
     buffer_duration = frame_duration * enc_params->avc_param.sc.i_buffer_size;
-#endif
+
 
     /* Broadcast because input and muxer can be stuck waiting for encoder */
     pthread_cond_broadcast( &encoder->queue.in_cv );
@@ -673,9 +672,7 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
             h->enc_smoothing_buffer_complete = 0;
             pthread_mutex_unlock( &h->enc_smoothing_queue.mutex );
             syslog( LOG_INFO, "Speedcontrol reset\n" );
-#if X264_BUILD < 148
             x264_speedcontrol_sync( s, enc_params->avc_param.sc.i_buffer_size, enc_params->avc_param.sc.f_buffer_init, 0 );
-#endif
             h->video_encoder_drop = 0;
             upstream_signal_lost = 1;
         }
@@ -851,9 +848,7 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
                 else
                     buffer_fill = (float)(-1 * last_frame_delta)/buffer_duration;
 
-#if X264_BUILD < 148
                 x264_speedcontrol_sync( s, buffer_fill, enc_params->avc_param.sc.i_buffer_size, 1 );
-#endif
             }
 
             pthread_mutex_unlock( &h->enc_smoothing_queue.mutex );
@@ -1046,7 +1041,6 @@ if (fh)
             }
             last_raw_frame_pts = current_raw_frame_pts;
 
-#if X264_BUILD < 148
             coded_frame->cpb_initial_arrival_time = pic_out.hrd_timing.cpb_initial_arrival_time;
             coded_frame->cpb_final_arrival_time = pic_out.hrd_timing.cpb_final_arrival_time;
             coded_frame->real_dts = pic_out.hrd_timing.cpb_removal_time;
@@ -1076,12 +1070,6 @@ if (fh)
                 last_real_pts = coded_frame->real_pts;
                 last_real_dts = coded_frame->real_dts;
             }
-#endif
-#else
-            coded_frame->cpb_initial_arrival_time = pic_out.hrd_timing.cpb_initial_arrival_time * 27000000.0;
-            coded_frame->cpb_final_arrival_time = pic_out.hrd_timing.cpb_final_arrival_time * 27000000.0;
-            coded_frame->real_dts = (pic_out.hrd_timing.cpb_removal_time * 27000000.0);
-            coded_frame->real_pts = (pic_out.hrd_timing.dpb_output_time  * 27000000.0);
 #endif
 
             /* The audio and video clocks jump with different intervals when the cable

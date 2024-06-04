@@ -1045,11 +1045,7 @@ extern char g_video_encoder_tuning_name[64];
                     avc_param->b_opencl = 0;
 
                 if( filler )
-#if X264_BUILD < 148
                     avc_param->i_nal_hrd = obe_otob( filler, 0 ) ? X264_NAL_HRD_FAKE_CBR : X264_NAL_HRD_FAKE_VBR;
-#else
-                    avc_param->i_nal_hrd = obe_otob( filler, 0 ) ? X264_NAL_HRD_CBR : X264_NAL_HRD_VBR;
-#endif
 
                 /* Turn on the 3DTV mux option automatically */
                 if( avc_param->i_frame_packing >= 0 )
