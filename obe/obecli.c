@@ -148,35 +148,128 @@ static const char * input_opts[]  = { "location", "card-idx", "video-format", "v
                                       NULL };
 static const char * add_opts[] =    { "type" };
 /* TODO: split the stream options into general options, video options, ts options */
-static const char * stream_opts[] = { "action", "format",
-                                      /* Encoding options */
-                                      "vbv-maxrate", "vbv-bufsize", "bitrate",
-                                      "profile", "level", "keyint", "lookahead", "threads", "bframes", "b-pyramid", "weightp",
-                                      "interlaced", "tff", "frame-packing", "csp", "filler", "intra-refresh", "aspect-ratio",
-                                      "width", "max-refs",
+static const char * stream_opts[] = {
+                                      /* Base 0-1*/
+                                      "action", "format",
 
-                                      /* Audio options - 22-30 */
+                                      /* Encoding options 2-70 */
+                                      "profile", /* 2 */
+                                      "level", /* 3 */
+                                      "preset", /* 4 */
+                                      "tune", /* 5 */
+
+                                      "bitrate", /* 6 */
+                                      "vbv-maxrate", /* 7 */
+                                      "vbv-bufsize", /* 8 */
+
+                                      "min-keyint", /* 9 */
+                                      "keyint", /* 10 */
+
+                                      "bframes", /* 11 */
+                                      "b-adapt", /* 12 */
+                                      "b-bias", /* 13 */
+                                      "b-pyramid", /* 14 */
+
+                                      "qp", /* 15 */
+                                      "qpmin", /* 16 */
+                                      "qpmax", /* 17 */
+                                      "qpstep", /* 18 */
+                                      "qcomp", /* 19 */
+                                      "qblur", /* 20 */
+                                      "cplxblur", /* 21 */
+                                      "chroma-qp-offset", /* 22 */
+
+                                      "deblock", /* 23 */
+                                      "mbtree", /* 24 */
+                                      "fgo", /* 25 */
+                                      "ref", /* 26 */
+                                      "fade-compensate", /* 27 */
+
+                                      "ratetol", /* 28 */
+                                      "ipratio", /* 29 */
+                                      "pbratio", /* 30 */
+
+                                      "rc-lookahead", /* 31 */
+                                      "sync-lookahead", /* 32 */
+
+                                      "aq-strength", /* 33 */
+                                      "aq-sensitivity", /* 34 */
+                                      "aq-ifactor", /* 35 */
+                                      "aq-pfactor", /* 36 */
+                                      "aq-bfactor", /* 37 */
+                                      "aq-mode", /* 38 */
+                                      "aq-bias-strength", /* 39 */
+                                      "aq2-strength", /* 40 */
+                                      "aq2-sensitivity", /* 41 */
+                                      "aq2-ifactor", /* 42 */
+                                      "aq2-pfactor", /* 43 */
+                                      "aq2-bfactor", /* 44 */
+                                      "aq3-strength", /* 45 */
+                                      "aq3-sensitivity", /* 46 */
+                                      "aq3-ifactor", /* 47 */
+                                      "aq3-pfactor", /* 48 */
+                                      "aq3-bfactor", /* 49 */
+                                      "aq3-mode", /* 50 */
+                                      "aq3-boundary", /* 51 */
+
+                                      "me", /* 52 */
+                                      "merange", /* 53 */
+                                      "mvrange", /* 54 */
+                                      "mvrange-thread", /* 55 */
+                                      "subme", /* 56 */
+
+                                      "constrained-intra", /* 57 */
+                                      "intra-refresh", /* 58 */
+                                      "scenecut", /* 59 */
+
+                                      "psy", /* 60 */
+                                      "psy-rd", /* 61 */
+
+                                      "analyse", /* 62 */
+                                      "partitions", /* 63 */
+                                      "direct", /* 64 */
+                                      "weightb", /* 65 */
+                                      "weightp", /* 66 */
+                                      "mixed-refs", /* 67 */
+                                      "8x8dct", /* 68 */
+                                      "trellis", /* 69 */
+                                      "fast-pskip", /* 70 */
+
+                                      /* Audio options - 71-79 */
                                       "sdi-audio-pair", "channel-map", "mono-channel",
+
                                       /* AAC options */
                                       "aac-profile", "aac-encap",
+
                                       /* MP2 options */
                                       "mp2-mode",
+
                                       /* TS options */
                                       "pid", "lang", "audio-type",
-                                      /* Teletext 31-35 */
-                                      "num-ttx", "ttx-lang", "ttx-type", "ttx-mag", "ttx-page",
-                                      /* VBI options */
+
+                                      /* Teletext 80-85 */
+                                      "num-ttx", "ttx-lang", "ttx-type", "ttx-mag", "ttx-page", "ttx-reverse",
+
+                                      /* VBI options 86-89 */
                                       "vbi-ttx", "vbi-inv-ttx", "vbi-vps", "vbi-wss",
 
-                                      "opencl", /* 40 */
-                                      "preset-name", /* 41 */
-                                      "entropy", /* 42 */
-                                      "audio-offset", /* 43 */
-                                      "video-codec", /* 44 */
-                                      "tuning-name", /* 45 */
-                                      "dialnorm", /* 46 */
-                                      "ttx-reverse", /* 47 */
-                                      "gain", /* 48 */
+                                      "opencl", /* 90 */
+                                      "entropy", /* 91 */
+                                      "audio-offset", /* 92 */
+                                      "video-codec", /* 93 */
+                                      "dialnorm", /* 94 */
+                                      "gain", /* 95 */
+
+                                      /* Other 98-*/
+                                      "thread", /* 96 */
+                                      "width", /* 97 */
+                                      "interlaced", /* 98 */
+                                      "tff", /* 99 */
+                                      "frame-packing", /* 100 */
+                                      "csp", /* 101 */
+                                      "filler", /* 102 */
+                                      "aspect-ratio", /* 103 */
+                                      "max-refs", /* 104 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
@@ -763,56 +856,115 @@ static int set_stream( char *command, obecli_command_t *child )
             if( !opts && params )
                 return -1;
 
-            char *action      = obe_get_option( stream_opts[0], opts );
-            char *format      = obe_get_option( stream_opts[1], opts );
-            char *vbv_maxrate = obe_get_option( stream_opts[2], opts );
-            char *vbv_bufsize = obe_get_option( stream_opts[3], opts );
-            char *bitrate     = obe_get_option( stream_opts[4], opts );
-            char *profile     = obe_get_option( stream_opts[5], opts );
-            char *level       = obe_get_option( stream_opts[6], opts );
-            char *keyint      = obe_get_option( stream_opts[7], opts );
-            char *lookahead   = obe_get_option( stream_opts[8], opts );
-            char *threads     = obe_get_option( stream_opts[9], opts );
-            char *bframes     = obe_get_option( stream_opts[10], opts );
-            char *b_pyramid   = obe_get_option( stream_opts[11], opts );
-            char *weightp     = obe_get_option( stream_opts[12], opts );
-            char *interlaced  = obe_get_option( stream_opts[13], opts );
-            char *tff         = obe_get_option( stream_opts[14], opts );
-            char *frame_packing = obe_get_option( stream_opts[15], opts );
-            char *csp         = obe_get_option( stream_opts[16], opts );
-            char *filler      = obe_get_option( stream_opts[17], opts );
-            char *intra_refresh = obe_get_option( stream_opts[18], opts );
-            char *aspect_ratio = obe_get_option( stream_opts[19], opts );
-            char *width = obe_get_option( stream_opts[20], opts );
-            char *max_refs = obe_get_option( stream_opts[21], opts );
+            char *action             = obe_get_option( stream_opts[0], opts );
+            char *format             = obe_get_option( stream_opts[1], opts );
+
+            /* Video encoding options*/
+            char *profile            = obe_get_option( stream_opts[2], opts );
+            char *level              = obe_get_option( stream_opts[3], opts );
+            char *preset_name        = obe_get_option( stream_opts[4], opts );
+            char *tuning_name        = obe_get_option( stream_opts[5], opts );
+            char *bitrate            = obe_get_option( stream_opts[6], opts );
+            char *vbv_maxrate        = obe_get_option( stream_opts[7], opts );
+            char *vbv_bufsize        = obe_get_option( stream_opts[8], opts );
+            char *min_keyint         = obe_get_option( stream_opts[9], opts );
+            char *keyint             = obe_get_option( stream_opts[10], opts );
+            char *bframes            = obe_get_option( stream_opts[11], opts );
+            char *badapt             = obe_get_option( stream_opts[12], opts );
+            char *bbias              = obe_get_option( stream_opts[13], opts );
+            char *b_pyramid          = obe_get_option( stream_opts[14], opts );
+            char *qp                 = obe_get_option( stream_opts[15], opts );
+            char *qpmin              = obe_get_option( stream_opts[16], opts );
+            char *qpmax              = obe_get_option( stream_opts[17], opts );
+            char *qpstep             = obe_get_option( stream_opts[18], opts );
+            char *qcomp              = obe_get_option( stream_opts[19], opts );
+            char *qblur              = obe_get_option( stream_opts[20], opts );
+            char *cplxblur           = obe_get_option( stream_opts[21], opts );
+            char *chroma_qp_offset   = obe_get_option( stream_opts[22], opts );
+            char *deblock            = obe_get_option( stream_opts[23], opts );
+            char *opt_mbtree         = obe_get_option( stream_opts[24], opts );
+            char *opt_fgo            = obe_get_option( stream_opts[25], opts );
+            char *ref                = obe_get_option( stream_opts[26], opts );
+            char *fade_compensate    = obe_get_option( stream_opts[27], opts );
+            char *ratetol            = obe_get_option( stream_opts[28], opts );
+            char *ipratio            = obe_get_option( stream_opts[29], opts );
+            char *pbratio            = obe_get_option( stream_opts[30], opts );
+            char *lookahead          = obe_get_option( stream_opts[31], opts );
+            char *sync_lookahead     = obe_get_option( stream_opts[32], opts );
+            char *aq_strength        = obe_get_option( stream_opts[33], opts );
+            char *aq_sensitivity     = obe_get_option( stream_opts[34], opts );
+            char *aq_ifactor         = obe_get_option( stream_opts[35], opts );
+            char *aq_pfactor         = obe_get_option( stream_opts[36], opts );
+            char *aq_bfactor         = obe_get_option( stream_opts[37], opts );
+            char *aq_mode            = obe_get_option( stream_opts[38], opts );
+            char *aq_bias_strength   = obe_get_option( stream_opts[39], opts );
+            char *aq2_strength       = obe_get_option( stream_opts[40], opts );
+            char *aq2_sensitivity    = obe_get_option( stream_opts[41], opts );
+            char *aq2_ifactor        = obe_get_option( stream_opts[42], opts );
+            char *aq2_pfactor        = obe_get_option( stream_opts[43], opts );
+            char *aq2_bfactor        = obe_get_option( stream_opts[44], opts );
+            char *aq3_strength       = obe_get_option( stream_opts[45], opts );
+            char *aq3_sensitivity    = obe_get_option( stream_opts[46], opts );
+            char *aq3_ifactor        = obe_get_option( stream_opts[47], opts ); //
+            char *aq3_pfactor        = obe_get_option( stream_opts[48], opts ); //
+            char *aq3_bfactor        = obe_get_option( stream_opts[49], opts ); //
+            char *aq3_mode           = obe_get_option( stream_opts[50], opts );
+            char *aq3_boundary       = obe_get_option( stream_opts[51], opts ); //
+            char *me                 = obe_get_option( stream_opts[52], opts );
+            char *merange            = obe_get_option( stream_opts[53], opts );
+            char *mvrange            = obe_get_option( stream_opts[54], opts );
+            char *mvrange_thread     = obe_get_option( stream_opts[55], opts );
+            char *subme              = obe_get_option( stream_opts[56], opts );
+            char *constrained_intra  = obe_get_option( stream_opts[57], opts );
+            char *intra_refresh      = obe_get_option( stream_opts[58], opts );
+            char *scenecut           = obe_get_option( stream_opts[59], opts );
+            char *psy                = obe_get_option( stream_opts[60], opts );
+            char *psy_rd             = obe_get_option( stream_opts[61], opts );
+            char *analyse            = obe_get_option( stream_opts[62], opts );
+            char *partitions         = obe_get_option( stream_opts[63], opts );
+            char *direct             = obe_get_option( stream_opts[64], opts );
+            char *weightb            = obe_get_option( stream_opts[65], opts );
+            char *weightp            = obe_get_option( stream_opts[66], opts );
+            char *mixed_refs         = obe_get_option( stream_opts[67], opts );
+            char *dct8x8             = obe_get_option( stream_opts[68], opts );
+            char *trellis            = obe_get_option( stream_opts[69], opts );
+            char *fast_pskip         = obe_get_option( stream_opts[70], opts );
+            /* 71 - 95 audio*/
+            char *threads            = obe_get_option( stream_opts[96], opts );
+            char *width              = obe_get_option( stream_opts[97], opts );
+            char *interlaced         = obe_get_option( stream_opts[98], opts );
+            char *tff                = obe_get_option( stream_opts[99], opts );
+            char *frame_packing      = obe_get_option( stream_opts[100], opts );
+            char *csp                = obe_get_option( stream_opts[101], opts );
+            char *filler             = obe_get_option( stream_opts[102], opts );
+            char *aspect_ratio       = obe_get_option( stream_opts[103], opts );
+            char *max_refs           = obe_get_option( stream_opts[104], opts );
 
             /* Audio Options */
-            char *sdi_audio_pair = obe_get_option( stream_opts[22], opts );
-            char *channel_map    = obe_get_option( stream_opts[23], opts );
-            char *mono_channel   = obe_get_option( stream_opts[24], opts );
+            char *sdi_audio_pair     = obe_get_option( stream_opts[71], opts );
+            char *channel_map        = obe_get_option( stream_opts[72], opts );
+            char *mono_channel       = obe_get_option( stream_opts[73], opts );
 
             /* AAC options */
-            char *aac_profile = obe_get_option( stream_opts[25], opts );
-            char *aac_encap   = obe_get_option( stream_opts[26], opts );
+            char *aac_profile        = obe_get_option( stream_opts[74], opts );
+            char *aac_encap          = obe_get_option( stream_opts[75], opts );
 
             /* MP2 options */
-            char *mp2_mode    = obe_get_option( stream_opts[27], opts );
-
-            /* Audio Gain Options. 0dB is effectively no gain adjustment. Eg 0dB, 3dB -4dB, etc*/
-            char *gain_db    = obe_get_option( stream_opts[48], opts );
+            char *mp2_mode           = obe_get_option( stream_opts[76], opts );
 
             /* NB: remap these and the ttx values below if more encoding options are added - TODO: split them up */
-            char *pid         = obe_get_option( stream_opts[28], opts );
-            char *lang        = obe_get_option( stream_opts[29], opts );
-            char *audio_type  = obe_get_option( stream_opts[30], opts );
+            char *pid                = obe_get_option( stream_opts[77], opts );
+            char *lang               = obe_get_option( stream_opts[78], opts );
+            char *audio_type         = obe_get_option( stream_opts[79], opts );
 
-            char *opencl  = obe_get_option( stream_opts[40], opts );
-            const char *preset_name  = obe_get_option( stream_opts[41], opts );
-            const char *entropy_mode = obe_get_option( stream_opts[42], opts );
-            const char *audio_offset = obe_get_option( stream_opts[43], opts );
-            const char *video_codec = obe_get_option( stream_opts[44], opts );
-            const char *tuning_name  = obe_get_option( stream_opts[45], opts );
-            const char *dialnorm  = obe_get_option( stream_opts[46], opts );
+            char *opencl             = obe_get_option( stream_opts[90], opts );
+            const char *entropy_mode = obe_get_option( stream_opts[91], opts );
+            const char *audio_offset = obe_get_option( stream_opts[92], opts );
+            const char *video_codec  = obe_get_option( stream_opts[93], opts );
+            const char *dialnorm     = obe_get_option( stream_opts[94], opts );
+
+            /* Audio Gain Options. 0dB is effectively no gain adjustment. Eg 0dB, 3dB -4dB, etc*/
+            char *gain_db            = obe_get_option( stream_opts[95], opts );
 
             int video_codec_id = 0; /* AVC */
             if (video_codec) {
@@ -922,13 +1074,19 @@ extern char g_video_encoder_tuning_name[64];
                 FAIL_IF_ERROR( profile && ( check_enum_value( profile, x264_profile_names ) < 0 ),
                                "Invalid AVC profile\n" );
 
+                FAIL_IF_ERROR( me && ( check_enum_value( me, x264_motion_est_names ) < 0 ),
+                               "Invalid ME value\n" );
+     
+                FAIL_IF_ERROR( direct && ( check_enum_value( direct, x264_direct_pred_names ) < 0 ),
+                               "Invalid direct value\n" );
+
                 FAIL_IF_ERROR( vbv_bufsize && system_type_value == OBE_SYSTEM_TYPE_LOWEST_LATENCY,
                                "VBV buffer size is not user-settable in lowest-latency mode\n" );
 
                 FAIL_IF_ERROR( frame_packing && ( check_enum_value( frame_packing, frame_packing_modes ) < 0 ),
                                "Invalid frame packing mode\n" )
 
-                if( aspect_ratio )
+                if ( aspect_ratio )
                 {
                     int ar_num, ar_den;
                     sscanf( aspect_ratio, "%d:%d", &ar_num, &ar_den );
@@ -943,7 +1101,7 @@ extern char g_video_encoder_tuning_name[64];
                     }
                 }
 
-                if( width )
+                if ( width )
                 {
                     int i_width = obe_otoi( width, avc_param->i_width );
                     while( allowed_resolutions[i][0] && ( allowed_resolutions[i][1] != avc_param->i_height ||
@@ -985,25 +1143,139 @@ extern char g_video_encoder_tuning_name[64];
                     cli.output_streams[output_stream_id].stream_format = VIDEO_HEVC_GPU_NVENC_AVCODEC;
                 }
 
-                avc_param->rc.i_vbv_max_bitrate = obe_otoi( vbv_maxrate, 0 );
+                avc_param->rc.i_vbv_max_bitrate       = obe_otoi( vbv_maxrate, 0 );
                 FAIL_IF_ERROR(avc_param->rc.i_vbv_max_bitrate < 0, "Invalid vbv_maxrate.\n" );
-                avc_param->rc.i_vbv_buffer_size = obe_otoi( vbv_bufsize, 0 );
+                avc_param->rc.i_vbv_buffer_size       = obe_otoi( vbv_bufsize, 0 );
                 FAIL_IF_ERROR(avc_param->rc.i_vbv_buffer_size < 0, "Invalid vbv_buffer_size.\n" );
-                avc_param->rc.i_bitrate         = obe_otoi( bitrate, 0 );
+                avc_param->rc.i_bitrate               = obe_otoi( bitrate, 0 );
                 FAIL_IF_ERROR(avc_param->rc.i_bitrate < 0, "Invalid bitrate.\n" );
-                avc_param->i_keyint_max        = obe_otoi( keyint, avc_param->i_keyint_max );
-                avc_param->rc.i_lookahead      = obe_otoi( lookahead, avc_param->rc.i_lookahead );
-                avc_param->i_threads           = obe_otoi( threads, avc_param->i_threads );
-                avc_param->i_bframe            = obe_otoi( bframes, avc_param->i_bframe );
-                avc_param->i_bframe_pyramid    = obe_otoi( b_pyramid, avc_param->i_bframe_pyramid );
-                avc_param->analyse.i_weighted_pred = obe_otoi( weightp, avc_param->analyse.i_weighted_pred );
-                avc_param->b_interlaced        = obe_otob( interlaced, avc_param->b_interlaced );
-                avc_param->b_tff               = obe_otob( tff, avc_param->b_tff );
-                avc_param->b_intra_refresh     = obe_otob( intra_refresh, avc_param->b_intra_refresh );
-                avc_param->i_frame_reference   = obe_otoi( max_refs, avc_param->i_frame_reference );
+
+                avc_param->rc.i_lookahead             = obe_otoi( lookahead, avc_param->rc.i_lookahead );
+                avc_param->i_sync_lookahead           = obe_otoi( sync_lookahead, avc_param->i_sync_lookahead );
+                avc_param->i_threads                  = obe_otoi( threads, avc_param->i_threads );
+
+                avc_param->i_bframe                   = obe_otoi( bframes, avc_param->i_bframe );
+                avc_param->i_bframe_pyramid           = obe_otoi( b_pyramid, avc_param->i_bframe_pyramid );
+                avc_param->i_bframe_adaptive          = obe_otoi( badapt, avc_param->i_bframe_adaptive );
+                avc_param->i_bframe_bias              = obe_otoi( bbias, avc_param->i_bframe_bias );
+
+                avc_param->i_keyint_min               = obe_otoi( min_keyint, avc_param->i_keyint_min );
+                avc_param->i_keyint_max               = obe_otoi( keyint, avc_param->i_keyint_max );
+                avc_param->i_frame_reference          = obe_otoi( max_refs, avc_param->i_frame_reference );
+                avc_param->i_scenecut_threshold       = obe_otoi( scenecut, avc_param->i_scenecut_threshold );
+
+                avc_param->analyse.i_weighted_pred    = obe_otoi( weightp, avc_param->analyse.i_weighted_pred );
+                avc_param->b_interlaced               = obe_otob( interlaced, avc_param->b_interlaced );
+                avc_param->b_tff                      = obe_otob( tff, avc_param->b_tff );
+                avc_param->b_intra_refresh            = obe_otob( intra_refresh, avc_param->b_intra_refresh );
+                avc_param->b_constrained_intra        = obe_otob( constrained_intra, avc_param->b_constrained_intra );
+
+                avc_param->rc.i_qp_constant           = obe_otoi( qp, avc_param->rc.i_qp_constant );
+                avc_param->rc.i_qp_min_min            = obe_otoi( qpmin, avc_param->rc.i_qp_min_min );
+                avc_param->rc.i_qp_max_max            = obe_otoi( qpmax, avc_param->rc.i_qp_max_max );
+                avc_param->rc.i_qp_step               = obe_otoi( qpstep, avc_param->rc.i_qp_step );
+                avc_param->rc.f_qcompress             = obe_otof( qcomp, avc_param->rc.f_qcompress );
+                avc_param->rc.f_qblur                 = obe_otof( qblur, avc_param->rc.f_qblur );
+                avc_param->rc.f_complexity_blur       = obe_otof( cplxblur, avc_param->rc.f_complexity_blur );
+                avc_param->rc.f_fade_compensate       = obe_otof( fade_compensate, avc_param->rc.f_fade_compensate );
+
+                avc_param->analyse.i_chroma_qp_offset = obe_otoi( chroma_qp_offset, avc_param->analyse.i_chroma_qp_offset );
+
+                avc_param->b_deblocking_filter        = obe_otob( deblock, avc_param->b_deblocking_filter );
+
+                if ( !!deblock ) {
+                    int i_deb_alp, i_deb_bet;
+                    sscanf( deblock, "%d:%d", &i_deb_alp, &i_deb_bet );
+
+                    avc_param->i_deblocking_filter_alphac0 = i_deb_alp;
+                    avc_param->i_deblocking_filter_beta = i_deb_bet;
+                }
+
+                avc_param->rc.b_mb_tree               = obe_otob( opt_mbtree, avc_param->rc.b_mb_tree);
+                avc_param->analyse.i_fgo              = obe_otoi( opt_fgo, avc_param->analyse.i_fgo);
+
+                avc_param->rc.f_rate_tolerance;
+                avc_param->rc.f_ip_factor;
+                avc_param->rc.f_pb_factor;
 
                 if( profile )
                     parse_enum_value( profile, x264_profile_names, &cli.avc_profile );
+
+
+                avc_param->analyse.inter = 0;
+
+                if ( !partitions)
+                    partitions = analyse;
+
+                if ( !!partitions ) {
+                    if( strstr( partitions, "none" ) )  avc_param->analyse.inter =  0;
+                    if( strstr( partitions, "all" ) )   avc_param->analyse.inter = ~0;
+
+                    if( strstr( partitions, "i4x4" ) )  avc_param->analyse.inter |= X264_ANALYSE_I4x4;
+                    if( strstr( partitions, "i8x8" ) )  avc_param->analyse.inter |= X264_ANALYSE_I8x8;
+                    if( strstr( partitions, "p8x8" ) )  avc_param->analyse.inter |= X264_ANALYSE_PSUB16x16;
+                    if( strstr( partitions, "p4x4" ) )  avc_param->analyse.inter |= X264_ANALYSE_PSUB8x8;
+                    if( strstr( partitions, "b8x8" ) )  avc_param->analyse.inter |= X264_ANALYSE_BSUB16x16;
+                }
+
+                avc_param->analyse.i_trellis          = obe_otoi( trellis, avc_param->analyse.i_trellis );
+
+                if( direct )
+                    parse_enum_value( direct, x264_direct_pred_names, &avc_param->analyse.i_direct_mv_pred );
+
+                avc_param->analyse.b_mixed_references = obe_otob( mixed_refs, avc_param->analyse.b_mixed_references );
+                avc_param->analyse.b_fast_pskip       = obe_otob( fast_pskip, avc_param->analyse.b_fast_pskip );
+                avc_param->analyse.b_transform_8x8    = obe_otob( dct8x8, avc_param->analyse.b_transform_8x8 );
+
+                avc_param->analyse.b_psy              = obe_otob( psy, avc_param->analyse.b_psy );
+
+                if ( !!psy ) {
+                    float f_psy_rd, f_psy_trellis;
+                    sscanf( psy, "%f:%f", &f_psy_rd, &f_psy_trellis );
+
+                    avc_param->analyse.f_psy_rd       = f_psy_rd;
+                    avc_param->analyse.f_psy_trellis  = f_psy_trellis;
+                }
+
+                if( me )
+                    parse_enum_value( me, x264_motion_est_names, &avc_param->analyse.i_me_method );
+
+                /* PSY AQ */
+                avc_param->rc.i_aq_mode                = obe_otoi( aq_mode, avc_param->rc.i_aq_mode );
+                avc_param->rc.f_aq_strength            = obe_otof( aq_strength, avc_param->rc.f_aq_strength );
+                avc_param->rc.f_aq_bias_strength       = obe_otof( aq_bias_strength, avc_param->rc.f_aq_bias_strength );
+                avc_param->rc.f_aq_sensitivity         = obe_otof( aq_sensitivity, avc_param->rc.f_aq_sensitivity );
+                avc_param->rc.f_aq_ifactor             = obe_otof( aq_ifactor, avc_param->rc.f_aq_ifactor );
+                avc_param->rc.f_aq_pfactor             = obe_otof( aq_pfactor, avc_param->rc.f_aq_pfactor );
+                avc_param->rc.f_aq_bfactor             = obe_otof( aq_bfactor, avc_param->rc.f_aq_bfactor );
+                
+                /* PSY AQ2 */
+                avc_param->rc.b_aq2                    = !!aq2_strength;
+                avc_param->rc.f_aq2_strength           = obe_otof( aq2_strength, avc_param->rc.f_aq2_strength );
+                avc_param->rc.f_aq2_sensitivity        = obe_otof( aq2_sensitivity, avc_param->rc.f_aq2_sensitivity );
+                avc_param->rc.f_aq2_ifactor            = obe_otof( aq2_ifactor, avc_param->rc.f_aq2_ifactor );
+                avc_param->rc.f_aq2_pfactor            = obe_otof( aq2_pfactor, avc_param->rc.f_aq2_pfactor );
+                avc_param->rc.f_aq2_bfactor            = obe_otof( aq2_bfactor, avc_param->rc.f_aq2_bfactor );
+
+                /* PSY AQ3 */
+                avc_param->rc.i_aq3_mode               = obe_otoi( aq3_mode, avc_param->rc.i_aq3_mode );
+                avc_param->rc.f_aq3_strength           = obe_otof( aq3_strength, avc_param->rc.f_aq3_strength );
+                // avc_param->rc.f_aq3_strengths          = obe_otof( , avc_param->rc.f_aq3_strengths );
+                avc_param->rc.f_aq3_sensitivity        = obe_otof( aq3_sensitivity, avc_param->rc.f_aq3_sensitivity );
+                // avc_param->rc.f_aq3_ifactor            = obe_otof( , avc_param->rc.f_aq3_ifactor );
+                // avc_param->rc.f_aq3_pfactor            = obe_otof( , avc_param->rc.f_aq3_pfactor );
+                // avc_param->rc.f_aq3_bfactor            = obe_otof( , avc_param->rc.f_aq3_bfactor );
+                // avc_param->rc.b_aq3_boundary           = obe_otob( , avc_param->rc.b_aq3_boundary );
+                // avc_param->rc.i_aq3_boundary           = obe_otoi( , avc_param->rc.i_aq3_boundary );
+                
+
+                if ( me )
+                    parse_enum_value( me, x264_motion_est_names, &avc_param->analyse.i_me_method );
+
+                avc_param->analyse.i_me_range          = obe_otoi( merange, avc_param->analyse.i_me_range );
+                avc_param->analyse.i_mv_range          = obe_otoi( mvrange, avc_param->analyse.i_mv_range );
+                avc_param->analyse.i_mv_range_thread   = obe_otoi( mvrange_thread, avc_param->analyse.i_mv_range );
+                avc_param->analyse.i_subpel_refine     = obe_otoi( subme, avc_param->analyse.i_subpel_refine );
 
 #if 0
 // VAAPI
@@ -1162,10 +1434,10 @@ extern char g_video_encoder_tuning_name[64];
                      output_stream->stream_format == VBI_RAW )
             {
                 /* NB: remap these if more encoding options are added - TODO: split them up */
-                char *ttx_lang = obe_get_option( stream_opts[32], opts );
-                char *ttx_type = obe_get_option( stream_opts[33], opts );
-                char *ttx_mag  = obe_get_option( stream_opts[34], opts );
-                char *ttx_page = obe_get_option( stream_opts[35], opts );
+                char *ttx_lang = obe_get_option( stream_opts[81], opts );
+                char *ttx_type = obe_get_option( stream_opts[82], opts );
+                char *ttx_mag  = obe_get_option( stream_opts[83], opts );
+                char *ttx_page = obe_get_option( stream_opts[84], opts );
 
                 FAIL_IF_ERROR( ttx_type && ( check_enum_value( ttx_type, teletext_types ) < 0 ),
                                "Invalid Teletext type\n" );
@@ -1194,10 +1466,10 @@ extern char g_video_encoder_tuning_name[64];
                 if( output_stream->stream_format == VBI_RAW )
                 {
                     obe_dvb_vbi_opts_t *vbi_opts = &cli.output_streams[output_stream_id].dvb_vbi_opts;
-                    char *vbi_ttx = obe_get_option( stream_opts[36], opts );
-                    char *vbi_inv_ttx = obe_get_option( stream_opts[37], opts );
-                    char *vbi_vps  = obe_get_option( stream_opts[38], opts );
-                    char *vbi_wss = obe_get_option( stream_opts[39], opts );
+                    char *vbi_ttx = obe_get_option( stream_opts[86], opts );
+                    char *vbi_inv_ttx = obe_get_option( stream_opts[87], opts );
+                    char *vbi_vps  = obe_get_option( stream_opts[88], opts );
+                    char *vbi_wss = obe_get_option( stream_opts[89], opts );
 
                     vbi_opts->ttx = obe_otob( vbi_ttx, vbi_opts->ttx );
                     vbi_opts->inverted_ttx = obe_otob( vbi_inv_ttx, vbi_opts->inverted_ttx );
@@ -1208,11 +1480,11 @@ extern char g_video_encoder_tuning_name[64];
             else if (output_stream->stream_format == SMPTE2031)
             {
                 /* NB: remap these if more encoding options are added - TODO: split them up */
-                char *ttx_lang = obe_get_option( stream_opts[32], opts );
-                char *ttx_type = obe_get_option( stream_opts[33], opts );
-                char *ttx_mag  = obe_get_option( stream_opts[34], opts );
-                char *ttx_page = obe_get_option( stream_opts[35], opts );
-                char *ttx_reverse = obe_get_option( stream_opts[47], opts );
+                char *ttx_lang = obe_get_option( stream_opts[81], opts );
+                char *ttx_type = obe_get_option( stream_opts[82], opts );
+                char *ttx_mag  = obe_get_option( stream_opts[83], opts );
+                char *ttx_page = obe_get_option( stream_opts[84], opts );
+                char *ttx_reverse = obe_get_option( stream_opts[85], opts );
 
                 FAIL_IF_ERROR(ttx_type && (check_enum_value(ttx_type, teletext_types) < 0 ),
                                "Invalid Teletext type\n" );
