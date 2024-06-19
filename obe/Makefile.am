@@ -12,8 +12,8 @@ BLACKMAGIC_SDK_PATH = $(top_srcdir)/include/decklink-sdk
 # This will be ignored if libklmonitoring is not installed in the system.
 #HISTOGRAMS = -DPRINT_HISTOGRAMS=1
 
-CFLAGS += -g -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFSET_BITS=64 -O3 \
-	-D_BSD_SOURCE $(HISTOGRAMS) \
+CFLAGS += -g -Wall -Wno-unused-result -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" -D_FILE_OFFSET_BITS=64 -O3 \
+	-D_DEFAULT_SOURCE $(HISTOGRAMS) \
 	-I$(BLACKMAGIC_SDK_PATH) \
 	-I$(top_srcdir) \
 	-DKL_USERSPACE -D__STDC_FORMAT_MACROS \
@@ -51,7 +51,7 @@ endif
 if DEKTECLIB
 LDFLAGS += /storage/dev/obe-build-environment-v3.4.0/dektecsdk/2019.11.0/DTAPI/Lib/GCC4.8_CXX11_ABI0/DTAPI64.o
 endif
-CXXFLAGS = $(CFLAGS) -std=c++11
+CXXFLAGS = $(CFLAGS) -std=c++17
 
 bin_PROGRAMS  = obecli
 
