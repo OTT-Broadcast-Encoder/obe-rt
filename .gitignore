@@ -65,3 +65,4 @@ obe/Makefile
 obe/Makefile.in
 obe/obecli
 obe/*.cfg
+.vscode/sftp.json
