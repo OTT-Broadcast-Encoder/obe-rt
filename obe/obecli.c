@@ -1165,6 +1165,7 @@ extern char g_video_encoder_tuning_name[64];
                 avc_param->i_scenecut_threshold       = obe_otoi( scenecut, avc_param->i_scenecut_threshold );
 
                 avc_param->analyse.i_weighted_pred    = obe_otoi( weightp, avc_param->analyse.i_weighted_pred );
+                avc_param->analyse.b_weighted_bipred  = obe_otob( weightb, avc_param->analyse.b_weighted_bipred );
                 avc_param->b_interlaced               = obe_otob( interlaced, avc_param->b_interlaced );
                 avc_param->b_tff                      = obe_otob( tff, avc_param->b_tff );
                 avc_param->b_intra_refresh            = obe_otob( intra_refresh, avc_param->b_intra_refresh );
@@ -1194,9 +1195,9 @@ extern char g_video_encoder_tuning_name[64];
                 avc_param->rc.b_mb_tree               = obe_otob( opt_mbtree, avc_param->rc.b_mb_tree);
                 avc_param->analyse.i_fgo              = obe_otoi( opt_fgo, avc_param->analyse.i_fgo);
 
-                avc_param->rc.f_rate_tolerance;
-                avc_param->rc.f_ip_factor;
-                avc_param->rc.f_pb_factor;
+                avc_param->rc.f_rate_tolerance        = obe_otof( ratetol, avc_param->rc.f_rate_tolerance );
+                avc_param->rc.f_ip_factor             = obe_otof( ipratio, avc_param->rc.f_ip_factor );
+                avc_param->rc.f_pb_factor             = obe_otof( pbratio, avc_param->rc.f_pb_factor );
 
                 if( profile )
                     parse_enum_value( profile, x264_profile_names, &cli.avc_profile );
@@ -1231,7 +1232,7 @@ extern char g_video_encoder_tuning_name[64];
 
                 if ( !!psy ) {
                     float f_psy_rd, f_psy_trellis;
-                    sscanf( psy, "%f:%f", &f_psy_rd, &f_psy_trellis );
+                    sscanf( psy_rd, "%f:%f", &f_psy_rd, &f_psy_trellis );
 
                     avc_param->analyse.f_psy_rd       = f_psy_rd;
                     avc_param->analyse.f_psy_trellis  = f_psy_trellis;
