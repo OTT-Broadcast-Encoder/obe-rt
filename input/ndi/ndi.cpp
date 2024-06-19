@@ -773,7 +773,7 @@ static int open_device(ndi_opts_t *opts)
 	printf(MODULE_PREFIX "Using NDI discovery configuration directory '%s'\n", cfgdir);
 
 	/* Check if the ndi file exists, if not throw an informational warning */
-	char cfgname[256];
+	char cfgname[512];
 	sprintf(cfgname, "%s/ndi-config.v1.json", cfgdir);
 	printf(MODULE_PREFIX "Using NDI discovery configuration absolute filename '%s'\n", cfgname);
 	FILE *fh = fopen(cfgname, "rb");

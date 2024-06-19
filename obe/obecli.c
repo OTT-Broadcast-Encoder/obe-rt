@@ -884,7 +884,7 @@ static int set_stream( char *command, obecli_command_t *child )
             char *deblock            = obe_get_option( stream_opts[23], opts );
             char *opt_mbtree         = obe_get_option( stream_opts[24], opts );
             char *opt_fgo            = obe_get_option( stream_opts[25], opts );
-            char *ref                = obe_get_option( stream_opts[26], opts );
+            // char *ref                = obe_get_option( stream_opts[26], opts ); //
             char *fade_compensate    = obe_get_option( stream_opts[27], opts );
             char *ratetol            = obe_get_option( stream_opts[28], opts );
             char *ipratio            = obe_get_option( stream_opts[29], opts );
@@ -905,11 +905,11 @@ static int set_stream( char *command, obecli_command_t *child )
             char *aq2_bfactor        = obe_get_option( stream_opts[44], opts );
             char *aq3_strength       = obe_get_option( stream_opts[45], opts );
             char *aq3_sensitivity    = obe_get_option( stream_opts[46], opts );
-            char *aq3_ifactor        = obe_get_option( stream_opts[47], opts ); //
-            char *aq3_pfactor        = obe_get_option( stream_opts[48], opts ); //
-            char *aq3_bfactor        = obe_get_option( stream_opts[49], opts ); //
+            // char *aq3_ifactor        = obe_get_option( stream_opts[47], opts ); //
+            // char *aq3_pfactor        = obe_get_option( stream_opts[48], opts ); //
+            // char *aq3_bfactor        = obe_get_option( stream_opts[49], opts ); //
             char *aq3_mode           = obe_get_option( stream_opts[50], opts );
-            char *aq3_boundary       = obe_get_option( stream_opts[51], opts ); //
+            // char *aq3_boundary       = obe_get_option( stream_opts[51], opts ); //
             char *me                 = obe_get_option( stream_opts[52], opts );
             char *merange            = obe_get_option( stream_opts[53], opts );
             char *mvrange            = obe_get_option( stream_opts[54], opts );
@@ -1595,10 +1595,12 @@ static int set_muxer( char *command, obecli_command_t *child )
                 printf("sPID 0x%04x\n", pidnr);
                 cli.h->enable_scte35 = 1;
             } else {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
                 cli.h->enable_scte35 = 0;
                 char arg[255] = { 0 };
                 strncpy(arg, scte35_pid, sizeof(arg));
-
+#pragma GCC diagnostic pop
                 int index = 0;
 
                 char *save;
@@ -2713,7 +2715,7 @@ static int start_encode( char *command, obecli_command_t *child )
             }
             scte_index++;
         }
-
+ 
         if( input_stream && input_stream->stream_type == STREAM_TYPE_VIDEO )
         {
             /* x264 calculates the single-frame VBV size later on */
@@ -3161,6 +3163,8 @@ int main( int argc, char **argv )
 
     _usage(argv[0], 0);
 
+    int line_read_len = 1024;
+
     while (1) {
         if (line_read) {
             free(line_read);
@@ -3169,7 +3173,7 @@ int main( int argc, char **argv )
 
 
         if (script && !scriptInitialized) {
-            line_read = malloc(256);
+            line_read = malloc(line_read_len);
             if (!line_read) {
                 fprintf(stderr, "Unable to allocate ram for script command, aborting.\n");
                 break;
@@ -3191,10 +3195,10 @@ int main( int argc, char **argv )
                     break;
 	} else
 	if (line_read && line_read[0] == '@' && strlen(line_read) > 1) {
-            line_read = realloc(line_read, 256);
+            line_read = realloc(line_read, line_read_len);
             FILE *fh = fopen(&line_read[1], "r");
             while (fh && !feof(fh)) {
-                if (fgets(line_read, 256, fh) == NULL)
+                if (fgets(line_read, line_read_len, fh) == NULL)
                     break;
                 if (feof(fh))
                     break;

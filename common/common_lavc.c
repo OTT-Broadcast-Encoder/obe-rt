@@ -37,7 +37,10 @@ int obe_get_buffer2(AVCodecContext *codec, AVFrame *pic, int flags)
 	int h = codec->height;
 	int stride[4];
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
 	avcodec_align_dimensions2(codec, &w, &h, stride);
+#pragma GCC diagnostic pop
 
 	pic->linesize[0] = w * 2;
 	pic->linesize[1] = pic->linesize[0] / 4;

@@ -2422,11 +2422,11 @@ static int cb_SDP(void *callback_context, struct klvanc_context_s *ctx, struct k
         }
 
 	int N_units = 0; /* See EN301755 or EN300472 Section 4.2 */
-        for (int j = 0; j < 5; j++) {
+    for (int j = 0; j < 5; j++) {
 
-            /* Skip any illegal / undefined lines */
-            if (pkt->descriptors[j].line == 0)
-                continue;
+        /* Skip any illegal / undefined lines */
+        if (pkt->descriptors[j].line == 0)
+            continue;
 
 		N_units++;
 	}

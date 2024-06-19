@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.68])
 AC_INIT([obe], [1.5], [stoth@kernellabs.com])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 AM_SILENT_RULES([yes])
