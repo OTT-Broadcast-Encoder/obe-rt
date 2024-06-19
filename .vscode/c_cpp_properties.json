@@ -4,18 +4,27 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "E:/Cache/Repositories/OTT-Broadcast/x264"
+                "E:/Cache/Repositories/vapoursynth/include",
+                "E:/Cache/Repositories/OTT-Broadcast/obe-rt-build/target-root/usr/local/include",
+                "E:/Cache/Repositories/OTT-Broadcast/obe-rt-build/blackmagic-sdk/10.8.5/Linux",
+                "C:/Programs/Compilers/cygwin64/usr/include"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "DO_VAPOURSYNTH_VF",
+                "GIT_VERSION=\"VER\"",
+                "VERSION_MAJOR=1",
+                "VERSION_MINOR=0",
+                "VERSION_PATCH=0",
+                "DEV_ABR=1"
             ],
             "windowsSdkVersion": "10.0.22621.0",
-            "compilerPath": "cl.exe",
+            "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",
             "cStandard": "c17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64"
+            "intelliSenseMode": "${default}"
         }
     ],
     "version": 4
