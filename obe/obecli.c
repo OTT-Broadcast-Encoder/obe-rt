@@ -681,7 +681,7 @@ static int set_obe( char *command, obecli_command_t *child )
         char *max_probe_time  = obe_get_option(system_opts[1], opts);
         if (max_probe_time) {
             cli.h->probe_time_seconds = atoi(max_probe_time);
-            if ((cli.h->probe_time_seconds < 5) || (cli.h->probe_time_seconds > MAX_PROBE_TIME)) {
+            if ((cli.h->probe_time_seconds < MIN_PROBE_TIME) || (cli.h->probe_time_seconds > MAX_PROBE_TIME)) {
                 printf("%s valid values are %d to %d, defaulting to %d\n",
                     system_opts[1], MIN_PROBE_TIME, MAX_PROBE_TIME, MAX_PROBE_TIME);
                 cli.h->probe_time_seconds = MAX_PROBE_TIME;
