@@ -33,68 +33,13 @@
 
 #include <histogram.h>
 
-#if DEV_ABR
-#include "obe/osd.h"
-#endif
-
 #define MESSAGE_PREFIX "[x264]: "
 #define DEBUG_CODEC_TIMING 0
 
 int64_t cpb_removal_time = 0;
 int64_t g_x264_monitor_bps = 0;
+
 int g_x264_nal_debug = 0;
-
-#if DEV_DOWN_UP
-#include <libavutil/pixfmt.h>
-#include <libswscale/swscale.h>
-
-struct SwsContext *g_sws_ctx = NULL;
-void x264_picture_scaleByN(
-	x264_picture_t **out, int outwidth, int outheight,
-	x264_picture_t *in,   int  inwidth, int  inheight)
-{
-	if (g_sws_ctx == NULL) {
-		/* create scaling context */
-		g_sws_ctx = sws_getContext(inwidth, inheight, AV_PIX_FMT_YUV420P,
-			outwidth, outheight, AV_PIX_FMT_YUV420P,
-			SWS_BILINEAR, NULL, NULL, NULL);
-	}
-
-	x264_picture_t *p = calloc(1, sizeof(*p));
-	int ret = x264_picture_alloc(p, in->img.i_csp, outwidth, outheight);
-#if 0
-printf(" in->i_stride[0] %d\n", in->img.i_stride[0]);
-printf("out->i_stride[0] %d\n", p->img.i_stride[0]);
-#endif
-
-	const uint8_t *srcPlanes[4]  = { in->img.plane[0],    in->img.plane[1],    in->img.plane[2],    NULL };
-	int            srcStrides[4] = { in->img.i_stride[0], in->img.i_stride[1], in->img.i_stride[2], 0    };
-	uint8_t       *dstPlanes[4]  = { p->img.plane[0],     p->img.plane[1],     p->img.plane[2],     NULL };
-	int            dstStrides[4] = { p->img.i_stride[0],  p->img.i_stride[1],  p->img.i_stride[2],  0    };
-
-	/* convert to destination format */
-	ret = sws_scale(g_sws_ctx,
-		&srcPlanes[0],
-		&srcStrides[0],
-		0,
-		inheight,
-		&dstPlanes[0],
-		&dstStrides[0]);
-	if (ret != outheight) {
-		fprintf(stderr, MESSAGE_PREFIX "Warning: scaleByN error\n");
-	}
-
-#if 0
-	printf("Scale done %dx%d -> %dx%d, ret = %d\n",
-		inwidth, inheight, outwidth, outheight, ret);
-#endif
-
-	p->opaque = in->opaque;
-	*out = p;
-}
-#endif
-
-#if DEV_ABR
 int g_x264_encode_alternate = 0;
 int g_x264_encode_alternate_new = 0;
 int g_x264_bitrate_bps = 0;
@@ -105,7 +50,6 @@ int g_x264_keyint_max = 0;
 int g_x264_keyint_max_new = 0;
 int g_x264_lookahead = 0;
 int g_x264_lookahead_new = 0;
-#endif
 
 #define SERIALIZE_CODED_FRAMES 0
 #if SERIALIZE_CODED_FRAMES
@@ -148,10 +92,8 @@ static int convert_obe_to_x264_pic( x264_picture_t *pic, obe_raw_frame_t *raw_fr
 PRINT_OBE_IMAGE(img, "      X264->img");
 PRINT_OBE_IMAGE(&raw_frame->alloc_img, "alloc X264->img");
 #endif
-#if DEV_ABR
-#else
+
     int idx = 0, count = 0;
-#endif
 
     x264_picture_init( pic );
 
@@ -171,9 +113,7 @@ printf("pic->img.i_csp = %d [%s] bits = %d\n",
   X264_BIT_DEPTH);
 #endif
 
-#if DEV_ABR
-    /* TODO: Some kind of leak or double free. fix me for abr. */
-#else
+
     if( X264_BIT_DEPTH == 10 )
         pic->img.i_csp |= X264_CSP_HIGH_DEPTH;
 
@@ -258,7 +198,6 @@ printf("pic->img.i_csp = %d [%s] bits = %d\n",
          * will be filled when the frame exists the compressor. */
         framecount++;
     }
-#endif
 
     return 0;
 }
@@ -423,9 +362,6 @@ static void *x264_start_encoder( void *ptr )
     obe_encoder_t *encoder = enc_params->encoder;
     x264_t *s = NULL;
     x264_picture_t pic, pic_out;
-#if DEV_ABR
-    x264_picture_t *pic_copy = NULL;
-#endif
     x264_nal_t *nal;
     int i_nal, frame_size = 0;
     int64_t pts = 0, arrival_time = 0, frame_duration, buffer_duration;
@@ -436,14 +372,7 @@ static void *x264_start_encoder( void *ptr )
     int64_t last_raw_frame_pts = 0;
     int64_t current_raw_frame_pts = 0;
     int upstream_signal_lost = 0;
-#if DEV_ABR
-    int encode_alternate_copy = 0;
-#endif
 
-#if DEV_ABR
-    struct vc8x0_display_context osdctx;
-    vc8x0_display_init(&osdctx);
-#endif
     /* TODO: check for width, height changes */
 
     /* Lock the mutex until we verify and fetch new parameters */
@@ -719,66 +648,64 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
         }
 #endif
 
-#if DEV_ABR
-	if (g_x264_lookahead_new) {
-		g_x264_lookahead_new = 0;
+        if (g_x264_lookahead_new) {
+            g_x264_lookahead_new = 0;
 
-		enc_params->avc_param.rc.i_lookahead = g_x264_lookahead;
+            enc_params->avc_param.rc.i_lookahead = g_x264_lookahead;
 
-		printf(MESSAGE_PREFIX "Adjusting codec with new lookahead %d\n",
-			enc_params->avc_param.rc.i_lookahead);
+            printf(MESSAGE_PREFIX "Adjusting codec with new lookahead %d\n",
+                enc_params->avc_param.rc.i_lookahead);
 
-		int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
-		if (ret < 0) {
-			fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
-			exit(1);
-		}
-	}
-	if (g_x264_keyint_min_new) {
-		g_x264_keyint_min_new = 0;
+            int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
+            if (ret < 0) {
+                fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
+                exit(1);
+            }
+        }
+        if (g_x264_keyint_min_new) {
+            g_x264_keyint_min_new = 0;
 
-		enc_params->avc_param.i_keyint_min = g_x264_keyint_min;
+            enc_params->avc_param.i_keyint_min = g_x264_keyint_min;
 
-		printf(MESSAGE_PREFIX "Adjusting codec with new keyint_min gop %d\n",
-			enc_params->avc_param.i_keyint_min);
+            printf(MESSAGE_PREFIX "Adjusting codec with new keyint_min gop %d\n",
+                enc_params->avc_param.i_keyint_min);
 
-		int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
-		if (ret < 0) {
-			fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
-			exit(1);
-		}
-	}
-	if (g_x264_keyint_max_new) {
-		g_x264_keyint_max_new = 0;
+            int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
+            if (ret < 0) {
+                fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
+                exit(1);
+            }
+        }
+        if (g_x264_keyint_max_new) {
+            g_x264_keyint_max_new = 0;
 
-		enc_params->avc_param.i_keyint_max = g_x264_keyint_max;
+            enc_params->avc_param.i_keyint_max = g_x264_keyint_max;
 
-		printf(MESSAGE_PREFIX "Adjusting codec with new keyint_max gop %d\n",
-			enc_params->avc_param.i_keyint_max);
+            printf(MESSAGE_PREFIX "Adjusting codec with new keyint_max gop %d\n",
+                enc_params->avc_param.i_keyint_max);
 
-		int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
-		if (ret < 0) {
-			fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
-			exit(1);
-		}
-	}
-	if (g_x264_bitrate_bps_new) {
-		g_x264_bitrate_bps_new = 0;
+            int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
+            if (ret < 0) {
+                fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
+                exit(1);
+            }
+        }
+        if (g_x264_bitrate_bps_new) {
+            g_x264_bitrate_bps_new = 0;
 
-		enc_params->avc_param.rc.i_bitrate = g_x264_bitrate_bps / 1000;
-		enc_params->avc_param.rc.i_vbv_max_bitrate = enc_params->avc_param.rc.i_bitrate;
+            enc_params->avc_param.rc.i_bitrate = g_x264_bitrate_bps / 1000;
+            enc_params->avc_param.rc.i_vbv_max_bitrate = enc_params->avc_param.rc.i_bitrate;
 
-		printf(MESSAGE_PREFIX "Adjusting codec with new bitrate %dkbps, vbvmax %d\n",
-			enc_params->avc_param.rc.i_bitrate,
-			enc_params->avc_param.rc.i_vbv_max_bitrate);
+            printf(MESSAGE_PREFIX "Adjusting codec with new bitrate %dkbps, vbvmax %d\n",
+                enc_params->avc_param.rc.i_bitrate,
+                enc_params->avc_param.rc.i_vbv_max_bitrate);
 
-		int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
-		if (ret < 0) {
-			fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
-			exit(1);
-		}
-	}
-#endif
+            int ret = x264_encoder_reconfig(s, &enc_params->avc_param);
+            if (ret < 0) {
+                fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
+                exit(1);
+            }
+        }
         /* convert obe_frame_t into x264 friendly struct */
         if( convert_obe_to_x264_pic( &pic, raw_frame ) < 0 )
         {
@@ -874,86 +801,6 @@ printf("param.rc.i_vbv_buffer_size = %d\n", param.rc.i_vbv_buffer_size);
         cached = x264_picture_copy(&pic);
 #endif
 
-#if DEV_ABR
-        vc8x0_display_render_reset(&osdctx, pic.img.plane[0], pic.img.i_stride[0], pic.img.i_stride[0]);
-
-        char line[80];
-        int linepos = 0;
-        sprintf(line, "bitrate: %d", enc_params->avc_param.rc.i_bitrate);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "vbv_max_bitrate: %d", enc_params->avc_param.rc.i_vbv_max_bitrate);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "vbv_buf_size: %d", enc_params->avc_param.rc.i_vbv_buffer_size);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "keyint_min: %d", enc_params->avc_param.i_keyint_min);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "keyint_max: %d", enc_params->avc_param.i_keyint_max);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "lookahead: %d", enc_params->avc_param.rc.i_lookahead);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-        sprintf(line, "alterate encoding: %d", g_x264_encode_alternate);
-        vc8x0_display_render_string(&osdctx, line, strlen(line), 0, linepos++);
-
-#endif
-
-#if DEV_DOWN_UP
-	if (g_x264_encode_alternate_new == 1) {
-		g_x264_encode_alternate_new = 0;
-		encode_alternate_copy = 0;
-		printf("Resetting encode_alternate_copy to 0\n");
-	}
-	if (g_x264_encode_alternate) {
-		if (encode_alternate_copy == 0) {
-			/* Free the cached frame, copy the current frame, encode the current frame. */
-			if (pic_copy)
-				x264_picture_free(pic_copy);
-			pic_copy = x264_picture_copy(&pic);
-        		frame_size = x264_encoder_encode(s, &nal, &i_nal, &pic, &pic_out );
-			encode_alternate_copy = 1;
-		} else
-		if (encode_alternate_copy == 1) {
-			/* Encode the previous frame, with some minor metadata updates. */
-        		pic_copy->i_pts = pic.i_pts;
-			pic_copy->opaque = pic.opaque;
-        		frame_size = x264_encoder_encode(s, &nal, &i_nal, pic_copy, &pic_out);
-			encode_alternate_copy = 2;
-		} else
-		if (encode_alternate_copy == 2) {
-			/* Encode the previous frame, with some minor metadata updates. */
-        		pic_copy->i_pts = pic.i_pts;
-			pic_copy->opaque = pic.opaque;
-        		frame_size = x264_encoder_encode(s, &nal, &i_nal, pic_copy, &pic_out);
-			encode_alternate_copy = 3;
-		} else {
-			/* Encode the previous frame, with some minor metadata updates. */
-        		pic_copy->i_pts = pic.i_pts;
-			pic_copy->opaque = pic.opaque;
-        		frame_size = x264_encoder_encode(s, &nal, &i_nal, pic_copy, &pic_out);
-			x264_picture_free(pic_copy);
-			pic_copy = NULL;
-			encode_alternate_copy = 0;
-		}
-	} else {
-                x264_picture_t *down = NULL, *up = NULL;
-                int scaleby = 2; /* Half resolution. */
-
-                x264_picture_scaleByN(&down, raw_frame->img.width / scaleby, raw_frame->img.height / scaleby,
-                                      &pic, raw_frame->img.width, raw_frame->img.height);
-                x264_picture_scaleByN(&up, raw_frame->img.width, raw_frame->img.height,
-                                      down, raw_frame->img.width / scaleby, raw_frame->img.height / scaleby);
-
-                frame_size = x264_encoder_encode(s, &nal, &i_nal, up, &pic_out);
-
-                x264_picture_free(down);
-                x264_picture_free(up);
-	}
-#else
 struct timeval begin, end, diff;
 gettimeofday(&begin, NULL);
         frame_size = x264_encoder_encode( s, &nal, &i_nal, &pic, &pic_out );
@@ -971,7 +818,6 @@ printf("frame_size = %7d pic_type %d (%s) time %6d keyframe %d qp %d\n", frame_s
   pic_out.i_type == X264_TYPE_BREF ? "BREF " :
   "UNKNO",
   us, pic_out.b_keyframe, pic_out.i_qpplus1);
-#endif
 #endif
 
         if (g_sei_timestamping) {

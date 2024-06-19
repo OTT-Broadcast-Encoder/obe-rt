@@ -1712,15 +1712,12 @@ extern int g_x265_monitor_bps;
 extern int g_x265_nal_debug;
 extern int g_x265_min_qp;
 extern int g_x265_min_qp_new;
-#if DEV_ABR
 extern int g_x265_bitrate_bps;
 extern int g_x265_bitrate_bps_new;
-#endif
 
 /* x264 */
 extern int g_x264_monitor_bps;
 extern int g_x264_nal_debug;
-#if DEV_ABR
 extern int g_x264_encode_alternate;
 extern int g_x264_encode_alternate_new;
 extern int g_x264_bitrate_bps;
@@ -1731,7 +1728,6 @@ extern int g_x264_keyint_max;
 extern int g_x264_keyint_max_new;
 extern int g_x264_lookahead;
 extern int g_x264_lookahead_new;
-#endif
 
 /* LAVC */
 extern int g_audio_cf_debug;
@@ -1853,13 +1849,11 @@ extern time_t g_decklink_missing_video_last_time;
         g_x264_nal_debug,
         g_x264_nal_debug == 0 ? "disabled" : "enabled");
 
-#if DEV_ABR
     printf("codec.x264.bitrate = %d (bps)\n", g_x264_bitrate_bps);
     printf("codec.x264.keyint_min = %d\n", g_x264_keyint_min);
     printf("codec.x264.keyint_max = %d\n", g_x264_keyint_max);
     printf("codec.x264.lookahead = %d\n", g_x264_lookahead);
     printf("codec.x264.encode_alternate = %d\n", g_x264_encode_alternate);
-#endif
 
     printf("codec.audio.mp2.force_pmt_type_11172 = %d [%s]\n",
         g_mux_audio_mp2_force_pmt_11172,
@@ -1869,9 +1863,7 @@ extern time_t g_decklink_missing_video_last_time;
         g_audio_cf_debug == 0 ? "disabled" : "enabled");
 
     printf("codec.x265.qpmin = %d\n", g_x265_min_qp);
-#if DEV_ABR
     printf("codec.x265.bitrate = %d (bps)\n", g_x265_bitrate_bps);
-#endif
 
     printf("video_encoder.last_pts = %" PRIi64 "\n", cpb_removal_time);
     printf("v - a                  = %" PRIi64 "  %" PRIi64 "(ms)\n", cpb_removal_time - cur_pts,
@@ -2098,7 +2090,6 @@ static int set_variable(char *command, obecli_command_t *child)
     if (strcasecmp(var, "codec.x264.nal_debug") == 0) {
         g_x264_nal_debug = val;
     } else
-#if DEV_ABR
     if (strcasecmp(var, "codec.x264.bitrate") == 0) {
         g_x264_bitrate_bps = val;
         g_x264_bitrate_bps_new = 1;
@@ -2119,7 +2110,6 @@ static int set_variable(char *command, obecli_command_t *child)
         g_x264_encode_alternate = val;
         g_x264_encode_alternate_new = 1;
     } else
-#endif
     if (strcasecmp(var, "codec.audio.mp2.force_pmt_type_11172") == 0) {
         g_mux_audio_mp2_force_pmt_11172 = val;
     } else
@@ -2133,12 +2123,10 @@ static int set_variable(char *command, obecli_command_t *child)
         g_x265_min_qp = val;
         g_x265_min_qp_new = 1;
     } else
-#if DEV_ABR
     if (strcasecmp(var, "codec.x265.bitrate") == 0) {
         g_x265_bitrate_bps = val;
         g_x265_bitrate_bps_new = 1;
     } else
-#endif
     if (strcasecmp(var, "udp_output.transport_payload_size") == 0) {
         obe_core_set_payload_size(val);
     } else
