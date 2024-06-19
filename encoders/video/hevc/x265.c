@@ -1097,7 +1097,7 @@ static void *x265_start_encoder( void *ptr )
 printf("Restarting codec with new bitrate %dkbps, vbvmax %d\n", ctx->enc_params->avc_param.rc.i_bitrate, ctx->enc_params->avc_param.rc.i_vbv_max_bitrate);
 					ret = rapid_reconfigure_encoder(ctx);
 					if (ret < 0) {
-						fprintf(stderr, MESSAGE_PREFIX " failed to reconfigre encoder.\n");
+						fprintf(stderr, MESSAGE_PREFIX " failed to reconfigure encoder.\n");
 						exit(1);
 					}
 				}
