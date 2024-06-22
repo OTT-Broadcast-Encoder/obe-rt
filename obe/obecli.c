@@ -1051,11 +1051,11 @@ extern char g_video_encoder_preset_name[64];
                 if (preset_name) {
                     strcpy(g_video_encoder_preset_name, preset_name);
                     obe_populate_avc_encoder_params(cli.h,  input_stream->input_stream_id
-			/* cli.program.streams[i].input_stream_id */, avc_param, preset_name);
+			/* cli.program.streams[i].input_stream_id */, avc_param, preset_name, tuning_name);
                 } else {
                     sprintf(g_video_encoder_preset_name, "very-fast");
                     obe_populate_avc_encoder_params(cli.h, input_stream->input_stream_id
-			/* cli.program.streams[i].input_stream_id */, avc_param, "veryfast");
+			/* cli.program.streams[i].input_stream_id */, avc_param, "veryfast", tuning_name);
                 }
 
 extern char g_video_encoder_tuning_name[64];

@@ -952,7 +952,7 @@ fail:
     return -1;
 }
 
-int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t *param, const char *preset_name)
+int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t *param, const char *preset_name, const char *tuning_name)
 {
     obe_int_input_stream_t *stream = get_input_stream( h, input_stream_id );
     if( !stream )
@@ -976,7 +976,9 @@ int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t
     if( h->obe_system == OBE_SYSTEM_TYPE_LOWEST_LATENCY || h->obe_system == OBE_SYSTEM_TYPE_LOW_LATENCY ) {
         x264_param_default_preset(param, preset_name, "zerolatency");
         // printf("Using x264 preset: %s\n", stream->preset_name);
-    } else
+    } else if (tuning_name)
+        x264_param_default_preset(param, preset_name, tuning_name);
+    else
         x264_param_default( param );
 
     param->b_deterministic = 0;
