@@ -893,10 +893,10 @@ static void *start_filter_video( void *ptr )
         }
 
 #if DO_CRYSTAL_FP
-	filter_analyze_fp_process(fp_ctx, raw_frame);
+	    filter_analyze_fp_process(fp_ctx, raw_frame);
 #endif
 
-        add_to_encode_queue( h, raw_frame, 0 );
+            add_to_encode_queue( h, raw_frame, 0 );
 #if PERFORMANCE_PROFILE
         gettimeofday(&tsframeEnd, NULL);
         obe_timeval_subtract(&tsframeDiff, &tsframeEnd, &tsframeBegin);
