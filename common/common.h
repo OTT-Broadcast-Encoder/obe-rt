@@ -649,6 +649,11 @@ struct obe_t
      * correctly enabled or disabled. The Mux and the Decklink input.
      */
     int enable_scte35;
+
+    /*
+     * Vapoursynth
+    */
+   char *vapoursynth_script_path;
 };
 
 typedef struct

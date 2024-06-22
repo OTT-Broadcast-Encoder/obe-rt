@@ -35,6 +35,7 @@
 #define PREFIX "[video filter]: "
 
 int g_filter_video_fullsize_jpg = 0;
+int g_vapoursynth_enabled = 0;
 
 #include "convert.h"
 
@@ -43,6 +44,8 @@ int g_filter_video_fullsize_jpg = 0;
 /* Crystall CC */
 #include "analyze_fp.h"
 #endif
+
+#include "vapoursynth_vf.h"
 
 #if X264_BIT_DEPTH > 8
 typedef uint16_t pixel;
@@ -754,6 +757,9 @@ static void *start_filter_video( void *ptr )
     filter_analyze_fp_alloc(&fp_ctx);
 #endif
 
+    struct filter_vapoursynth_ctx *vs_ctx = NULL;
+    filter_vapoursynth_alloc(&vs_ctx, h);
+
     obe_vid_filter_ctx_t *vfilt = calloc( 1, sizeof(*vfilt) );
     if( !vfilt )
     {
@@ -896,7 +902,14 @@ static void *start_filter_video( void *ptr )
 	    filter_analyze_fp_process(fp_ctx, raw_frame);
 #endif
 
+        int bypass_vs = !g_vapoursynth_enabled;
+
+        if (g_vapoursynth_enabled)
+            bypass_vs = filter_vapoursynth_process(vs_ctx, raw_frame);
+        
+        if (bypass_vs)
             add_to_encode_queue( h, raw_frame, 0 );
+
 #if PERFORMANCE_PROFILE
         gettimeofday(&tsframeEnd, NULL);
         obe_timeval_subtract(&tsframeDiff, &tsframeEnd, &tsframeBegin);
@@ -923,6 +936,8 @@ end:
 #if DO_CRYSTAL_FP
     filter_analyze_fp_free(fp_ctx);
 #endif
+
+    filter_vapoursynth_free(vs_ctx);
 
     return NULL;
 }

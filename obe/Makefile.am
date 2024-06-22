@@ -18,7 +18,7 @@ CFLAGS += -g -Wall -Wno-unused-result -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKA
 	-I$(top_srcdir) \
 	-DKL_USERSPACE -D__STDC_FORMAT_MACROS \
 	-DGIT_VERSION=\"$(GIT_VERSION)\" \
-	-DHAVE_DECKLINK \
+	-DHAVE_DECKLINK -DVS_USE_LATEST_API \
 	-DVERSION_MAJOR=$(VERSION_MAJOR) \
 	-DVERSION_MINOR=$(VERSION_MINOR) \
 	-DVERSION_PATCH=$(VERSION_PATCH)
@@ -26,7 +26,7 @@ CFLAGS += -g -Wall -Wno-unused-result -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKA
 LDFLAGS += -lpthread -lz -lx264 -lyuv
 LDFLAGS += -lavformat -lavcodec -ldl -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
 LDFLAGS += -lklscte35 -lklvanc -llzma
-LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses -lltntstools
+LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses -lltntstools -lvapoursynth -lvapoursynth-script
 
 if LIBX265
 LDFLAGS += -lx265
@@ -113,6 +113,7 @@ obecli_SOURCES += ../filters/video/cc.c
 obecli_SOURCES += ../filters/video/video.c
 obecli_SOURCES += ../filters/video/convert_jpeg.c
 obecli_SOURCES += ../filters/video/analyze_fp.cpp
+obecli_SOURCES += ../filters/video/vapoursynth_vf.cpp
 obecli_SOURCES += ../encoders/codec_metadata.c
 obecli_SOURCES += ../encoders/encoder_smoothing.c
 obecli_SOURCES += ../encoders/audio/audio_enc_params.c

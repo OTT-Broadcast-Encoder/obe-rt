@@ -13,11 +13,11 @@
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE",
-                "DO_VAPOURSYNTH_VF",
                 "GIT_VERSION=\"VER\"",
                 "VERSION_MAJOR=1",
                 "VERSION_MINOR=0",
-                "VERSION_PATCH=0"
+                "VERSION_PATCH=0",
+                "VS_USE_LATEST_API"
             ],
             "windowsSdkVersion": "10.0.22621.0",
             "compilerPath": "C:/msys64/ucrt64/bin/g++.exe",

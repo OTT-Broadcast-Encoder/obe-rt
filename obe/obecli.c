@@ -270,6 +270,7 @@ static const char * stream_opts[] = {
                                       "filler", /* 102 */
                                       "aspect-ratio", /* 103 */
                                       "max-refs", /* 104 */
+                                      "vs-script", /* 105 */
                                       NULL };
 
 static const char * muxer_opts[]  = { "ts-type", "cbr", "ts-muxrate", "passthrough", "ts-id", "program-num", "pmt-pid", "pcr-pid",
@@ -1323,6 +1324,21 @@ extern char g_video_encoder_tuning_name[64];
                 /* Turn on the 3DTV mux option automatically */
                 if( avc_param->i_frame_packing >= 0 )
                     cli.mux_opts.is_3dtv = 1;
+
+                char *vs_script_path   = obe_get_option( stream_opts[105], opts );
+
+                if (vs_script_path) {
+extern int g_vapoursynth_enabled;
+
+                    g_vapoursynth_enabled = 1;
+
+                    if(cli.h->vapoursynth_script_path )
+                        free(cli.h->vapoursynth_script_path);
+
+                    cli.h->vapoursynth_script_path = malloc( strlen( vs_script_path ) + 1 );
+                    FAIL_IF_ERROR( !cli.h->vapoursynth_script_path, "malloc failed\n" );
+                    strcpy( cli.h->vapoursynth_script_path, vs_script_path );
+                }
             }
             else if( input_stream->stream_type == STREAM_TYPE_AUDIO )
             {
@@ -1777,6 +1793,9 @@ extern int g_filter_video_fullsize_jpg;
 /* Ancillary data */
 extern int g_ancillary_disable_captions;
 
+/* Vapoursynth */
+extern int g_vapoursynth_enabled;
+
 void display_variables()
 {
 extern int    g_decklink_missing_audio_count;
@@ -1956,6 +1975,11 @@ extern time_t g_decklink_missing_video_last_time;
     }
 
     printf("vanc_receiver.udp_port             = %d\n", g_decklink_udp_vanc_receiver_port);
+
+    
+    printf("vapoursynth.enabled = %d [%s]\n",
+        g_vapoursynth_enabled,
+        g_vapoursynth_enabled == 0 ? "disabled" : "enabled");
 }
 
 extern char *strcasestr(const char *haystack, const char *needle);
@@ -2218,7 +2242,11 @@ static int set_variable(char *command, obecli_command_t *child)
             return -1;
         }
 
-    } else {
+    } else
+    if (strcasecmp(var, "vapoursynth.enabled") == 0) {
+        g_vapoursynth_enabled = val;
+    } else
+    {
         printf("illegal variable name.\n");
         return -1;
     }
