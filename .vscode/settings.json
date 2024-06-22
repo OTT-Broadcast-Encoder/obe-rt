@@ -102,7 +102,8 @@
         "thread": "cpp",
         "variant": "cpp",
         "common.h": "c",
-        "xstring": "cpp"
+        "xstring": "cpp",
+        "queue": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

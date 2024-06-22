@@ -51,7 +51,7 @@ endif
 if DEKTECLIB
 LDFLAGS += /storage/dev/obe-build-environment-v3.4.0/dektecsdk/2019.11.0/DTAPI/Lib/GCC4.8_CXX11_ABI0/DTAPI64.o
 endif
-CXXFLAGS = $(CFLAGS) -std=c++17
+CXXFLAGS = $(CFLAGS) -std=c++20
 
 bin_PROGRAMS  = obecli
 
