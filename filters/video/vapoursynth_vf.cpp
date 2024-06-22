@@ -27,6 +27,12 @@ extern "C"
 
 #define MAX_SKIP_MS 100
 
+bool g_vapoursynth_monitor_fps = 0;
+
+struct monitor_fps {
+    int last_enc_frame_num;
+    std::chrono::milliseconds last_time;
+};
 
 struct filter_vapoursynth_ctx {   
     obe_t *h;
@@ -61,7 +67,20 @@ struct filter_vapoursynth_ctx {
     std::mutex vsscript_mtx;
 
     std::deque<VSScript *> old_envs;
+
+    monitor_fps monitor;
 };
+
+std::chrono::milliseconds get_chrono_now() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    );
+}
+
+void set_monitor_fps(filter_vapoursynth_ctx *ctx) {
+    ctx->monitor.last_time = get_chrono_now();
+    ctx->monitor.last_enc_frame_num = ctx->enc_frame_num;
+}
 
 void filter_vapoursynth_free(filter_vapoursynth_ctx *ctx) {
     if (!ctx)
@@ -390,6 +409,7 @@ const char *create_filterchain(filter_vapoursynth_ctx *ctx, obe_raw_frame_t *raw
     if (!ctx->source_node) {
         ctx->start_frame_num = ctx->enc_frame_num = ctx->frame_num;
         ctx->out_frame_num = ctx->frame_num;
+        set_monitor_fps(ctx);
     }
 
     ctx->vsapi->freeNode(ctx->source_node);    
@@ -415,6 +435,15 @@ int filter_vapoursynth_process(filter_vapoursynth_ctx *ctx, obe_raw_frame_t *raw
         return 1;
 
     ctx->frame_num++;
+
+    if (g_vapoursynth_monitor_fps && ctx->out_node) {
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+
+        if ((now - ctx->monitor.last_time).count() >= 1000) {
+            PRINTF("Current FPS: %dfps", ctx->enc_frame_num - ctx->monitor.last_enc_frame_num);
+            set_monitor_fps(ctx);
+        }
+    }
 
     if (ctx->script_path.length() && ctx->frame_num % raw_frame->timebase_den == 0) {
         std::string py_script = get_script_content(ctx);

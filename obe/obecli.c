@@ -1795,6 +1795,7 @@ extern int g_ancillary_disable_captions;
 
 /* Vapoursynth */
 extern int g_vapoursynth_enabled;
+extern int g_vapoursynth_monitor_fps;
 
 void display_variables()
 {
@@ -1980,6 +1981,10 @@ extern time_t g_decklink_missing_video_last_time;
     printf("vapoursynth.enabled = %d [%s]\n",
         g_vapoursynth_enabled,
         g_vapoursynth_enabled == 0 ? "disabled" : "enabled");
+
+    printf("vapoursynth.monitor_fps = %d [%s]\n",
+        g_vapoursynth_monitor_fps,
+        g_vapoursynth_monitor_fps == 0 ? "disabled" : "enabled");
 }
 
 extern char *strcasestr(const char *haystack, const char *needle);
@@ -2245,6 +2250,9 @@ static int set_variable(char *command, obecli_command_t *child)
     } else
     if (strcasecmp(var, "vapoursynth.enabled") == 0) {
         g_vapoursynth_enabled = val;
+    } else
+    if (strcasecmp(var, "vapoursynth.monitor_fps") == 0) {
+        g_vapoursynth_monitor_fps = val;
     } else
     {
         printf("illegal variable name.\n");

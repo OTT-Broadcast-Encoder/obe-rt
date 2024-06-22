@@ -4,6 +4,7 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
+                "C:/Programs/CPPLibs",
                 "E:/Cache/Repositories/vapoursynth/include",
                 "E:/Cache/Repositories/OTT-Broadcast/obe-rt-build/target-root/usr/local/include",
                 "E:/Cache/Repositories/OTT-Broadcast/obe-rt-build/blackmagic-sdk/10.8.5/Linux",
