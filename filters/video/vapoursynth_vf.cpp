@@ -82,6 +82,10 @@ void set_monitor_fps(filter_vapoursynth_ctx *ctx) {
     ctx->monitor.last_enc_frame_num = ctx->enc_frame_num;
 }
 
+int filter_vapoursynth_loaded(filter_vapoursynth_ctx *ctx) {
+    return !!ctx->vs_loaded;
+}
+
 void filter_vapoursynth_free(filter_vapoursynth_ctx *ctx) {
     if (!ctx)
     	return;
@@ -93,6 +97,9 @@ int filter_vapoursynth_alloc(filter_vapoursynth_ctx **p, obe_t *h) {
     filter_vapoursynth_ctx *ctx = new filter_vapoursynth_ctx();
 
     if (!ctx)
+        return -1;
+
+    if (!h->vapoursynth_script_path)
         return -1;
 
     *p = ctx;

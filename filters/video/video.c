@@ -758,7 +758,9 @@ static void *start_filter_video( void *ptr )
 #endif
 
     struct filter_vapoursynth_ctx *vs_ctx = NULL;
-    filter_vapoursynth_alloc(&vs_ctx, h);
+
+    if (g_vapoursynth_enabled)
+        filter_vapoursynth_alloc(&vs_ctx, h);
 
     obe_vid_filter_ctx_t *vfilt = calloc( 1, sizeof(*vfilt) );
     if( !vfilt )
@@ -773,6 +775,9 @@ static void *start_filter_video( void *ptr )
     {
         /* TODO: support resolution changes */
         /* TODO: support changes in pixel format */
+
+        if (g_vapoursynth_enabled && !filter_vapoursynth_loaded(vs_ctx))
+            filter_vapoursynth_alloc(&vs_ctx, h);
 
         pthread_mutex_lock( &filter->queue.mutex );
 

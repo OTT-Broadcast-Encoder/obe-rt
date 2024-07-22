@@ -1154,6 +1154,9 @@ extern char g_video_encoder_tuning_name[64];
                 avc_param->rc.i_lookahead             = obe_otoi( lookahead, avc_param->rc.i_lookahead );
                 avc_param->i_sync_lookahead           = obe_otoi( sync_lookahead, avc_param->i_sync_lookahead );
                 avc_param->i_threads                  = obe_otoi( threads, avc_param->i_threads );
+                avc_param->b_sliced_threads = 0;
+                avc_param->i_slice_count = 0;
+                avc_param->i_slice_max_size = 0;
 
                 avc_param->i_bframe                   = obe_otoi( bframes, avc_param->i_bframe );
                 avc_param->i_bframe_pyramid           = obe_otoi( b_pyramid, avc_param->i_bframe_pyramid );
