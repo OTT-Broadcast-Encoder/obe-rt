@@ -1903,13 +1903,16 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 //
 
             ret = avcodec_send_packet(decklink_ctx->codec, &pkt);
-            while (ret >= 0) {
+            if (ret >= 0)
                 ret = avcodec_receive_frame(decklink_ctx->codec, frame);
-                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                    return -1;
-                else if (ret < 0) {
-                }
-                break;
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                av_frame_free( &frame );
+                return -1;
+            }
+            if (ret < 0) {
+                syslog( LOG_ERR, "[decklink]: Video decode failed (%d), dropping frame\n", ret );
+                av_frame_free( &frame );
+                goto fail;
             }
 
             raw_frame->release_data = obe_release_video_data;
@@ -2738,6 +2741,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     if( !decklink_ctx->dec )
     {
         fprintf( stderr, "[decklink] Could not find v210 decoder\n" );
+        ret = -1;
         goto finish;
     }
 
@@ -2745,6 +2749,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     if( !decklink_ctx->codec )
     {
         fprintf( stderr, "[decklink] Could not allocate AVCodecContext\n" );
+        ret = -1;
         goto finish;
     }
 
@@ -2759,6 +2764,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
     if( avcodec_open2( decklink_ctx->codec, decklink_ctx->dec, NULL ) < 0 )
     {
         fprintf( stderr, "[decklink] Could not open libavcodec\n" );
+        ret = -1;
         goto finish;
     }
 
@@ -3032,6 +3038,7 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         if (swr_init(decklink_ctx->avr) < 0)
         {
             fprintf(stderr, PREFIX "couldn't setup sample rate conversion\n");
+            ret = -1;
             goto finish;
         }
     }
@@ -3154,6 +3161,10 @@ static void *probe_stream( void *ptr )
         user_opts->video_format, getModeName(fmt->bmd_name));
 
 #define ALLOC_STREAM(nr) \
+    if (cur_stream >= MAX_STREAMS) { \
+        fprintf(stderr, "[decklink] Too many input streams configured (max %d), aborting probe\n", MAX_STREAMS); \
+        goto finish; \
+    } \
     streams[cur_stream] = (obe_int_input_stream_t*)calloc(1, sizeof(*streams[cur_stream])); \
     if (!streams[cur_stream]) goto finish;
 
