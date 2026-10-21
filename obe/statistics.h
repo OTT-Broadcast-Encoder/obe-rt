@@ -29,11 +29,19 @@
 enum obe_statistic_e
 {
         OBE_STATISTIC__UNDEFINED = 0,
+        OBE_STATISTIC_VIDEO_FRAMES,
+        OBE_STATISTIC_VIDEO_BYTES,
+        OBE_STATISTIC_OUTPUT_BYTES,
+        OBE_STATISTIC_OUTPUT_DATAGRAMS,
+        OBE_STATISTIC_OUTPUT_ERRORS,
         OBE_STATISTIC__MAX
 };
 const char *obe_statistic_name(enum obe_statistic_e type);
 
-void    obe_statistic_set(enum obe_statistic_e type, int64_t value);
-int64_t obe_statistic_get(enum obe_statistic_e type);
+/* Process-wide counters; reset only before starting encoder/output threads. */
+void     obe_statistics_reset(void);
+void     obe_statistic_set(enum obe_statistic_e type, uint64_t value);
+void     obe_statistic_add(enum obe_statistic_e type, uint64_t value);
+uint64_t obe_statistic_get(enum obe_statistic_e type);
 
 #endif /* STATISTICS_H */

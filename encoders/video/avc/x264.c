@@ -28,6 +28,7 @@
 #include "common/vancprocessor.h"
 #include "encoders/video/video.h"
 #include "encoders/codec_metadata.h"
+#include "obe/statistics.h"
 #include <libavutil/mathematics.h>
 #include <libklscte35/scte35.h>
 
@@ -856,6 +857,8 @@ printf("frame_size = %7d pic_type %d (%s) time %6d keyframe %d qp %d\n", frame_s
 
         if( frame_size )
         {
+            obe_statistic_add( OBE_STATISTIC_VIDEO_FRAMES, 1 );
+            obe_statistic_add( OBE_STATISTIC_VIDEO_BYTES, frame_size );
             if (g_x264_monitor_bps) {
                 _monitor_bps(enc_params, frame_size);
             }

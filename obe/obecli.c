@@ -23,6 +23,7 @@
  *****************************************************************************/
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <math.h>
 #include <assert.h>
@@ -47,6 +48,7 @@
 #include "common/common.h"
 #include "input/lavf/srt_options.h"
 #include "ltn_ws.h"
+#include "statistics.h"
 
 #if HAVE_DTAPI_H
 extern char *dektec_sdk_version;
@@ -2358,6 +2360,48 @@ static int set_output( char *command, obecli_command_t *child )
 
 
 /* show functions */
+static int show_telemetry( char *command, obecli_command_t *child )
+{
+    FAIL_IF_ERROR( !g_running, "Encoder is not running\n" );
+
+    struct timespec now;
+    FAIL_IF_ERROR( clock_gettime( CLOCK_MONOTONIC, &now ) < 0, "Cannot read monotonic clock\n" );
+    uint64_t monotonic_ns = (uint64_t)now.tv_sec * UINT64_C(1000000000) + now.tv_nsec;
+    uint64_t queue_frames = 0;
+    int has_avc = 0;
+    char video_frames[32] = "null", video_bytes[32] = "null", video_queue[32] = "null";
+
+    /* Encoders are packed independently of output-stream indices. */
+    for( int i = 0; i < cli.h->num_encoders; i++ )
+    {
+        obe_encoder_t *encoder = cli.h->encoders[i];
+        if( !encoder || encoder->priv_stream_format != VIDEO_AVC )
+            continue;
+        has_avc = 1;
+        pthread_mutex_lock( &encoder->queue.mutex );
+        queue_frames += encoder->queue.size;
+        pthread_mutex_unlock( &encoder->queue.mutex );
+    }
+    if( has_avc )
+    {
+        snprintf( video_frames, sizeof(video_frames), "%" PRIu64, obe_statistic_get( OBE_STATISTIC_VIDEO_FRAMES ) );
+        snprintf( video_bytes, sizeof(video_bytes), "%" PRIu64, obe_statistic_get( OBE_STATISTIC_VIDEO_BYTES ) );
+        snprintf( video_queue, sizeof(video_queue), "%" PRIu64, queue_frames );
+    }
+
+    /* A single stdio write prevents other worker log lines splitting the JSON. */
+    printf( "\nOBE_TELEMETRY {\"schema\":1,\"monotonic_ns\":%" PRIu64
+            ",\"video_frames\":%s,\"video_bytes\":%s,\"output_bytes\":%" PRIu64
+            ",\"output_datagrams\":%" PRIu64 ",\"output_errors\":%" PRIu64
+            ",\"video_queue_frames\":%s}\n",
+            monotonic_ns, video_frames, video_bytes,
+            obe_statistic_get( OBE_STATISTIC_OUTPUT_BYTES ),
+            obe_statistic_get( OBE_STATISTIC_OUTPUT_DATAGRAMS ),
+            obe_statistic_get( OBE_STATISTIC_OUTPUT_ERRORS ), video_queue );
+    fflush( stdout );
+    return 0;
+}
+
 static int show_bitdepth( char *command, obecli_command_t *child )
 {
     printf( "AVC output bit depth: %i bits per sample\n", X264_BIT_DEPTH );
@@ -2821,6 +2865,7 @@ static int start_encode( char *command, obecli_command_t *child )
     obe_setup_streams( cli.h, cli.output_streams, cli.num_output_streams );
     obe_setup_muxer( cli.h, &cli.mux_opts );
     obe_setup_output( cli.h, &cli.output );
+    obe_statistics_reset();
     if( obe_start( cli.h ) < 0 )
         return -1;
 

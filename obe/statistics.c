@@ -21,32 +21,45 @@
  *
  ******************************************************************************/
 
-#include <stdio.h>
 #include "statistics.h"
 
-static char lbl[64]; /* in non-typical use cases. */
+static uint64_t counters[OBE_STATISTIC__MAX];
+
 const char *obe_statistic_name(enum obe_statistic_e type)
 {
-	switch (type) {
-	default:
-		{
-		sprintf(lbl,  "UNDEFINED id %d", type);
-		return lbl;
-		}
-	}
+    switch( type )
+    {
+        case OBE_STATISTIC_VIDEO_FRAMES: return "video_frames";
+        case OBE_STATISTIC_VIDEO_BYTES: return "video_bytes";
+        case OBE_STATISTIC_OUTPUT_BYTES: return "output_bytes";
+        case OBE_STATISTIC_OUTPUT_DATAGRAMS: return "output_datagrams";
+        case OBE_STATISTIC_OUTPUT_ERRORS: return "output_errors";
+        default: return "undefined";
+    }
 }
 
-void obe_statistic_set(enum obe_statistic_e type, int64_t value)
+void obe_statistics_reset(void)
 {
-	if ((type >= OBE_STATISTIC__MAX) || (type == OBE_STATISTIC__UNDEFINED))
-		return;
+    for( int type = OBE_STATISTIC__UNDEFINED + 1; type < OBE_STATISTIC__MAX; type++ )
+        __atomic_store_n( &counters[type], 0, __ATOMIC_RELAXED );
 }
 
-int64_t obe_statistic_get(enum obe_statistic_e type)
+void obe_statistic_set(enum obe_statistic_e type, uint64_t value)
 {
-	if ((type >= OBE_STATISTIC__MAX) || (type == OBE_STATISTIC__UNDEFINED))
-		return -1;
+    if( type > OBE_STATISTIC__UNDEFINED && type < OBE_STATISTIC__MAX )
+        __atomic_store_n( &counters[type], value, __ATOMIC_RELAXED );
+}
 
-	return 0;
+void obe_statistic_add(enum obe_statistic_e type, uint64_t value)
+{
+    if( type > OBE_STATISTIC__UNDEFINED && type < OBE_STATISTIC__MAX )
+        __atomic_fetch_add( &counters[type], value, __ATOMIC_RELAXED );
+}
+
+uint64_t obe_statistic_get(enum obe_statistic_e type)
+{
+    if( type > OBE_STATISTIC__UNDEFINED && type < OBE_STATISTIC__MAX )
+        return __atomic_load_n( &counters[type], __ATOMIC_RELAXED );
+    return 0;
 }
 

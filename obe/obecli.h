@@ -73,6 +73,7 @@ static int start_encode( char *command, obecli_command_t *child );
 static int stop_encode( char *command, obecli_command_t *child );
 
 static int show_queues(char *command, obecli_command_t *child);
+static int show_telemetry(char *command, obecli_command_t *child);
 
 struct obecli_command_t
 {
@@ -141,6 +142,7 @@ static obecli_command_t show_commands[] =
     { "output",   "streams",  "Show output streams", show_output,   NULL },
     { "outputs",  "",  "Show supported outputs",     show_outputs,  NULL },
     { "queues",   "",  "Show queue metrics",         show_queues,   NULL },
+    { "telemetry", "", "Show live JSON counters",    show_telemetry, NULL },
     { 0 }
 };
 

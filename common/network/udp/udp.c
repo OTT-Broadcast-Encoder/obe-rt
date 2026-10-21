@@ -26,6 +26,7 @@
 #include "common/network/network.h"
 #include "output/output.h"
 #include "udp.h"
+#include "obe/statistics.h"
 #include <libltntstools/ltntstools.h>
 
 typedef struct
@@ -385,12 +386,15 @@ int udp_write( hnd_t handle, uint8_t *buf, int size )
         ret = send( s->udp_fd, buf, size, 0 );
     }
 
-    if( ret < 0 )
+    if( ret != size )
     {
+        obe_statistic_add( OBE_STATISTIC_OUTPUT_ERRORS, 1 );
         syslog( LOG_WARNING, "UDP packet failed to send \n" );
         return -1;
     }
 
+    obe_statistic_add( OBE_STATISTIC_OUTPUT_BYTES, ret );
+    obe_statistic_add( OBE_STATISTIC_OUTPUT_DATAGRAMS, 1 );
     return size;
 }
 
