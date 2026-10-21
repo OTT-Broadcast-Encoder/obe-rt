@@ -81,7 +81,8 @@ static void *file_ts_start(void *ptr)
 	if (output_dest->target[ strlen(output_dest->target) - 1 ] == '@')
 		writeMode = 1;
 
-	int ret = ltntstools_segmentwriter_alloc(&status->segmentWriter, output_dest->target, writeMode);
+	int ret = ltntstools_segmentwriter_alloc(&status->segmentWriter, output_dest->target,
+		writeMode ? ".ts" : "", writeMode);
 	if (ret < 0) {
             fprintf(stderr, PREFIX "Could not create file output [%s]\n", output_dest->target);
             return NULL;

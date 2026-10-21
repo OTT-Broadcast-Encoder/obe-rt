@@ -174,7 +174,7 @@ static size_t _deliver_nals(struct context_s *ctx, AVPacket *pkt, obe_raw_frame_
 		/* For each nal, lookup and prepare a list of found NAL types. */
 		switch (obe_core_encoder_get_stream_format(ctx->encoder)) {
 		case VIDEO_HEVC_GPU_VAAPI_AVCODEC:
-			foundNals = ltn_nal_hevc_findNalTypes(pkt->data, pkt->size);
+			foundNals = ltn_nal_h265_findNalTypes(pkt->data, pkt->size);
 			break;
 		default:
 			/* No requirement to support */
