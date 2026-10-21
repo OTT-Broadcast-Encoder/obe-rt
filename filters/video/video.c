@@ -817,7 +817,7 @@ static void *start_filter_video( void *ptr )
         /* TODO: scale 8-bit to 10-bit
          * TODO: convert from 4:2:0 to 4:2:2 */
 
-        if( raw_frame->img.format == INPUT_VIDEO_FORMAT_PAL )
+        if( raw_frame->img.format == INPUT_VIDEO_FORMAT_PAL && h->devices[0]->device_type != INPUT_URL )
             blank_lines( raw_frame );
 
         /* Resize if necessary. Together with colourspace conversion if progressive */
@@ -885,7 +885,8 @@ static void *start_filter_video( void *ptr )
 
         /* If SAR, on an SD stream, has not been updated by AFD or WSS, set to default 4:3
          * TODO: make this user-choosable. OBE will prioritise any SAR information from AFD or WSS over any user settings */
-        if( raw_frame->sar_width == 1 && raw_frame->sar_height == 1 )
+        if( h->devices[0]->device_type != INPUT_URL &&
+            raw_frame->sar_width == 1 && raw_frame->sar_height == 1 )
         {
             set_sar( raw_frame, IS_SD( raw_frame->img.format ) ? output_stream->is_wide : 1 );
             raw_frame->sar_guess = 1;

@@ -51,6 +51,7 @@ struct context_s
     int64_t lastOutputFramePTS; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
     int64_t frameLengthTicks; /* TODO: Isn't this the same as pts_internal, If yes, remove this */
     int encoderMode;
+    int64_t input_duration;
 
     int num_frames;
     int total_size_bytes;
@@ -142,14 +143,12 @@ static int processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifo *fifo
         ctx->ptsfixup += (drifted_frames * video_interval_clk);
     }
 
-    /* We seem to be 33.2ms latent for 1080i, adjust it. Does this vary for low vs normal latency? */
-    coded_frame->pts += (-33 * 27000LL);
-    coded_frame->pts += (-2 * 2700LL);
-    if (ctx->h->obe_system == OBE_SYSTEM_TYPE_GENERIC) {
-        //coded_frame->pts += (8 * 2700LL);
-    }
-    if (ctx->encoderMode == AV_CODEC_ID_AC3) {
-        coded_frame->pts += (38 * 27000LL);
+    /* Hardware latency compensation does not apply to decoded URL PTS. */
+    if (!ctx->h->num_devices || ctx->h->devices[0]->device_type != INPUT_URL) {
+        coded_frame->pts += (-33 * 27000LL);
+        coded_frame->pts += (-2 * 2700LL);
+        if (ctx->encoderMode == AV_CODEC_ID_AC3)
+            coded_frame->pts += (38 * 27000LL);
     }
 
     coded_frame->pts += (ctx->ptsfixup * -1);
@@ -437,7 +436,11 @@ static void *aac_start_encoder(void *ptr)
                 raw_frame->avfm.audio_pts - ctx->avfm.audio_pts);
         }
 #endif
-        if (raw_frame->avfm.audio_pts - ctx->avfm.audio_pts >= (2 * ctx->frameLengthTicks)) {
+        int discontinuity = raw_frame->avfm.audio_pts - ctx->avfm.audio_pts >= (2 * ctx->frameLengthTicks);
+        if (ctx->h->num_devices && ctx->h->devices[0]->device_type == INPUT_URL)
+            discontinuity = ctx->input_duration && llabs(raw_frame->avfm.audio_pts -
+                ctx->avfm.audio_pts - ctx->input_duration) > OBE_CLOCK / 1000;
+        if (discontinuity) {
             printf("Reset the cur_pts because of the hardware\n");
             printf("raw_frame->avfm.audio_pts %" PRIi64 "\n", raw_frame->avfm.audio_pts);
             printf("ctx->avfm.audio_pts %" PRIi64 "\n", ctx->avfm.audio_pts);
@@ -446,6 +449,7 @@ static void *aac_start_encoder(void *ptr)
             ctx->cur_pts = -1; /* Reset the audio timebase from the hardware. */
         }
         memcpy(&ctx->avfm, &raw_frame->avfm, sizeof(ctx->avfm));
+        ctx->input_duration = av_rescale(raw_frame->audio_frame.num_samples, OBE_CLOCK, ctx->enc_params->sample_rate);
 
         pthread_mutex_unlock(&ctx->encoder->queue.mutex);
 

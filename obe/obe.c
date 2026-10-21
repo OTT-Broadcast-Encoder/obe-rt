@@ -119,6 +119,8 @@ obe_device_t *new_device( void )
 
 void destroy_device( obe_device_t *device )
 {
+    if( device->device_type == INPUT_URL )
+        free( device->user_opts.location );
     for( int i = 0; i < device->num_input_streams; i++ )
         free( device->input_streams[i] );
     if( device->probed_streams )
@@ -752,11 +754,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     }
 
     if( input_device->input_type == INPUT_URL )
-    {
-        //input = lavf_input;
-        fprintf( stderr, "URL input is not supported currently \n" );
-        goto fail;
-    }
+        input = lavf_input;
 #if HAVE_DECKLINK
     else if( input_device->input_type == INPUT_DEVICE_DECKLINK )
         input = decklink_input;
@@ -829,14 +827,16 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
     if( obe_validate_input_params( input_device ) < 0 )
         goto fail;
 
-    if( pthread_create( &thread, NULL, input.probe_input, (void*)args ) < 0 )
+    if( pthread_create( &thread, NULL, input.probe_input, (void*)args ) != 0 )
     {
         fprintf( stderr, "Couldn't create probe thread \n" );
         goto fail;
     }
     ltnpthread_setname_np(thread, "obe-probe");
 
-    if( input_device->location )
+    if( input_device->input_type == INPUT_URL )
+        printf( "Probing network URL. " );
+    else if( input_device->location )
         printf( "Probing device: \"%s\". ", input_device->location );
     else if( input_device->input_type == INPUT_DEVICE_LINSYS_SDI )
         printf( "Probing device: Linsys card %i. ", input_device->card_idx );
@@ -884,6 +884,7 @@ int obe_probe_device( obe_t *h, obe_input_t *input_device, obe_input_program_t *
 
     __pthread_cancel( thread );
     __pthread_join( thread, &ret_ptr );
+    args = NULL; /* The probe thread owns its arguments after creation. */
 
     cur_devices = h->num_devices;
 
@@ -1053,6 +1054,14 @@ int obe_populate_avc_encoder_params( obe_t *h, int input_stream_id, x264_param_t
         param->vui.i_colmatrix = 1;
     }
 
+    if( h->devices[0]->device_type == INPUT_URL )
+    {
+        param->vui.i_colorprim = stream->color_primaries;
+        param->vui.i_transfer = stream->color_trc;
+        param->vui.i_colmatrix = stream->colorspace;
+        param->vui.b_fullrange = stream->color_range == AVCOL_RANGE_JPEG;
+    }
+
     x264_param_apply_profile( param, X264_BIT_DEPTH == 10 ? "high10" : "high", NULL );
     param->i_nal_hrd = X264_NAL_HRD_FAKE_VBR;
     param->b_aud = 1;
@@ -1204,11 +1213,7 @@ int obe_start( obe_t *h )
     pthread_cond_init( &h->obe_clock_cv, NULL );
 
     if( h->devices[0]->device_type == INPUT_URL )
-    {
-        //input = lavf_input;
-        fprintf( stderr, "URL input is not supported currently \n" );
-        goto fail;
-    }
+        input = lavf_input;
 #if HAVE_DECKLINK
     else if( h->devices[0]->device_type == INPUT_DEVICE_DECKLINK )
         input = decklink_input;

@@ -43,7 +43,7 @@ typedef struct
     int audio_samples;
 } obe_input_params_t;
 
-//extern const obe_input_func_t lavf_input;
+extern const obe_input_func_t lavf_input;
 #if HAVE_VEGA3301_CAP_TYPES_H
 extern const obe_input_func_t vega3301_input;
 #endif

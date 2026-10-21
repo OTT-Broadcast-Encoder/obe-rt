@@ -178,6 +178,8 @@ typedef struct
     /* VBI */
     int vbi_ntsc;
     int is_hdr;
+    /* Decoded URL colour signalling; zero-initialized for hardware inputs. */
+    int color_primaries, color_trc, colorspace, color_range;
 } obe_int_input_stream_t;
 
 typedef struct
