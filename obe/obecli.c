@@ -45,6 +45,7 @@
 #include "obecli.h"
 #include "obecli-shared.h"
 #include "common/common.h"
+#include "input/lavf/srt_options.h"
 #include "ltn_ws.h"
 
 #if HAVE_DTAPI_H
@@ -2969,6 +2970,14 @@ static int processCommand(char *line_read)
 {
     if (!strcasecmp(line_read, "exit") || !strcasecmp(line_read, "quit"))
         return -1;
+
+    /* Reject SRT URL credentials before saving history or probing/logging the URL. */
+    for (const char *url = line_read; *url; url++) {
+        if (!strncasecmp(url, "srt://", 6) && obe_srt_url_has_crypto_options(url)) {
+            fprintf(stderr, "SRT crypto options are forbidden in URLs; use OBE_SRT_PASSPHRASE (10-79 bytes)\n");
+            return 0;
+        }
+    }
 
     add_history(line_read);
 

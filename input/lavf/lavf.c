@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later */
 #include "common/common.h"
 #include "input/input.h"
+#include "srt_options.h"
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/time.h>
@@ -103,14 +104,20 @@ static void report_error( const char *operation, int error )
 static int open_input( url_input_t *ctx, const char *location )
 {
     /* Network URLs only; protocols still depend on the linked FFmpeg build. */
-    const char *schemes[] = { "udp://", "rtp://", "http://", "https://", "rtsp://", "tcp://" };
+    const char *schemes[] = { "udp://", "rtp://", "http://", "https://", "rtsp://", "tcp://", "srt://" };
     int valid = 0, ret;
     for( unsigned i = 0; i < sizeof(schemes)/sizeof(*schemes); i++ )
         valid |= !strncmp( location, schemes[i], strlen(schemes[i]) );
     if( !valid )
     {
-        fprintf( stderr, "URL input: supported schemes are udp, rtp, http(s), rtsp and tcp\n" );
+        fprintf( stderr, "URL input: supported schemes are udp, rtp, http(s), rtsp, tcp and srt\n" );
         return AVERROR(EINVAL);
+    }
+    ret = obe_srt_options(location, getenv("OBE_SRT_PASSPHRASE"), &ctx->options);
+    if (ret < 0) {
+        if (ret == AVERROR(EINVAL))
+            fprintf(stderr, "URL input: use OBE_SRT_PASSPHRASE (10-79 bytes) for SRT encryption; crypto options are forbidden in the URL\n");
+        return ret;
     }
     ctx->format = avformat_alloc_context();
     ctx->frame = av_frame_alloc();
@@ -118,7 +125,7 @@ static int open_input( url_input_t *ctx, const char *location )
     if( !ctx->format || !ctx->frame || !ctx->packet )
         return AVERROR(ENOMEM);
     ctx->format->interrupt_callback = (AVIOInterruptCB){ interrupted, ctx };
-    av_dict_set( &ctx->options, "protocol_whitelist", "udp,rtp,tcp,http,https,tls,crypto,httpproxy", 0 );
+    av_dict_set( &ctx->options, "protocol_whitelist", "udp,rtp,tcp,http,https,tls,crypto,httpproxy,srt", 0 );
     av_dict_set( &ctx->options, "rw_timeout", "2000000", 0 );
     /* RTP disables libavformat's UDP FIFO. Retain enough socket buffering
      * while consuming the packets collected by find_stream_info at CFR pace. */
