@@ -26,7 +26,9 @@ CFLAGS += -g -Wall -Wno-unused-result -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKA
 LDFLAGS += -lpthread -lz -lx264 -lyuv
 LDFLAGS += -lavformat -lavcodec -ldl -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm -lswresample
 LDFLAGS += -lklscte35 -lklvanc -llzma
-LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lzvbi -lreadline -lcurses -lltntstools -lvapoursynth -lvapoursynth-script
+LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lreadline -lcurses -lltntstools
+LDFLAGS += $(shell pkg-config --libs --static zvbi-0.2 libltntstools)
+LDFLAGS += -lvapoursynth -lvapoursynth-script
 
 if LIBX265
 LDFLAGS += -lx265
