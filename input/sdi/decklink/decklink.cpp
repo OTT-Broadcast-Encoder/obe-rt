@@ -1163,8 +1163,8 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
     int ret, num_anc_lines = 0, anc_line_stride,
     lines_read = 0, first_line = 0, last_line = 0, line, num_vbi_lines, vii_line;
     uint32_t *frame_ptr;
-    uint16_t *anc_buf, *anc_buf_pos;
-    uint8_t *vbi_buf;
+    uint16_t *anc_buf = NULL, *anc_buf_pos;
+    uint8_t *vbi_buf = NULL;
     int anc_lines[DECKLINK_VANC_LINES];
     IDeckLinkVideoFrameAncillary *ancillary;
     BMDTimeValue frame_duration;
@@ -1839,7 +1839,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             if( !vbi_buf )
             {
                 syslog( LOG_ERR, "Malloc failed\n" );
-                goto end;
+                goto fail;
             }
 
             /* Scale the lines from 10-bit to 8-bit */
@@ -1877,10 +1877,10 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             if( decode_vbi( h, &decklink_ctx->non_display_parser, vbi_buf, raw_frame ) < 0 )
                 goto fail;
 
-            av_free( vbi_buf );
+            av_freep( &vbi_buf );
         }
 
-        av_free( anc_buf );
+        av_freep( &anc_buf );
 
         if( !decklink_opts_->probe )
         {
@@ -1889,7 +1889,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             if( !frame )
             {
                 syslog( LOG_ERR, "[decklink]: Could not allocate video frame\n" );
-                goto end;
+                goto fail;
             }
             decklink_ctx->codec->width = width;
             decklink_ctx->codec->height = height;
@@ -1906,8 +1906,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             if (ret >= 0)
                 ret = avcodec_receive_frame(decklink_ctx->codec, frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                av_frame_free( &frame );
-                return -1;
+                goto fail;
             }
             if (ret < 0) {
                 syslog( LOG_ERR, "[decklink]: Video decode failed (%d), dropping frame\n", ret );
@@ -1994,10 +1993,12 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
             /* Ensure we put any associated video vanc / metadata into this raw frame. */
             avmetadata_clone(&raw_frame->metadata, &decklink_ctx->metadataVANC);
 
+            int64_t video_pts = raw_frame->pts;
             if( add_to_filter_queue( h, raw_frame ) < 0 )
                 goto fail;
+            raw_frame = NULL; /* The filter now owns the frame. */
 
-            if( send_vbi_and_ttx( h, &decklink_ctx->non_display_parser, raw_frame->pts ) < 0 )
+            if( send_vbi_and_ttx( h, &decklink_ctx->non_display_parser, video_pts ) < 0 )
                 goto fail;
 
             decklink_ctx->non_display_parser.num_vbi = 0;
@@ -2043,6 +2044,9 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
     }
 
 end:
+    av_freep( &anc_buf );
+    av_freep( &vbi_buf );
+
     if( frame )
         av_frame_free( &frame );
 
@@ -2055,13 +2059,11 @@ fail:
 
     if( raw_frame )
     {
-        if (raw_frame->release_data)
-            raw_frame->release_data( raw_frame );
-        if (raw_frame->release_frame)
-            raw_frame->release_frame( raw_frame );
+        obe_release_video_data( raw_frame );
+        obe_release_frame( raw_frame );
     }
 
-    return S_OK;
+    goto end;
 }
 
 static void close_card( decklink_opts_t *decklink_opts )
@@ -2122,8 +2124,11 @@ static void close_card( decklink_opts_t *decklink_opts )
         }
     }
 
-    if( IS_SD( decklink_opts->video_format ) )
+    if( decklink_ctx->has_setup_vbi )
+    {
         vbi_raw_decoder_destroy( &decklink_ctx->non_display_parser.vbi_decoder );
+        decklink_ctx->has_setup_vbi = 0;
+    }
 
     if (decklink_ctx->avr)
         swr_free(&decklink_ctx->avr);
@@ -2156,7 +2161,7 @@ static int cb_EIA_608(void *callback_context, struct klvanc_context_s *ctx, stru
 /* For a given SCTE35 stream 0..N, find it */
 static int findOutputStreamIdByFormat(decklink_ctx_t *decklink_ctx, enum stream_type_e stype, enum stream_formats_e fmt, int instancenr)
 {
-	if (decklink_ctx && decklink_ctx->device == NULL)
+	if (!decklink_ctx || decklink_ctx->device == NULL)
 		return -1;
 
     int instance = 0;
@@ -3091,7 +3096,7 @@ static void *probe_stream( void *ptr )
     obe_t *h = probe_ctx->h;
     obe_input_t *user_opts = &probe_ctx->user_opts;
     obe_device_t *device;
-    obe_int_input_stream_t *streams[MAX_STREAMS];
+    obe_int_input_stream_t *streams[MAX_STREAMS] = {0};
     int cur_stream = 0;
     obe_sdi_non_display_data_t *non_display_parser;
     decklink_ctx_t *decklink_ctx;
@@ -3339,12 +3344,16 @@ static void *probe_stream( void *ptr )
     device->device_type = INPUT_DEVICE_DECKLINK;
     memcpy( &device->user_opts, user_opts, sizeof(*user_opts) );
 
-    /* Upstream is responsible for freeing streams[x] allocations */
+    /* Ownership passes to the device, including stream allocations. */
+    memset(streams, 0, sizeof(streams));
 
     /* add device */
     add_device( h, device );
 
 finish:
+    for( int i = 0; i < MAX_STREAMS; i++ )
+        free( streams[i] );
+
     if( decklink_opts )
         free( decklink_opts );
 
