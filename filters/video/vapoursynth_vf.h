@@ -1,10 +1,10 @@
 #ifndef OBE_FILTER_VIDEO_VAPOURSYNTH_VF_H
 #define OBE_FILTER_VIDEO_VAPOURSYNTH_VF_H
 
-#include <vapoursynth/VapourSynth4.h>
-#include <vapoursynth/VSConstants4.h>
-#include <vapoursynth/VSHelper4.h>
-#include <vapoursynth/VSScript4.h>
+#include <VapourSynth4.h>
+#include <VSConstants4.h>
+#include <VSHelper4.h>
+#include <VSScript4.h>
 
 #ifdef __cplusplus
 extern "C" {

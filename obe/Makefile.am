@@ -28,7 +28,8 @@ LDFLAGS += -lavformat -lavcodec -ldl -lfdk-aac -lbz2 -lz -lswscale -lavutil -lm 
 LDFLAGS += -lklscte35 -lklvanc -llzma
 LDFLAGS += -ltwolame -lmpegts -lstdc++ -ldl -lreadline -lcurses -lltntstools
 LDFLAGS += $(shell pkg-config --libs --static zvbi-0.2 libltntstools)
-LDFLAGS += -lvapoursynth -lvapoursynth-script
+LDFLAGS += -L$(shell pkg-config --variable=prefix vapoursynth) -lvsscript
+CFLAGS += $(shell pkg-config --cflags vapoursynth)
 
 if LIBX265
 LDFLAGS += -lx265
