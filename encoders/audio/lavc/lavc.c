@@ -463,7 +463,10 @@ static void *aac_start_encoder(void *ptr)
             /* Drain the conversion fifos else we induce drift. */
             av_fifo_reset2(out_fifo_compressed);
             av_audio_fifo_drain(ctx->audio_pcm_fifo, av_audio_fifo_size(ctx->audio_pcm_fifo));
-            swr_drop_output(avr, 65535);
+            /* Reset buffered conversion state without dropping future input. */
+            swr_close(avr);
+            if (swr_init(avr) < 0)
+                goto finish;
             ctx->num_frames = 0;
             ctx->total_size_bytes = 0;
         }
@@ -569,9 +572,9 @@ static void *aac_start_encoder(void *ptr)
 #endif
 
         /* Push the converted samples into the audio pcm fifo. */
-        ret = av_audio_fifo_write(ctx->audio_pcm_fifo, (void **)audio_planes, raw_frame->audio_frame.num_samples);
-        if (ret != raw_frame->audio_frame.num_samples) {
-            fprintf(stderr, MODULE "Unable to write to audio fifo, ret = %d - should be %d\n", ret, raw_frame->audio_frame.num_samples);
+        ret = av_audio_fifo_write(ctx->audio_pcm_fifo, (void **)audio_planes, count);
+        if (ret != count) {
+            fprintf(stderr, MODULE "Unable to write to audio fifo, ret = %d - should be %d\n", ret, count);
             exit(1);
         }
 

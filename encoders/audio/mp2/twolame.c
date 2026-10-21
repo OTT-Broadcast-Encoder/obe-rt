@@ -230,7 +230,9 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
 
             /* Drain the conversion fifos else we induce drift. */
             av_fifo_reset2(fifo);
-            swr_drop_output(avr, 65535);
+            swr_close(avr);
+            if (swr_init(avr) < 0)
+                goto end;
 
             output_size = twolame_encode_flush(tl_opts, output_buf, MP2_AUDIO_BUFFER_SIZE);
         }
@@ -261,14 +263,15 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
             goto end;
         }
 
-        if (swr_convert(avr, (uint8_t **)&audio_buf, raw_frame->audio_frame.num_samples, (const uint8_t **)raw_frame->audio_frame.audio_data,
-                                raw_frame->audio_frame.num_samples) < 0)
+        int converted_samples = swr_convert(avr, (uint8_t **)&audio_buf, raw_frame->audio_frame.num_samples,
+                    (const uint8_t **)raw_frame->audio_frame.audio_data, raw_frame->audio_frame.num_samples);
+        if (converted_samples < 0)
         {
             syslog( LOG_ERR, "[twolame] Sample format conversion failed\n" );
             break;
         }
 
-        output_size = twolame_encode_buffer_float32_interleaved( tl_opts, audio_buf, raw_frame->audio_frame.num_samples, output_buf, MP2_AUDIO_BUFFER_SIZE );
+        output_size = twolame_encode_buffer_float32_interleaved( tl_opts, audio_buf, converted_samples, output_buf, MP2_AUDIO_BUFFER_SIZE );
 
         if( output_size < 0 )
         {
