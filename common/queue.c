@@ -32,6 +32,7 @@ int add_to_queue( obe_queue_t *queue, void *item )
     if( !tmp )
     {
         syslog( LOG_ERR, "Malloc failed\n" );
+        pthread_mutex_unlock( &queue->mutex );
         return -1;
     }
     queue->queue = tmp;

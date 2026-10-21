@@ -876,8 +876,11 @@ void *open_muxer( void *ptr )
 
     //FILE *fp = fopen( "test.ts", "wb" );
 
-    streamstats = malloc(sizeof(*streamstats));
-    ltntstools_pid_stats_reset(streamstats);
+    if( ltntstools_pid_stats_alloc(&streamstats) < 0 )
+    {
+        fprintf(stderr, "[ts] Could not allocate stream statistics\n");
+        goto end;
+    }
 
     while( 1 )
     {
@@ -1145,7 +1148,7 @@ if (fh)
     }
 
 end:
-    free(streamstats);
+    ltntstools_pid_stats_free(streamstats);
 
     ts_close_writer( w );
 
