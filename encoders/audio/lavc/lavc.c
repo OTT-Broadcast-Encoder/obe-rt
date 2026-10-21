@@ -218,7 +218,12 @@ static int processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifo *fifo
 
 static void *aac_start_encoder(void *ptr)
 {
+    if (!ptr)
+        return NULL;
+
     struct context_s *ctx = calloc(1, sizeof(*ctx));
+    if (!ctx)
+        return NULL;
     ctx->enc_params = ptr;
     ctx->h = ctx->enc_params->h;
     ctx->encoder = ctx->enc_params->encoder;
@@ -421,6 +426,11 @@ static void *aac_start_encoder(void *ptr)
         }
 
         raw_frame = ctx->encoder->queue.queue[0];
+        if (!raw_frame) {
+            remove_from_queue_without_lock(&ctx->encoder->queue);
+            pthread_mutex_unlock(&ctx->encoder->queue.mutex);
+            continue;
+        }
 #if AUDIO_DEBUG_ENABLE
         audioFramesDQ++;
 #endif
