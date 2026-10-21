@@ -56,7 +56,6 @@ int obe_get_buffer2(AVCodecContext *codec, AVFrame *pic, int flags)
 	pic->buf[1] = av_buffer_create(pic->data[1], pic->linesize[1] * h / 4, _buffer_default_free, NULL, 0);
 	pic->buf[2] = av_buffer_create(pic->data[2], pic->linesize[2] * h / 4, _buffer_default_free, NULL, 0);
 
-	pic->reordered_opaque = codec->reordered_opaque;
 	pic->pts = AV_NOPTS_VALUE;
 
 	return 0;

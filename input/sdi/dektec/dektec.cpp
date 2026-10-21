@@ -92,7 +92,7 @@ typedef struct
 	uint64_t v_counter;
 
 	/* AVCodec for V210 conversion. */
-	AVCodec         *dec;
+	const AVCodec         *dec;
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
@@ -592,8 +592,7 @@ static void close_device(dektec_opts_t *opts)
 	ctx->R->Stop();
 
 	if (ctx->codec) {
-		avcodec_close(ctx->codec);
-		av_free(ctx->codec);
+		avcodec_free_context(&ctx->codec);
 	}
 
 	printf(MODULE_PREFIX "Closed card idx #%d\n", opts->card_idx);

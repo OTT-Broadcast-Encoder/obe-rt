@@ -22,7 +22,9 @@
 #ifndef OBE_FILTERS_DITHER_H
 #define OBE_FILTERS_DITHER_H
 
-DECLARE_ALIGNED(16, const uint16_t, obe_dithers)[8][8] =
+#include <stdalign.h>
+
+alignas(16) const uint16_t obe_dithers[8][8] =
 {
     { 1,  2,  1,  2,  1,  2,  1,  2 },
     { 3,  0,  3,  0,  3,  0,  3,  0 },

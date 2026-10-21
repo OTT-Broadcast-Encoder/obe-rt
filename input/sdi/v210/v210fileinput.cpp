@@ -95,7 +95,7 @@ typedef struct
 	uint64_t v_counter;
 
 	/* AVCodec for V210 conversion. */
-	AVCodec         *dec;
+	const AVCodec         *dec;
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
@@ -171,8 +171,8 @@ static void *v210_videoThreadFunc(void *p)
 
 		usleep(166 * 100);
 
-		AVPacket pkt;
-		av_init_packet(&pkt);
+		AVPacket pkt = {0};
+		av_packet_unref(&pkt);
 
 		pkt.data = getNextFrameAddress(opts);
 		pkt.size = ctx->frameSizeBytesVideo;
@@ -249,8 +249,7 @@ static void close_device(v210_opts_t *opts)
 	}
 
 	if (ctx->codec) {
-		avcodec_close(ctx->codec);
-		av_free(ctx->codec);
+		avcodec_free_context(&ctx->codec);
 	}
 
 	munmap(ctx->v210_addr, ctx->v210_file_size);

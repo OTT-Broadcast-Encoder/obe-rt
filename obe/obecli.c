@@ -1411,7 +1411,7 @@ extern int g_vapoursynth_enabled;
                 {
                     default_bitrate = 256;
 
-                    FAIL_IF_ERROR( channel_map && av_get_channel_layout_nb_channels( channel_layout ) > 2,
+                    FAIL_IF_ERROR( channel_map && av_popcount64( channel_layout ) > 2,
                                    "MP2 audio does not support > 2 channels of audio\n" );
 
                     if( mp2_mode )
@@ -2601,7 +2601,12 @@ static int show_input_streams( char *command, obecli_command_t *child )
             if( !stream->channel_layout )
                 snprintf( buf, sizeof(buf), "%2i channels", stream->num_channels );
             else
-                av_get_channel_layout_string( buf, sizeof(buf), 0, stream->channel_layout );
+            {
+                AVChannelLayout layout = {0};
+                av_channel_layout_from_mask(&layout, stream->channel_layout);
+                av_channel_layout_describe(&layout, buf, sizeof(buf));
+                av_channel_layout_uninit(&layout);
+            }
             printf( "Input-stream-id: %d - Audio: %s%s %s %ikHz - SDI audio pair: %d\n", stream->input_stream_id, format_name,
                     stream->stream_format == AUDIO_AAC ? stream->aac_is_latm ? " LATM" : " ADTS" : "",
                     buf, stream->sample_rate / 1000,

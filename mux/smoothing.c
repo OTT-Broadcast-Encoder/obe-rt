@@ -44,7 +44,7 @@ static void *mux_start_smoothing( void *ptr )
     int num_muxed_data = 0, buffer_complete = 0;
     int64_t start_clock = -1, start_pcr, end_pcr, temporal_vbv_size = 0, cur_pcr = 0;
     obe_muxed_data_t **muxed_data = NULL, *start_data, *end_data;
-    AVFifoBuffer *fifo_data = NULL, *fifo_pcr = NULL;
+    AVFifo *fifo_data = NULL, *fifo_pcr = NULL;
     AVBufferRef **output_buffers = NULL;
     int trim_ms_pending = 0;
 
@@ -56,20 +56,22 @@ static void *mux_start_smoothing( void *ptr )
     pthread_setschedparam( pthread_self(), SCHED_FIFO, &param );
 
     /* This thread buffers one VBV worth of frames */
-    fifo_data = av_fifo_alloc( obe_core_get_payload_size() );
+    fifo_data = av_fifo_alloc2( obe_core_get_payload_size(), 1, AV_FIFO_FLAG_AUTO_GROW );
     if( !fifo_data )
     {
         fprintf( stderr, "[mux-smoothing] Could not allocate data fifo" );
         return NULL;
     }
 
-    fifo_pcr = av_fifo_alloc( obe_core_get_payload_packets() * sizeof(int64_t) );
+    av_fifo_auto_grow_limit(fifo_data, INT_MAX);
+    fifo_pcr = av_fifo_alloc2( obe_core_get_payload_packets() * sizeof(int64_t), 1, AV_FIFO_FLAG_AUTO_GROW );
     if( !fifo_pcr )
     {
         fprintf( stderr, "[mux-smoothing] Could not allocate pcr fifo" );
         return NULL;
     }
 
+    av_fifo_auto_grow_limit(fifo_pcr, INT_MAX);
     output_buffers = malloc( h->num_outputs * sizeof(*output_buffers) );
     if( !output_buffers )
     {
@@ -143,8 +145,8 @@ static void *mux_start_smoothing( void *ptr )
             printf("[Mux-Smoother] smoothing buffer reset\n" );
 #endif
             h->mux_drop = 0;
-            av_fifo_reset( fifo_data );
-            av_fifo_reset( fifo_pcr );
+            av_fifo_reset2( fifo_data );
+            av_fifo_reset2( fifo_pcr );
             buffer_complete = 0;
             start_clock = -1;
 
@@ -209,13 +211,13 @@ static void *mux_start_smoothing( void *ptr )
         pthread_mutex_unlock( &h->mux_smoothing_queue.mutex );
 
 #if LOCAL_DEBUG
-        printf("[Mux-Smoother] fifo_data size %d, num_muxed_data %d\n", av_fifo_size(fifo_data), num_muxed_data);
+        printf("[Mux-Smoother] fifo_data size %zu, num_muxed_data %d\n", av_fifo_can_read(fifo_data), num_muxed_data);
         printf("[Mux-Smoother] start_pcr %" PRIi64 "  end_pcr %" PRIi64 "  cur_pcr %" PRIi64 " t_vbv_size %" PRIi64 "\n",
             start_pcr, end_pcr, cur_pcr, temporal_vbv_size);
 #endif
 
-        g_mux_smoother_fifo_pcr_size = av_fifo_size(fifo_pcr);
-        g_mux_smoother_fifo_data_size = av_fifo_size(fifo_data);
+        g_mux_smoother_fifo_pcr_size = av_fifo_can_read(fifo_pcr);
+        g_mux_smoother_fifo_data_size = av_fifo_can_read(fifo_data);
 
         /* For every object we cloned... */
         /* Write the transport packets to the fifo_data fifo. */
@@ -226,28 +228,23 @@ static void *mux_start_smoothing( void *ptr )
         {
             g_mux_smoother_last_total_item_size += muxed_data[i]->len;
 
-            int len = av_fifo_size( fifo_data ) + muxed_data[i]->len;
-
 #if LOCAL_DEBUG
+            size_t len = av_fifo_can_read( fifo_data ) + muxed_data[i]->len;
             if (len > 4096000 || num_muxed_data > 80)
-                printf("i = %d, len %d\n", i, len);
+                printf("i = %d, len %zu\n", i, len);
 #endif
 
-            if( av_fifo_realloc2( fifo_data, len ) < 0 )
+            if( av_fifo_write( fifo_data, muxed_data[i]->data, muxed_data[i]->len ) < 0 )
             {
                 syslog( LOG_ERR, "Malloc failed\n" );
                 return NULL;
             }
 
-            av_fifo_generic_write( fifo_data, muxed_data[i]->data, muxed_data[i]->len, NULL );
-
-            if( av_fifo_realloc2( fifo_pcr, av_fifo_size( fifo_pcr ) + ((muxed_data[i]->len * sizeof(int64_t)) / 188) ) < 0 )
+            if( av_fifo_write( fifo_pcr, muxed_data[i]->pcr_list, (muxed_data[i]->len * sizeof(int64_t)) / 188 ) < 0 )
             {
                 syslog( LOG_ERR, "Malloc failed\n" );
                 return NULL;
             }
-
-            av_fifo_generic_write( fifo_pcr, muxed_data[i]->pcr_list, (muxed_data[i]->len * sizeof(int64_t)) / 188, NULL );
 
             remove_from_queue( &h->mux_smoothing_queue );
             destroy_muxed_data( muxed_data[i] );
@@ -259,17 +256,17 @@ static void *mux_start_smoothing( void *ptr )
         num_muxed_data = 0;
 
         /* While we have atleast 7 transport packets in the TS packet fifo.... */
-        while(!h->mux_drop && av_fifo_size( fifo_data ) >= obe_core_get_payload_size() )
+        while(!h->mux_drop && av_fifo_can_read( fifo_data ) >= obe_core_get_payload_size() )
         {
-            if (av_fifo_size( fifo_data ) > 10000000) {
+            if (av_fifo_can_read( fifo_data ) > 10000000) {
                 /* We won't want this much buffered content, lose it. */
                 h->mux_drop = 1;
                 continue;
             }
             /* allocate a buffer, of exactly 7 PCRs followed by 7 transport packets, drain the relevant fifos. */
             output_buffers[0] = av_buffer_alloc( obe_core_get_payload_size() + obe_core_get_payload_packets() * sizeof(int64_t) );
-            av_fifo_generic_read( fifo_pcr, output_buffers[0]->data, obe_core_get_payload_packets() * sizeof(int64_t), NULL );
-            av_fifo_generic_read( fifo_data, &output_buffers[0]->data[obe_core_get_payload_packets() * sizeof(int64_t)], obe_core_get_payload_size(), NULL );
+            av_fifo_read( fifo_pcr, output_buffers[0]->data, obe_core_get_payload_packets() * sizeof(int64_t) );
+            av_fifo_read( fifo_data, &output_buffers[0]->data[obe_core_get_payload_packets() * sizeof(int64_t)], obe_core_get_payload_size() );
 
             /* Generally, we only ever have a single (IP transmitter) output, take a reference for each. */
             for( int i = 1; i < h->num_outputs; i++ )
@@ -320,8 +317,8 @@ static void *mux_start_smoothing( void *ptr )
         }
     }
 
-    av_fifo_free( fifo_data );
-    av_fifo_free( fifo_pcr );
+    av_fifo_freep2( &fifo_data );
+    av_fifo_freep2( &fifo_pcr );
     free( output_buffers );
 
     return NULL;

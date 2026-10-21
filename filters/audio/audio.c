@@ -189,7 +189,7 @@ static void *start_filter_audio( void *ptr )
         if (output_stream->stream_format == AUDIO_AC_3_BITSTREAM)
             continue; /* Ignore downstream AC3 bitstream encoders */
 
-        num_channels = av_get_channel_layout_nb_channels(output_stream->channel_layout);
+        num_channels = av_popcount64(output_stream->channel_layout);
         output_stream->audioGain = 0.0;
 
         if ((num_channels == 2 || num_channels == 6) && strlen(output_stream->gain_db) > 0) {
@@ -242,7 +242,7 @@ static void *start_filter_audio( void *ptr )
                 continue; /* Ignore non-pcm frames */
 
 //printf("output_stream->stream_format = %d other\n", output_stream->stream_format);
-            num_channels = av_get_channel_layout_nb_channels( output_stream->channel_layout );
+            num_channels = av_popcount64( output_stream->channel_layout );
 
 #if LOCAL_DEBUG
             printf("%s() encoder#%d: output_stream->sdi_audio_pair %d, num_channels %d\n", __func__, i,

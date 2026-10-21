@@ -801,10 +801,10 @@ static int open_device(vega_opts_t *opts, int probe)
                 /* Give libswresample a made up channel map.
                  * Convert S16 interleaved to S32P planar.
                  */
-                av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_audio_channels) - 1, 0 );
+                obe_set_channel_layout(ctx->avr, "in_chlayout", (1 << opts->num_audio_channels) - 1);
                 av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
                 av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
-                av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_audio_channels) - 1, 0 );
+                obe_set_channel_layout(ctx->avr, "out_chlayout", (1 << opts->num_audio_channels) - 1);
                 av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
                 av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );
 

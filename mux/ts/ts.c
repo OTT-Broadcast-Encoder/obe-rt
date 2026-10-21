@@ -765,7 +765,7 @@ void *open_muxer( void *ptr )
         else if( stream_format == AUDIO_AAC )
         {
             /* TODO: handle associated switching */
-            int profile_and_level, num_channels = av_get_channel_layout_nb_channels( output_stream->channel_layout );
+            int profile_and_level, num_channels = av_popcount64( output_stream->channel_layout );
 
             if( num_channels > 2 )
                 profile_and_level = output_stream->aac_opts.aac_profile == AAC_HE_V2 ? LIBMPEGTS_MPEG4_HE_AAC_V2_PROFILE_LEVEL_5 :

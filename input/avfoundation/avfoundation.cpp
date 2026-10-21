@@ -99,7 +99,7 @@ typedef struct
 
 
 	/* AVCodec for V210 conversion. */
-	AVCodec         *dec;
+	const AVCodec         *dec;
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
@@ -184,8 +184,7 @@ static void close_device(avfoundation_opts_t *opts)
 	}
 
 	if (ctx->codec) {
-		avcodec_close(ctx->codec);
-		av_free(ctx->codec);
+		avcodec_free_context(&ctx->codec);
 	}
 
 	if (ctx->avr)
@@ -232,10 +231,10 @@ static int open_device(avfoundation_opts_t *opts)
 
 	/* Give libavresample our custom audio channel map */
 	printf(MODULE_PREFIX "audio num_channels detected = %d\n", opts->num_channels);
-	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "in_chlayout", (1 << opts->num_channels) - 1);
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
-	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_channels) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "out_chlayout", (1 << opts->num_channels) - 1);
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
 	av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );
 

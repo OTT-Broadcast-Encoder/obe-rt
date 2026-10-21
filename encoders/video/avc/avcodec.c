@@ -473,7 +473,7 @@ printf("mode undefined\n");
 
 static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *frame)
 {
-	AVPacket enc_pkt;
+	AVPacket enc_pkt = {0};
 
 #if 0
 	/* TODO: Handle SEI / AFD / User payloads. */
@@ -529,7 +529,7 @@ static int _encode_frame(struct context_s *ctx, obe_raw_frame_t *rf, AVFrame *fr
 	}
 
 	while (ret >= 0) {
-		av_init_packet(&enc_pkt);
+		av_packet_unref(&enc_pkt);
 		enc_pkt.data = NULL;
 		enc_pkt.size = 0;
 
@@ -609,8 +609,12 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 	}
 
 	printf(MESSAGE_PREFIX "Support pixel formats:\n");
-	for (int i = 0; ctx->codec->pix_fmts[i] != AV_PIX_FMT_NONE; i++)
-		printf("fmt[%d] = %s\n", i, av_get_pix_fmt_name(ctx->codec->pix_fmts[i]));
+	const enum AVPixelFormat *pix_fmts = NULL;
+	int num_pix_fmts = 0;
+	avcodec_get_supported_config(NULL, ctx->codec, AV_CODEC_CONFIG_PIX_FORMAT,
+		0, (const void **)&pix_fmts, &num_pix_fmts);
+	for (int i = 0; i < num_pix_fmts; i++)
+		printf("fmt[%d] = %s\n", i, av_get_pix_fmt_name(pix_fmts[i]));
 
 	ctx->c = avcodec_alloc_context3(ctx->codec);
 	if (!ctx->c) {
@@ -721,7 +725,7 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 		}
 
 		frame->pts = rf->avfm.audio_pts;
-		frame->key_frame = 1;
+		frame->flags |= AV_FRAME_FLAG_KEY;
 		frame->pict_type = AV_PICTURE_TYPE_I;
 
 		//struct userdata_s *ud = userdata_calloc();

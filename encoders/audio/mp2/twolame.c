@@ -104,7 +104,7 @@ static void *start_encoder_mp2( void *ptr )
     float *audio_buf = NULL;
     uint8_t *output_buf = NULL;
     struct SwrContext *avr = NULL;
-    AVFifoBuffer *fifo = NULL;
+    AVFifo *fifo = NULL;
 
 #if REPORT_AUDIO_DISCONTINUITIES
     int64_t lastOutputFramePTS = 0; /* Last pts we output, we'll comare against future version to warn for discontinuities. */
@@ -129,7 +129,7 @@ static void *start_encoder_mp2( void *ptr )
     twolame_set_out_samplerate( tl_opts, enc_params->sample_rate );
     twolame_set_copyright( tl_opts, 1 );
     twolame_set_original( tl_opts, 1 );
-    twolame_set_num_channels( tl_opts, av_get_channel_layout_nb_channels( stream->channel_layout ) );
+    twolame_set_num_channels( tl_opts, av_popcount64( stream->channel_layout ) );
     twolame_set_error_protection( tl_opts, 1 );
     if( stream->channel_layout == AV_CH_LAYOUT_STEREO )
         twolame_set_mode( tl_opts, stream->mp2_mode-1 );
@@ -157,10 +157,10 @@ static void *start_encoder_mp2( void *ptr )
         goto end;
     }
 
-    av_opt_set_int( avr, "in_channel_layout",   stream->channel_layout,  0 );
+    obe_set_channel_layout(avr, "in_chlayout", stream->channel_layout);
     av_opt_set_int( avr, "in_sample_fmt",       enc_params->input_sample_format, 0 );
     av_opt_set_int( avr, "in_sample_rate",      enc_params->sample_rate, 0 );
-    av_opt_set_int( avr, "out_channel_layout",  stream->channel_layout, 0 );
+    obe_set_channel_layout(avr, "out_chlayout", stream->channel_layout);
     av_opt_set_int( avr, "out_sample_fmt",      AV_SAMPLE_FMT_FLT,   0 );
     av_opt_set_int( avr, "dither_method",       SWR_DITHER_TRIANGULAR, 0 );
     av_opt_set_int( avr, "out_sample_rate",     enc_params->sample_rate, 0 );
@@ -172,7 +172,7 @@ static void *start_encoder_mp2( void *ptr )
     }
 
     /* Setup the output FIFO */
-    fifo = av_fifo_alloc( frame_size );
+    fifo = av_fifo_alloc2( frame_size, 1, AV_FIFO_FLAG_AUTO_GROW );
     if( !fifo )
     {
         fprintf( stderr, "Malloc failed\n" );
@@ -229,7 +229,7 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
                 cur_pts);
 
             /* Drain the conversion fifos else we induce drift. */
-            av_fifo_drain(fifo, av_fifo_size(fifo));
+            av_fifo_reset2(fifo);
             swr_drop_output(avr, 65535);
 
             output_size = twolame_encode_flush(tl_opts, output_buf, MP2_AUDIO_BUFFER_SIZE);
@@ -254,7 +254,7 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
 #endif
 
         /* Allocate the output buffer */
-        if( av_samples_alloc( (uint8_t**)&audio_buf, &linesize, av_get_channel_layout_nb_channels( raw_frame->audio_frame.channel_layout ),
+        if( av_samples_alloc( (uint8_t**)&audio_buf, &linesize, av_popcount64( raw_frame->audio_frame.channel_layout ),
                               raw_frame->audio_frame.linesize, AV_SAMPLE_FMT_FLT, 0 ) < 0 )
         {
             syslog( LOG_ERR, "Malloc failed\n" );
@@ -284,15 +284,13 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
         raw_frame->release_frame( raw_frame );
         remove_from_queue( &encoder->queue );
 
-        if( av_fifo_realloc2( fifo, av_fifo_size( fifo ) + output_size ) < 0 )
+        if( av_fifo_write( fifo, output_buf, output_size ) < 0 )
         {
             syslog( LOG_ERR, "Malloc failed\n" );
             break;
         }
 
-        av_fifo_generic_write( fifo, output_buf, output_size, NULL );
-
-        while( av_fifo_size( fifo ) >= frame_size )
+        while( av_fifo_can_read( fifo ) >= frame_size )
         {
             coded_frame = new_coded_frame( encoder->output_stream_id, frame_size );
             if( !coded_frame )
@@ -300,7 +298,7 @@ raw_frame->avfm.audio_pts, avfm.audio_pts);
                 syslog( LOG_ERR, "Malloc failed\n" );
                 goto end;
             }
-            av_fifo_generic_read( fifo, coded_frame->data, frame_size, NULL );
+            av_fifo_read( fifo, coded_frame->data, frame_size );
             memcpy(&coded_frame->avfm, &avfm, sizeof(avfm));
 
             /* 648000 27MHz ticks equates to 24ms.
@@ -388,7 +386,7 @@ end:
         swr_free( &avr );
 
     if( fifo )
-        av_fifo_free( fifo );
+        av_fifo_freep2( &fifo );
 
     if( tl_opts )
         twolame_close( &tl_opts );

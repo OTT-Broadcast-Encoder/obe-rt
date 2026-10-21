@@ -32,6 +32,8 @@
 #include <libavutil/pixfmt.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/common.h>
+#include <libavutil/cpu.h>
+#include "common/ffmpeg.h"
 
 #include <stdio.h>
 #include <stdlib.h>

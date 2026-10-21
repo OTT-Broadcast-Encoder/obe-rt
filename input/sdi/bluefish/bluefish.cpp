@@ -122,7 +122,7 @@ typedef struct
 	/* End: Bluefish SDK related */
 
 	/* AVCodec for V210 conversion. */
-	AVCodec         *dec;
+	const AVCodec         *dec;
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
@@ -378,18 +378,20 @@ static void *bluefish_videoThreadFunc(void *p)
 				break;
 			}
 
-			AVFrame *frame = avcodec_alloc_frame();
+			AVFrame *frame = av_frame_alloc();
 			ctx->codec->width = opts->width;
 			ctx->codec->height = opts->height;
 
-			AVPacket pkt;
-			av_init_packet(&pkt);
+			AVPacket pkt = {0};
+			av_packet_unref(&pkt);
 
 			pkt.data = (uint8_t *)pVideoBuffer;
 			pkt.size = ctx->frameSizeBytesVideo;
 
-			int ret = avcodec_decode_video2(ctx->codec, frame, &finished, &pkt);
-			if (ret < 0 || !finished) {
+			int ret = avcodec_send_packet(ctx->codec, &pkt);
+			if (ret >= 0)
+				ret = avcodec_receive_frame(ctx->codec, frame);
+			if (ret < 0) {
 				fprintf(stderr, MODULE_PREFIX "Could not decode video frame\n");
 				break;
 			}
@@ -497,9 +499,9 @@ static void *bluefish_videoThreadFunc(void *p)
 			}
 
 			if (frame)
-				avcodec_free_frame(&frame);
+				av_frame_free(&frame);
 
-			av_free_packet(&pkt);
+			av_packet_unref(&pkt);
 		}
 	}
 	printf(MODULE_PREFIX "Video thread complete\n");
@@ -529,8 +531,7 @@ static void close_device(bluefish_opts_t *opts)
 	BailOut(ctx->hBvc);
 
 	if (ctx->codec) {
-		avcodec_close(ctx->codec);
-		av_free(ctx->codec);
+		avcodec_free_context(&ctx->codec);
 	}
 
 	if (ctx->avr)
@@ -638,7 +639,6 @@ static int open_device(bluefish_opts_t *opts)
 		opts->width, opts->height,
 		opts->timebase_den, opts->timebase_num);
 
-	avcodec_register_all();
 
 	ctx->dec = avcodec_find_decoder(AV_CODEC_ID_V210);
 	if (!ctx->dec) {
@@ -656,10 +656,10 @@ static int open_device(bluefish_opts_t *opts)
         }
 
 	/* Give libavresample our custom audio channel map */
-	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->num_channels) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "in_chlayout", (1 << opts->num_channels) - 1);
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S16, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      48000, 0 );
-	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->num_channels) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "out_chlayout", (1 << opts->num_channels) - 1);
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
 
 	if (avresample_open(ctx->avr) < 0) {

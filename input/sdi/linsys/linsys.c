@@ -1005,10 +1005,10 @@ static int open_card( linsys_opts_t *linsys_opts )
         }
 
         /* Give libavresample a made up channel map */
-        av_opt_set_int( linsys_ctx->avr, "in_channel_layout",   (1 << linsys_opts->num_channels) - 1, 0 );
+        obe_set_channel_layout(linsys_ctx->avr, "in_chlayout", (1 << linsys_opts->num_channels) - 1);
         av_opt_set_int( linsys_ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
         av_opt_set_int( linsys_ctx->avr, "in_sample_rate",      48000, 0 );
-        av_opt_set_int( linsys_ctx->avr, "out_channel_layout",  (1 << linsys_opts->num_channels) - 1, 0 );
+        obe_set_channel_layout(linsys_ctx->avr, "out_chlayout", (1 << linsys_opts->num_channels) - 1);
         av_opt_set_int( linsys_ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
         av_opt_set_int( linsys_ctx->avr, "out_sample_rate",     48000, 0 );
 

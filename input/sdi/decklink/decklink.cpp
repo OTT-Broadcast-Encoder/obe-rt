@@ -190,7 +190,7 @@ typedef struct
     IDeckLinkConfiguration *p_config;
 
     /* Video */
-    AVCodec         *dec;
+    const AVCodec         *dec;
     AVCodecContext  *codec;
 
     /* Audio - Sample Rate Conversion. We convert S32 interleaved into S32P planer. */
@@ -1151,7 +1151,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
 {
     decklink_ctx_t *decklink_ctx = &decklink_opts_->decklink_ctx;
     obe_raw_frame_t *raw_frame = NULL;
-    AVPacket pkt;
+    AVPacket pkt = {0};
     AVFrame *frame = NULL;
     void *frame_bytes, *anc_line;
     obe_t *h = decklink_ctx->h;
@@ -1478,7 +1478,7 @@ HRESULT DeckLinkCaptureDelegate::timedVideoInputFrameArrived( IDeckLinkVideoInpu
         }
     }
 
-    av_init_packet( &pkt );
+    av_packet_unref( &pkt );
 
     if( videoframe )
     {
@@ -2075,8 +2075,7 @@ static void close_card( decklink_opts_t *decklink_opts )
 
     if( decklink_ctx->codec )
     {
-        avcodec_close( decklink_ctx->codec );
-        av_free( decklink_ctx->codec );
+        avcodec_free_context(&decklink_ctx->codec);
     }
 
     if (decklink_ctx->vanchdl) {
@@ -2999,10 +2998,10 @@ static int open_card( decklink_opts_t *decklink_opts, int allowFormatDetection)
         }
 
         /* Give libswresample a made up channel map */
-        av_opt_set_int( decklink_ctx->avr, "in_channel_layout",   (1 << decklink_opts->num_channels) - 1, 0 );
+        obe_set_channel_layout(decklink_ctx->avr, "in_chlayout", (1 << decklink_opts->num_channels) - 1);
         av_opt_set_int( decklink_ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
         av_opt_set_int( decklink_ctx->avr, "in_sample_rate",      48000, 0 );
-        av_opt_set_int( decklink_ctx->avr, "out_channel_layout",  (1 << decklink_opts->num_channels) - 1, 0 );
+        obe_set_channel_layout(decklink_ctx->avr, "out_chlayout", (1 << decklink_opts->num_channels) - 1);
         av_opt_set_int( decklink_ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
         av_opt_set_int( decklink_ctx->avr, "out_sample_rate",     48000, 0 );
 

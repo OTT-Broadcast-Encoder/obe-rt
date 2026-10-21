@@ -38,7 +38,7 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 
 	ctx->lastFrameTime = now;
 
-	AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
+	const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
 	if (!codec) {
 		printf("Codec not found\n");
 		exit(1);
@@ -78,8 +78,8 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 		exit(1);
 	}
 
-	AVPacket pkt;
-	av_init_packet(&pkt);
+	AVPacket pkt = {0};
+	av_packet_unref(&pkt);
 	pkt.data = NULL;
 	pkt.size = 0;
 
@@ -121,8 +121,7 @@ int filter_compress_jpg(struct filter_compress_ctx *ctx, obe_raw_frame_t *rf)
 		av_packet_unref(&pkt);
 	}
 
-	avcodec_close(c);
-	av_free(c);
+	avcodec_free_context(&c);
 	av_freep(&frame->data[0]);
 	av_frame_free(&frame);
 

@@ -118,7 +118,7 @@ typedef struct
 	/* End: NDI SDK related */
 
 	/* AVCodec for V210 conversion. */
-	AVCodec         *dec;
+	const AVCodec         *dec;
 	AVCodecContext  *codec;
 	/* End: AVCodec for V210 conversion. */
 
@@ -636,8 +636,7 @@ static void close_device(ndi_opts_t *opts)
 	}
 
 	if (ctx->codec) {
-		avcodec_close(ctx->codec);
-		av_free(ctx->codec);
+		avcodec_free_context(&ctx->codec);
 	}
 
 	if (ctx->avr)
@@ -990,15 +989,15 @@ printf("Reducing input framerate by 2\n");
 		opts->audio_channel_count,
 		opts->audio_channel_samplerate,
 		(1 << opts->audio_channel_count) - 1);
-	av_opt_set_int(ctx->avr, "in_channel_layout",   (1 << opts->audio_channel_count) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "in_chlayout", (1 << opts->audio_channel_count) - 1);
 #if TEAMS_16KHZ
-	av_opt_set_int(ctx->avr, "in_channel_layout",   1, 0 );
+	obe_set_channel_layout(ctx->avr, "in_chlayout", 1);
 #endif
 	av_opt_set_int(ctx->avr, "in_sample_fmt",       AV_SAMPLE_FMT_S32, 0 );
 	av_opt_set_int(ctx->avr, "in_sample_rate",      opts->audio_channel_samplerate, 0 );
-	av_opt_set_int(ctx->avr, "out_channel_layout",  (1 << opts->audio_channel_count) - 1, 0 );
+	obe_set_channel_layout(ctx->avr, "out_chlayout", (1 << opts->audio_channel_count) - 1);
 #if TEAMS_16KHZ
-	av_opt_set_int(ctx->avr, "out_channel_layout",  1, 0 );
+	obe_set_channel_layout(ctx->avr, "out_chlayout", 1);
 #endif
 	av_opt_set_int(ctx->avr, "out_sample_fmt",      AV_SAMPLE_FMT_S32P, 0 );
 	av_opt_set_int(ctx->avr, "out_sample_rate",     48000, 0 );

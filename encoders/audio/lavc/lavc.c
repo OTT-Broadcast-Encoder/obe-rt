@@ -77,7 +77,7 @@ static const lavc_encoder_t lavc_encoders[] =
 /* Function has zero ownership over the lifetime of the packet, so
  * don't unref or free.
  */
-static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffer *fifo)
+static int processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifo *fifo)
 {
     obe_coded_frame_t *coded_frame;
 
@@ -85,30 +85,24 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
     printf(MODULE "codec output %d bytes\n", pkt->size);
 #endif
 
-    if (av_fifo_realloc2(fifo, av_fifo_size(fifo) + pkt->size) < 0) {
-        char msg[128];
-        sprintf(msg, MODULE "malloc av_fifo_realloc2(?, %d + %d)\n", av_fifo_size(fifo), pkt->size);
-        fprintf(stderr, "%s\n", msg);
-        syslog(LOG_ERR, "%s", msg);
-        return;
-    }
-
     /* Write the output codec data into a fifo, because we want to make downstream packets
      * of exactly N frames (frames_per_pes).
      */
-    av_fifo_generic_write(fifo, pkt->data, pkt->size, NULL);
+    int ret = av_fifo_write(fifo, pkt->data, pkt->size);
+    if (ret < 0)
+        return ret;
 
     if (ctx->num_frames != ctx->enc_params->frames_per_pes) {
         /* Buffer enough codec content frames, to file the desired pes size. */
-        return;
+        return 0;
     }
 
     coded_frame = new_coded_frame(ctx->encoder->output_stream_id, ctx->total_size_bytes);
     if (!coded_frame)
-        return;
+        return AVERROR(ENOMEM);
 
     //printf("Fifo read of %d\n", ctx->total_size_bytes);
-    av_fifo_generic_read(fifo, coded_frame->data, ctx->total_size_bytes, NULL);
+    av_fifo_read(fifo, coded_frame->data, ctx->total_size_bytes);
     coded_frame->pts = ctx->cur_pts;
 
     /* Fixup the clock for 10.11.2, due to an audio clocking bug.
@@ -220,6 +214,7 @@ static void processCodecOutput(struct context_s *ctx, AVPacket *pkt, AVFifoBuffe
 
     ctx->cur_pts += ctx->pts_increment;
     ctx->total_size_bytes = ctx->num_frames = 0;
+    return 0;
 }
 
 static void *aac_start_encoder(void *ptr)
@@ -234,9 +229,9 @@ static void *aac_start_encoder(void *ptr)
 
     obe_raw_frame_t *raw_frame;
     int i, frame_size, ret;
-    AVFifoBuffer *out_fifo_compressed = NULL;
+    AVFifo *out_fifo_compressed = NULL;
     struct SwrContext *avr = NULL;
-    AVPacket pkt;
+    AVPacket pkt = {0};
     AVCodecContext *codec = NULL;
     AVFrame *frame = NULL;
     AVDictionary *opts = NULL;
@@ -269,7 +264,7 @@ static void *aac_start_encoder(void *ptr)
         lavc_encoders[i].display_name,
         lavc_encoders[i].lavc_name);
 
-    AVCodec *enc = NULL;
+    const AVCodec *enc = NULL;
     if (lavc_encoders[i].lavc_name == AV_CODEC_ID_AC3) {
         ctx->frameLengthTicks = 864000; /* 32ms = 32 * 90 * 300 */
         enc = avcodec_find_encoder(lavc_encoders[i].lavc_name);
@@ -296,7 +291,11 @@ static void *aac_start_encoder(void *ptr)
     }
     ctx->encoderMode = lavc_encoders[i].lavc_name;
 
-    if( enc->sample_fmts[0] == -1 )
+    const enum AVSampleFormat *sample_fmts = NULL;
+    int num_sample_fmts = 0;
+    ret = avcodec_get_supported_config(codec, enc, AV_CODEC_CONFIG_SAMPLE_FORMAT,
+                                      0, (const void **)&sample_fmts, &num_sample_fmts);
+    if( ret < 0 || !sample_fmts || !num_sample_fmts )
     {
         fprintf(stderr, MODULE "No valid sample formats\n");
         goto finish;
@@ -304,18 +303,18 @@ static void *aac_start_encoder(void *ptr)
 
     codec->sample_rate = ctx->enc_params->sample_rate;
     codec->bit_rate = ctx->stream->bitrate * 1000;
-    codec->sample_fmt = enc->sample_fmts[0];
+    codec->sample_fmt = sample_fmts[0];
     printf(MODULE "codec->sample_fmt = %d\n", codec->sample_fmt);
     printf(MODULE "codec->bit_rate   = %" PRIi64 "\n", codec->bit_rate);
     printf(MODULE "long_name         = %s\n", enc->long_name);
     printf(MODULE "dialnorm          = %d\n", ctx->enc_params->dialnorm);
-    codec->channels = av_get_channel_layout_nb_channels(ctx->stream->channel_layout);
-    codec->channel_layout = ctx->stream->channel_layout;
+    if (av_channel_layout_from_mask(&codec->ch_layout, ctx->stream->channel_layout) < 0)
+        goto finish;
     codec->time_base.num = 1;
     codec->time_base.den = OBE_CLOCK;
-    codec->profile = ctx->stream->aac_opts.aac_profile == AAC_HE_V2 ? FF_PROFILE_AAC_HE_V2 :
-                     ctx->stream->aac_opts.aac_profile == AAC_HE_V1 ? FF_PROFILE_AAC_HE :
-                     FF_PROFILE_AAC_LOW;
+    codec->profile = ctx->stream->aac_opts.aac_profile == AAC_HE_V2 ? AV_PROFILE_AAC_HE_V2 :
+                     ctx->stream->aac_opts.aac_profile == AAC_HE_V1 ? AV_PROFILE_AAC_HE :
+                     AV_PROFILE_AAC_LOW;
 
     snprintf( is_latm, sizeof(is_latm), "%i", ctx->stream->aac_opts.latm_output );
     av_dict_set( &opts, "latm", is_latm, 0 );
@@ -334,19 +333,19 @@ static void *aac_start_encoder(void *ptr)
         goto finish;
     }
 
-    av_opt_set_int( avr, "in_channel_layout",    codec->channel_layout, 0 );
+    av_opt_set_chlayout(avr, "in_chlayout", &codec->ch_layout, 0);
     av_opt_set_int( avr, "in_sample_rate",       ctx->enc_params->sample_rate, 0 );
     av_opt_set_sample_fmt( avr, "in_sample_fmt", ctx->enc_params->input_sample_format, 0 );
 
-    av_opt_set_int( avr, "out_channel_layout",    codec->channel_layout, 0 );
+    av_opt_set_chlayout(avr, "out_chlayout", &codec->ch_layout, 0);
     av_opt_set_int( avr, "out_sample_rate",       ctx->enc_params->sample_rate, 0 );
     av_opt_set_sample_fmt( avr, "out_sample_fmt", codec->sample_fmt,     0 );
     av_opt_set_int( avr, "dither_method",         SWR_DITHER_TRIANGULAR, 0 );
 
-    printf(MODULE "in_channel_layout  = %" PRIi64 "\n", codec->channel_layout);
+    printf(MODULE "in_channel_layout  = %" PRIu64 "\n", codec->ch_layout.u.mask);
     printf(MODULE "in_sample_fmt      = %d %s\n", ctx->enc_params->input_sample_format, av_get_sample_fmt_name(ctx->enc_params->input_sample_format));
     printf(MODULE "in_sample_rate     = %d\n", ctx->enc_params->sample_rate);
-    printf(MODULE "out_channel_layout = %" PRIi64 "\n", codec->channel_layout);
+    printf(MODULE "out_channel_layout = %" PRIu64 "\n", codec->ch_layout.u.mask);
     printf(MODULE "out_sample_fmt     = %d %s\n", codec->sample_fmt, av_get_sample_fmt_name(codec->sample_fmt));
     printf(MODULE "out_sample_rate    = %d\n", ctx->enc_params->sample_rate);
 
@@ -373,13 +372,13 @@ static void *aac_start_encoder(void *ptr)
     /* NB: libfdk-aac already doubles the frame size appropriately */
     ctx->pts_increment = (double)codec->frame_size * OBE_CLOCK * ctx->enc_params->frames_per_pes / ctx->enc_params->sample_rate;
 
-    ctx->audio_pcm_fifo = av_audio_fifo_alloc(codec->sample_fmt, codec->channels, 8000);
+    ctx->audio_pcm_fifo = av_audio_fifo_alloc(codec->sample_fmt, codec->ch_layout.nb_channels, 8000);
     if (!ctx->audio_pcm_fifo) {
         fprintf(stderr, MODULE "audio fifo alloc failed\n");
         goto finish;
     }
 
-    out_fifo_compressed = av_fifo_alloc(frame_size);
+    out_fifo_compressed = av_fifo_alloc2(frame_size, 1, AV_FIFO_FLAG_AUTO_GROW);
     if (!out_fifo_compressed) {
         fprintf(stderr, MODULE "compressed fifo alloc failed\n");
         goto finish;
@@ -391,13 +390,17 @@ static void *aac_start_encoder(void *ptr)
         fprintf(stderr, MODULE "Could not allocate frame\n");
         goto finish;
     }
+    frame->format = codec->sample_fmt;
+    frame->sample_rate = codec->sample_rate;
+    if (av_channel_layout_copy(&frame->ch_layout, &codec->ch_layout) < 0)
+        goto finish;
 
 /* AAC has 1 frame per pes in lowest latency mode, frame size 1024. */
 /* AAC has 6 frame per pes in normal latency mode, frame size 2048. */
     printf(MODULE "frames per pes     = %d\n", ctx->enc_params->frames_per_pes);
     printf(MODULE "dst_linesize       = %d\n", dst_linesize);
     printf(MODULE "codec->frame_size  = %d\n", codec->frame_size);
-    printf(MODULE "codec->channels    = %d\n", codec->channels);
+    printf(MODULE "codec channels     = %d\n", codec->ch_layout.nb_channels);
     printf(MODULE "codec->sample_fmt  = %d\n", codec->sample_fmt);
     printf(MODULE "bytes_per_sample   = %d\n", av_get_bytes_per_sample(codec->sample_fmt));
     printf(MODULE "is_planar          = %d\n", av_sample_fmt_is_planar(codec->sample_fmt));
@@ -429,7 +432,7 @@ static void *aac_start_encoder(void *ptr)
                 ctx->encoder->output_stream_id,
                 raw_frame->avfm.audio_pts,
                 raw_frame->audio_frame.linesize,
-                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                av_popcount64(raw_frame->audio_frame.channel_layout),
                 raw_frame->audio_frame.num_samples,
                 raw_frame->avfm.audio_pts - ctx->avfm.audio_pts);
         }
@@ -458,7 +461,7 @@ static void *aac_start_encoder(void *ptr)
                 ctx->cur_pts);
 
             /* Drain the conversion fifos else we induce drift. */
-            av_fifo_drain(out_fifo_compressed, av_fifo_size(out_fifo_compressed));
+            av_fifo_reset2(out_fifo_compressed);
             av_audio_fifo_drain(ctx->audio_pcm_fifo, av_audio_fifo_size(ctx->audio_pcm_fifo));
             swr_drop_output(avr, 65535);
             ctx->num_frames = 0;
@@ -495,7 +498,7 @@ static void *aac_start_encoder(void *ptr)
 		    newlinesize = raw_frame->audio_frame.linesize * 4;
 	    }
         if (av_samples_alloc(audio_planes, NULL,
-                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                av_popcount64(raw_frame->audio_frame.channel_layout),
                 newlinesize, codec->sample_fmt, 0) < 0) {
             fprintf(stderr, MODULE "Could not allocate audio samples\n");
             goto finish;
@@ -515,7 +518,7 @@ static void *aac_start_encoder(void *ptr)
                 g_audio_cf_debug,
                 ctx->encoder->output_stream_id,
                 audioFramesDQ,
-                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                av_popcount64(raw_frame->audio_frame.channel_layout),
                 raw_frame->audio_frame.num_samples);
             printf("Creating %s\n", fn);
             FILE *fh = fopen(fn, "wb");
@@ -550,7 +553,7 @@ static void *aac_start_encoder(void *ptr)
                 g_audio_cf_debug,
                 ctx->encoder->output_stream_id,
                 audioFramesDQ,
-                av_get_channel_layout_nb_channels(raw_frame->audio_frame.channel_layout),
+                av_popcount64(raw_frame->audio_frame.channel_layout),
                 raw_frame->audio_frame.num_samples);
             printf("Creating %s\n", fn);
             FILE *fh = fopen(fn, "wb");
@@ -590,7 +593,7 @@ static void *aac_start_encoder(void *ptr)
 		exit(1);
             }
 
-            av_init_packet(&pkt);
+            av_packet_unref(&pkt);
             pkt.data = NULL;
             pkt.size = 0;
 
@@ -616,8 +619,12 @@ static void *aac_start_encoder(void *ptr)
                ctx->total_size_bytes += pkt.size;
                ctx->num_frames++;
 
-               processCodecOutput(ctx, &pkt, out_fifo_compressed);
+               ret = processCodecOutput(ctx, &pkt, out_fifo_compressed);
                av_packet_unref(&pkt);
+               if (ret < 0) {
+                   fprintf(stderr, MODULE "Could not buffer compressed audio\n");
+                   goto finish;
+               }
             }
         }
 
@@ -638,15 +645,14 @@ finish:
         av_audio_fifo_free(ctx->audio_pcm_fifo);
 
     if( out_fifo_compressed )
-        av_fifo_free( out_fifo_compressed );
+        av_fifo_freep2( &out_fifo_compressed );
 
     if (avr)
         swr_free(&avr);
 
     if( codec )
     {
-        avcodec_close( codec );
-        av_free( codec );
+        avcodec_free_context(&codec);
     }
 
     aud_enc_params_free(ctx->enc_params);
