@@ -778,11 +778,11 @@ static void *avc_gpu_avcodec_start_encoder(void *ptr)
 
                         /* This costs a few percent of a cpu */
                         I420ToNV12(
-                                rf->img.plane[0], ctx->frame_width,
-                                rf->img.plane[1], ctx->frame_width / 4,
-                                rf->img.plane[2], ctx->frame_width / 4,
-                                dst_y, ctx->frame_width,
-                                dst_uv, ctx->frame_width / 2,
+                                rf->img.plane[0], rf->img.stride[0],
+                                rf->img.plane[1], rf->img.stride[1],
+                                rf->img.plane[2], rf->img.stride[2],
+                                dst_y, frame->linesize[0],
+                                dst_uv, frame->linesize[1],
                                 ctx->frame_width, ctx->frame_height);
 
 			ret = av_hwframe_transfer_data(hw_frame, frame, 0);

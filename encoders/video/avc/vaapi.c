@@ -2770,11 +2770,11 @@ static void *avc_vaapi_start_encoder( void *ptr )
 
 			/* This costs a few percent of a cpu */
 			I420ToNV12(
-				rf->img.plane[0], ctx->frame_width,
-				rf->img.plane[1], ctx->frame_width / 4,
-				rf->img.plane[2], ctx->frame_width / 4,
+				rf->img.plane[0], rf->img.stride[0],
+				rf->img.plane[1], rf->img.stride[1],
+				rf->img.plane[2], rf->img.stride[2],
 				dst_y, ctx->frame_width,
-				dst_uv, ctx->frame_width / 2,
+				dst_uv, ctx->frame_width,
 				ctx->frame_width, ctx->frame_height);
 
 #if SEI_TIMESTAMPING
