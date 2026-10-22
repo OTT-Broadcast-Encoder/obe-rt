@@ -6,6 +6,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/time.h>
+#include <libavutil/opt.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 
@@ -30,6 +31,9 @@ typedef struct
     unsigned session_streams;
     unsigned frames[STREAMS];
     obe_raw_frame_t *pending;
+    unsigned srt_connection;
+    int64_t srt_next_sample;
+    int is_srt;
 } url_input_t;
 
 static int interrupted( void *opaque )
@@ -135,6 +139,11 @@ static int open_input( url_input_t *ctx, const char *location )
     if( (ret = avformat_open_input( &ctx->format, location, NULL, &ctx->options )) < 0 ||
         (ret = avformat_find_stream_info( ctx->format, NULL )) < 0 )
         return ret;
+    if (ctx->params && !strncmp(location, "srt://", 6)) {
+        ctx->is_srt = 1;
+        ctx->srt_connection++;
+        ctx->srt_next_sample = 0;
+    }
     cancellation_point();
 
     ctx->index[VIDEO] = av_find_best_stream( ctx->format, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0 );
@@ -481,6 +490,13 @@ static int receive_input( url_input_t *ctx )
     int ret;
     ctx->deadline = av_gettime_relative() + 2000000;
     ret = av_read_frame(ctx->format, ctx->packet);
+    if (ret >= 0 && ctx->is_srt && av_gettime_relative() >= ctx->srt_next_sample) {
+        uint8_t *stats = NULL;
+        ctx->srt_next_sample = av_gettime_relative() + 1000000;
+        if (ctx->format->pb && av_opt_get(ctx->format->pb, "obe_srt_stats", AV_OPT_SEARCH_CHILDREN, &stats) >= 0 && stats && *stats)
+            fprintf(stderr, "\nOBE_SRT {\"schema\":1,\"connection\":%u,\"stats\":%s}\n", ctx->srt_connection, stats);
+        av_free(stats);
+    }
     cancellation_point();
     if( ret == AVERROR_EOF )
     {
